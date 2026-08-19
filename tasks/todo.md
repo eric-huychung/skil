@@ -637,17 +637,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: `adapter.read('.contextkit.yml')` parses valid YAML
-- [ ] Test: Returned Config object matches expected structure
-- [ ] Test: File not found returns error Result
-- [ ] Implementation: Uses js-yaml library
-- [ ] Handles YAML syntax errors
+- [x] Test: `adapter.read('.contextkit.yml')` parses valid YAML
+- [x] Test: Returned Config object matches expected structure
+- [x] Test: File not found returns error Result
+- [x] Implementation: Uses js-yaml library
+- [x] Handles YAML syntax errors
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- config-adapter.test.ts`
-- [ ] Valid YAML parsed correctly
-- [ ] Errors handled gracefully
+- [x] Tests pass: `npm test -- config-adapter.test.ts`
+- [x] Valid YAML parsed correctly
+- [x] Errors handled gracefully
 
 **Dependencies:** Task 3 (needs interfaces)
 
