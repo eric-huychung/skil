@@ -39,6 +39,7 @@ export class CollectionEngine implements ICollectionEngine {
       lastUsedAt: null,
     };
     this.state.collections.push(collection);
+    this.persist();
 
     return ok(collection);
   }
@@ -57,5 +58,9 @@ export class CollectionEngine implements ICollectionEngine {
 
   status(): Status {
     return { activeCollection: this.state.activeCollection, skills: [] };
+  }
+
+  private persist(): void {
+    this.fs.writeJSON(STATE_PATH, this.state);
   }
 }

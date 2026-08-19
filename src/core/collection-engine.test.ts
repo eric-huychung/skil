@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isErr, isOk } from './result.js';
-import { CollectionEngine } from './collection-engine.js';
+import { CollectionEngine, STATE_PATH } from './collection-engine.js';
 import { InMemoryConfigAdapter } from '../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../adapters/in-memory-skills.js';
@@ -73,6 +73,31 @@ describe('CollectionEngine', () => {
       const collections = engine.list();
 
       expect(collections.map((c) => c.name)).toEqual(['frontend', 'backend']);
+    });
+  });
+
+  describe('persistence', () => {
+    it('writes state to the state file after creating a collection', () => {
+      engine.create('frontend', ['react-patterns']);
+
+      const persisted = fs.readJSON<{ collections: Array<{ name: string }> }>(STATE_PATH);
+
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.collections.map((c) => c.name)).toEqual(['frontend']);
+      }
+    });
+
+    it('does not persist state when create fails validation', () => {
+      engine.create('frontend', []);
+
+      engine.create('frontend', ['dup']);
+
+      const persisted = fs.readJSON<{ collections: unknown[] }>(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.collections).toHaveLength(1);
+      }
     });
   });
 });
