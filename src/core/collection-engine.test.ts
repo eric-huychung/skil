@@ -206,6 +206,31 @@ describe('CollectionEngine', () => {
       expect(isOk(result)).toBe(true);
       expect(engine.status().activeCollection).toBeNull();
     });
+
+    it('removes symlinks for every skill in every detected IDE directory', () => {
+      fs.setDetectedIDEs([
+        { name: 'cursor', path: '/project/.agents/skills' },
+        { name: 'claude', path: '/project/.claude/skills' },
+      ]);
+      engine.create('frontend', ['skill-a', 'skill-b']);
+      engine.activate('frontend');
+
+      engine.deactivate();
+
+      const symlinks = fs.getSymlinks();
+      expect(symlinks.has('/project/.agents/skills/skill-a')).toBe(false);
+      expect(symlinks.has('/project/.agents/skills/skill-b')).toBe(false);
+      expect(symlinks.has('/project/.claude/skills/skill-a')).toBe(false);
+      expect(symlinks.has('/project/.claude/skills/skill-b')).toBe(false);
+    });
+
+    it('does not attempt symlink removal when nothing is active', () => {
+      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
+
+      const result = engine.deactivate();
+
+      expect(isOk(result)).toBe(true);
+    });
   });
 
   describe('loading existing state', () => {

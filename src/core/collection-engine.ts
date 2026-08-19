@@ -74,6 +74,12 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   deactivate(): Result<void> {
+    const active = this.state.collections.find((c) => c.name === this.state.activeCollection);
+    if (active) {
+      const ides = this.fs.detectIDEs(this.projectRoot);
+      this.removeSymlinksFor(active, ides);
+    }
+
     this.state.activeCollection = null;
     this.persist();
 
