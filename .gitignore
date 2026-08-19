@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.contextkit/
+*.log
+.DS_Store
