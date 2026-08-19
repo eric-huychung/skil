@@ -778,17 +778,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `search(query)` makes HTTP GET to skills.sh API
-- [ ] Returns array of Skill objects with id, name, description
-- [ ] Tests mock HTTP response with nock
-- [ ] Handles network errors gracefully
-- [ ] Handles empty search results
+- [x] `search(query)` makes HTTP GET to skills.sh API
+- [x] Returns array of Skill objects with id, name, description
+- [x] Tests mock HTTP response with nock
+- [x] Handles network errors gracefully
+- [x] Handles empty search results
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- skills-adapter.test.ts`
-- [ ] Mock HTTP calls verified
-- [ ] Error cases handled
+- [x] Tests pass: `npm test -- skills-adapter.test.ts`
+- [x] Mock HTTP calls verified
+- [x] Error cases handled
 
 **Dependencies:** Task 3 (needs interfaces)
 
