@@ -1,0 +1,19 @@
+---
+description: Response formatting—plain language summaries and concise phrasing
+alwaysApply: true
+---
+
+# Response Format
+
+## Guidance when code changes
+
+After edits, give a short plain-English breakdown of:
+- design choices
+- what changed (files, classes, functions)
+- why those changes
+
+Match length to the task. Prefer plain wording over jargon.
+
+## Phrasing
+
+Be short and simple with wording. scracifice grammar for quick and easy to understand response

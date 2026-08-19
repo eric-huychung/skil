@@ -1,0 +1,12 @@
+---
+description: Post-task cleanup—remove orphaned files and unused artifacts
+alwaysApply: true
+---
+
+# Hygiene
+
+## After implementation tasks
+
+After finishing an implement/fix/refactor task (not after pure Q&A):
+- Quickly check for unused, obsolete, or orphaned files created or left behind by the work.
+- Call out anything that looks stale; remove only with user agreement unless clearly part of the requested change (e.g. replacing a moved rule file).
