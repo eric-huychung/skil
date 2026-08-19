@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, lstatSync, readlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, lstatSync, readlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isErr, isOk } from '../core/result.js';
@@ -76,6 +76,32 @@ describe('RealFileSystemAdapter', () => {
       if (isErr(result)) {
         expect(result.error.message).toContain('missing.md');
       }
+    });
+  });
+
+  describe('detectIDEs', () => {
+    it('returns an empty array when no IDE directories exist', () => {
+      expect(adapter.detectIDEs(tmpDir)).toEqual([]);
+    });
+
+    it('detects a single IDE directory', () => {
+      mkdirSync(join(tmpDir, '.claude'));
+
+      const ides = adapter.detectIDEs(tmpDir);
+
+      expect(ides).toEqual([{ name: 'claude', path: join(tmpDir, '.claude', 'skills') }]);
+    });
+
+    it('detects multiple IDE directories', () => {
+      mkdirSync(join(tmpDir, '.agents'));
+      mkdirSync(join(tmpDir, '.windsurf'));
+
+      const ides = adapter.detectIDEs(tmpDir);
+
+      expect(ides).toEqual([
+        { name: 'cursor', path: join(tmpDir, '.agents', 'skills') },
+        { name: 'windsurf', path: join(tmpDir, '.windsurf', 'skills') },
+      ]);
     });
   });
 });

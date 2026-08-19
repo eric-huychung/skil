@@ -1,7 +1,15 @@
-import { symlinkSync, unlinkSync } from 'node:fs';
+import { existsSync, symlinkSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import type { IFileSystemAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
-import type { IDEInfo } from '../types/index.js';
+import type { IDE, IDEInfo } from '../types/index.js';
+
+/** Maps each supported IDE to its integration directory name, relative to the project root. */
+const IDE_DIRS: Record<IDE, string> = {
+  cursor: '.agents',
+  claude: '.claude',
+  windsurf: '.windsurf',
+};
 
 /**
  * Real file system implementation of IFileSystemAdapter, backed by Node's
@@ -27,8 +35,15 @@ export class RealFileSystemAdapter implements IFileSystemAdapter {
     }
   }
 
-  detectIDEs(_projectRoot: string): IDEInfo[] {
-    return [];
+  detectIDEs(projectRoot: string): IDEInfo[] {
+    const ides: IDEInfo[] = [];
+    for (const [name, dirName] of Object.entries(IDE_DIRS) as [IDE, string][]) {
+      const dirPath = join(projectRoot, dirName);
+      if (existsSync(dirPath)) {
+        ides.push({ name, path: join(dirPath, 'skills') });
+      }
+    }
+    return ides;
   }
 
   readJSON<T>(_path: string): Result<T> {
