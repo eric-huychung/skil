@@ -280,6 +280,32 @@ describe('CollectionEngine', () => {
 
       expect(isErr(result)).toBe(true);
     });
+
+    it('warns about local collections not present in the config file', () => {
+      engine.create('local-only', ['skill-x']);
+      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['skill-a'] } });
+
+      const result = engine.sync('.contextkit.yml');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.warnings).toEqual(
+          expect.arrayContaining([expect.stringContaining('local-only')])
+        );
+      }
+    });
+
+    it('does not warn about collections present in both local state and config', () => {
+      engine.create('frontend', ['old-skill']);
+      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['new-skill'] } });
+
+      const result = engine.sync('.contextkit.yml');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.warnings).toEqual([]);
+      }
+    });
   });
 
   describe('loading existing state', () => {

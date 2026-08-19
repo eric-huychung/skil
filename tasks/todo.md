@@ -732,17 +732,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: Sync returns success with warnings array
-- [ ] Test: Warning lists local collections not in config
-- [ ] Test: Warning message is actionable
-- [ ] Implementation: Compare local and config collections, note differences
-- [ ] Implementation: Return Result with warnings field
+- [x] Test: Sync returns success with warnings array
+- [x] Test: Warning lists local collections not in config
+- [x] Test: Warning message is actionable
+- [x] Implementation: Compare local and config collections, note differences
+- [x] Implementation: Return Result with warnings field
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Conflicts detected correctly
-- [ ] Warnings are clear
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Conflicts detected correctly
+- [x] Warnings are clear
 
 **Dependencies:** Task 21
 
@@ -759,10 +759,10 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 ## Checkpoint: Config Sync Works
 
-- [ ] Config parsing tests pass
-- [ ] Sync operation works correctly
-- [ ] Conflict detection and warnings work
-- [ ] Integration test: Sync from real YAML file
+- [x] Config parsing tests pass
+- [x] Sync operation works correctly
+- [x] Conflict detection and warnings work
+- [x] Integration test: Sync from real YAML file
 
 ---
 

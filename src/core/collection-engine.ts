@@ -101,6 +101,11 @@ export class CollectionEngine implements ICollectionEngine {
       return err(validation.error);
     }
 
+    const configNames = new Set(Object.keys(configResult.value.collections));
+    const warnings = this.state.collections
+      .filter((c) => !configNames.has(c.name))
+      .map((c) => `Local collection '${c.name}' is not in the config file. Add it to '${configPath}' or remove it locally.`);
+
     const synced: string[] = [];
     for (const [name, skillIds] of Object.entries(configResult.value.collections)) {
       const existing = this.state.collections.find((c) => c.name === name);
@@ -118,7 +123,7 @@ export class CollectionEngine implements ICollectionEngine {
     }
     this.persist();
 
-    return ok({ synced, warnings: [] });
+    return ok({ synced, warnings });
   }
 
   private persist(): void {
