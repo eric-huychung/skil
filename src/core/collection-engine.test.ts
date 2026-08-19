@@ -101,6 +101,33 @@ describe('CollectionEngine', () => {
     });
   });
 
+  describe('activate', () => {
+    it('activates an existing collection', () => {
+      engine.create('frontend', ['obra/react-patterns']);
+
+      const result = engine.activate('frontend');
+
+      expect(isOk(result)).toBe(true);
+    });
+
+    it('shows the activated collection as active in status', () => {
+      engine.create('frontend', ['obra/react-patterns']);
+
+      engine.activate('frontend');
+
+      expect(engine.status().activeCollection).toBe('frontend');
+    });
+
+    it('activating a non-existent collection returns an error', () => {
+      const result = engine.activate('missing');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toBe("Collection 'missing' does not exist");
+      }
+    });
+  });
+
   describe('loading existing state', () => {
     it('starts with an empty list when no state file exists yet', () => {
       expect(engine.list()).toEqual([]);

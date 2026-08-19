@@ -48,8 +48,16 @@ export class CollectionEngine implements ICollectionEngine {
     return [...this.state.collections];
   }
 
-  activate(_name: string): Result<void> {
-    return err(new Error('Not implemented yet'));
+  activate(name: string): Result<void> {
+    const collection = this.state.collections.find((c) => c.name === name);
+    if (!collection) {
+      return err(new Error(`Collection '${name}' does not exist`));
+    }
+
+    this.state.activeCollection = name;
+    this.persist();
+
+    return ok(undefined);
   }
 
   deactivate(): Result<void> {
