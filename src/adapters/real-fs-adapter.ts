@@ -1,5 +1,5 @@
-import { existsSync, symlinkSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { IFileSystemAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
 import type { IDE, IDEInfo } from '../types/index.js';
@@ -46,11 +46,30 @@ export class RealFileSystemAdapter implements IFileSystemAdapter {
     return ides;
   }
 
-  readJSON<T>(_path: string): Result<T> {
-    return err(new Error('RealFileSystemAdapter.readJSON not yet implemented'));
+  readJSON<T>(path: string): Result<T> {
+    let contents: string;
+    try {
+      contents = readFileSync(path, 'utf-8');
+    } catch (error) {
+      return err(new Error(`Failed to read '${path}': ${(error as Error).message}`));
+    }
+
+    try {
+      return ok(JSON.parse(contents) as T);
+    } catch (error) {
+      return err(new Error(`Failed to parse JSON in '${path}': ${(error as Error).message}`));
+    }
   }
 
-  writeJSON<T>(_path: string, _data: T): Result<void> {
-    return err(new Error('RealFileSystemAdapter.writeJSON not yet implemented'));
+  writeJSON<T>(path: string, data: T): Result<void> {
+    const tempPath = `${path}.${process.pid}.tmp`;
+    try {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(tempPath, JSON.stringify(data, null, 2));
+      renameSync(tempPath, path);
+      return ok(undefined);
+    } catch (error) {
+      return err(new Error(`Failed to write '${path}': ${(error as Error).message}`));
+    }
   }
 }

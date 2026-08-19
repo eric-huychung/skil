@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, lstatSync, readlinkSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  lstatSync,
+  readlinkSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isErr, isOk } from '../core/result.js';
@@ -102,6 +111,79 @@ describe('RealFileSystemAdapter', () => {
         { name: 'cursor', path: join(tmpDir, '.agents', 'skills') },
         { name: 'windsurf', path: join(tmpDir, '.windsurf', 'skills') },
       ]);
+    });
+  });
+
+  describe('readJSON', () => {
+    it('reads and parses a valid JSON file', () => {
+      const path = join(tmpDir, 'data.json');
+      writeFileSync(path, JSON.stringify({ name: 'frontend' }));
+
+      const result = adapter.readJSON<{ name: string }>(path);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual({ name: 'frontend' });
+      }
+    });
+
+    it('returns an error when the file does not exist', () => {
+      const result = adapter.readJSON(join(tmpDir, 'missing.json'));
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('missing.json');
+      }
+    });
+
+    it('returns an error when the file contains malformed JSON', () => {
+      const path = join(tmpDir, 'bad.json');
+      writeFileSync(path, '{ not valid json');
+
+      const result = adapter.readJSON(path);
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain(path);
+      }
+    });
+  });
+
+  describe('writeJSON', () => {
+    it('writes data as JSON to the target path', () => {
+      const path = join(tmpDir, 'state.json');
+
+      const result = adapter.writeJSON(path, { collections: [] });
+
+      expect(isOk(result)).toBe(true);
+      expect(JSON.parse(readFileSync(path, 'utf-8'))).toEqual({ collections: [] });
+    });
+
+    it('creates the parent directory if it does not exist', () => {
+      const path = join(tmpDir, '.contextkit', 'state.json');
+
+      const result = adapter.writeJSON(path, { collections: [] });
+
+      expect(isOk(result)).toBe(true);
+      expect(JSON.parse(readFileSync(path, 'utf-8'))).toEqual({ collections: [] });
+    });
+
+    it('writes atomically, leaving no temp file behind', () => {
+      const path = join(tmpDir, 'state.json');
+
+      adapter.writeJSON(path, { collections: [] });
+
+      const entries = readdirSync(tmpDir);
+      expect(entries).toEqual(['state.json']);
+    });
+
+    it('overwrites an existing file with new content', () => {
+      const path = join(tmpDir, 'state.json');
+      adapter.writeJSON(path, { collections: [] });
+
+      adapter.writeJSON(path, { collections: ['frontend'] });
+
+      expect(JSON.parse(readFileSync(path, 'utf-8'))).toEqual({ collections: ['frontend'] });
     });
   });
 });
