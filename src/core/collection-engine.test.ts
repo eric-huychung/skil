@@ -100,4 +100,39 @@ describe('CollectionEngine', () => {
       }
     });
   });
+
+  describe('loading existing state', () => {
+    it('starts with an empty list when no state file exists yet', () => {
+      expect(engine.list()).toEqual([]);
+    });
+
+    it('loads collections from an existing state file on construction', () => {
+      fs.writeJSON(STATE_PATH, {
+        collections: [{ name: 'frontend', skills: ['react-patterns'], createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null }],
+        activeCollection: null,
+        installedSkills: [],
+        version: '1.0',
+      });
+
+      const loadedEngine = new CollectionEngine(fs, config, skills);
+
+      expect(loadedEngine.list()).toEqual([
+        { name: 'frontend', skills: ['react-patterns'], createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null },
+      ]);
+    });
+
+    it('a duplicate name check considers collections loaded from the state file', () => {
+      fs.writeJSON(STATE_PATH, {
+        collections: [{ name: 'frontend', skills: [], createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null }],
+        activeCollection: null,
+        installedSkills: [],
+        version: '1.0',
+      });
+      const loadedEngine = new CollectionEngine(fs, config, skills);
+
+      const result = loadedEngine.create('frontend', []);
+
+      expect(isErr(result)).toBe(true);
+    });
+  });
 });
