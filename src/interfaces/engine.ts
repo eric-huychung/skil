@@ -1,5 +1,5 @@
 import type { Result } from '../core/result.js';
-import type { Collection, Status } from '../types/index.js';
+import type { Collection, Status, SyncResult } from '../types/index.js';
 
 /**
  * CollectionEngine is ContextKit's deep module: a small interface backed by
@@ -32,4 +32,12 @@ export interface ICollectionEngine {
 
   /** Returns the current activation status. */
   status(): Status;
+
+  /**
+   * Merges collections from a team config file into local state. Additive:
+   * config collections overwrite local collections with the same name, but
+   * local-only collections are never deleted.
+   * Returns an error Result if the config file is missing or invalid.
+   */
+  sync(configPath: string): Result<SyncResult>;
 }

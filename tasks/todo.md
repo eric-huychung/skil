@@ -701,17 +701,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: Sync adds collections from config to local state
-- [ ] Test: Existing local collections preserved
-- [ ] Test: Config collections overwrite existing with same name
-- [ ] Implementation: sync() reads config via adapter, merges into state
-- [ ] Implementation: Writes updated state to file
+- [x] Test: Sync adds collections from config to local state
+- [x] Test: Existing local collections preserved
+- [x] Test: Config collections overwrite existing with same name
+- [x] Implementation: sync() reads config via adapter, merges into state
+- [x] Implementation: Writes updated state to file
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Config collections added
-- [ ] Local collections not deleted
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Config collections added
+- [x] Local collections not deleted
 
 **Dependencies:** Task 20
 

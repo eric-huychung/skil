@@ -233,6 +233,55 @@ describe('CollectionEngine', () => {
     });
   });
 
+  describe('sync', () => {
+    it('adds collections from the config file to local state', () => {
+      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['skill-a'] } });
+
+      const result = engine.sync('.contextkit.yml');
+
+      expect(isOk(result)).toBe(true);
+      const frontend = engine.list().find((c) => c.name === 'frontend');
+      expect(frontend?.skills).toEqual(['skill-a']);
+    });
+
+    it('preserves local collections not present in the config file', () => {
+      engine.create('local-only', ['skill-x']);
+      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['skill-a'] } });
+
+      engine.sync('.contextkit.yml');
+
+      expect(engine.list().map((c) => c.name)).toEqual(expect.arrayContaining(['local-only', 'frontend']));
+    });
+
+    it('overwrites an existing local collection with the same name from config', () => {
+      engine.create('frontend', ['old-skill']);
+      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['new-skill'] } });
+
+      engine.sync('.contextkit.yml');
+
+      const frontend = engine.list().find((c) => c.name === 'frontend');
+      expect(frontend?.skills).toEqual(['new-skill']);
+    });
+
+    it('writes the merged state to the state file', () => {
+      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['skill-a'] } });
+
+      engine.sync('.contextkit.yml');
+
+      const persisted = fs.readJSON<{ collections: Array<{ name: string }> }>(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.collections.map((c) => c.name)).toContain('frontend');
+      }
+    });
+
+    it('returns an error when the config file cannot be read', () => {
+      const result = engine.sync('.contextkit.yml');
+
+      expect(isErr(result)).toBe(true);
+    });
+  });
+
   describe('loading existing state', () => {
     it('starts with an empty list when no state file exists yet', () => {
       expect(engine.list()).toEqual([]);

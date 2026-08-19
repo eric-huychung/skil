@@ -1,6 +1,6 @@
 import type { ICollectionEngine } from '../interfaces/engine.js';
 import type { IFileSystemAdapter, IConfigAdapter, ISkillsAdapter } from '../interfaces/adapters.js';
-import type { Collection, IDEInfo, State, Status } from '../types/index.js';
+import type { Collection, IDEInfo, State, Status, SyncResult } from '../types/index.js';
 import { err, isOk, ok, type Result } from './result.js';
 
 /** Path to the persisted engine state, relative to the project root. */
@@ -88,6 +88,37 @@ export class CollectionEngine implements ICollectionEngine {
 
   status(): Status {
     return { activeCollection: this.state.activeCollection, skills: [] };
+  }
+
+  sync(configPath: string): Result<SyncResult> {
+    const configResult = this.config.read(configPath);
+    if (!isOk(configResult)) {
+      return err(configResult.error);
+    }
+
+    const validation = this.config.validate(configResult.value);
+    if (!isOk(validation)) {
+      return err(validation.error);
+    }
+
+    const synced: string[] = [];
+    for (const [name, skillIds] of Object.entries(configResult.value.collections)) {
+      const existing = this.state.collections.find((c) => c.name === name);
+      if (existing) {
+        existing.skills = skillIds;
+      } else {
+        this.state.collections.push({
+          name,
+          skills: skillIds,
+          createdAt: new Date().toISOString(),
+          lastUsedAt: null,
+        });
+      }
+      synced.push(name);
+    }
+    this.persist();
+
+    return ok({ synced, warnings: [] });
   }
 
   private persist(): void {

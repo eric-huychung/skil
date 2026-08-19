@@ -54,3 +54,11 @@ export interface Config {
   /** Map of collection name to the list of skill IDs it contains. */
   collections: Record<string, string[]>;
 }
+
+/** Outcome of a sync operation, merging a team config into local state. */
+export interface SyncResult {
+  /** Names of collections added or updated from the config file. */
+  synced: string[];
+  /** Actionable messages about local collections not present in the config. */
+  warnings: string[];
+}
