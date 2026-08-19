@@ -29,7 +29,15 @@ export class ConfigAdapter implements IConfigAdapter {
     return err(new Error('ConfigAdapter.write is not implemented yet'));
   }
 
-  validate(_config: Config): Result<void> {
-    return err(new Error('ConfigAdapter.validate is not implemented yet'));
+  validate(config: Config): Result<void> {
+    if (typeof config.collections !== 'object' || config.collections === null) {
+      return err(new Error("Config must have a 'collections' object"));
+    }
+    for (const [name, skills] of Object.entries(config.collections)) {
+      if (!Array.isArray(skills)) {
+        return err(new Error(`Collection '${name}' must be an array of skill IDs`));
+      }
+    }
+    return ok(undefined);
   }
 }

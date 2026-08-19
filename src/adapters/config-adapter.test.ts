@@ -64,4 +64,36 @@ describe('ConfigAdapter', () => {
       }
     });
   });
+
+  describe('validate', () => {
+    it('accepts a well-formed config', () => {
+      const result = adapter.validate({
+        version: '1.0',
+        collections: { frontend: ['obra/react-patterns'] },
+      });
+
+      expect(isOk(result)).toBe(true);
+    });
+
+    it('rejects a config missing the collections key', () => {
+      const result = adapter.validate({ version: '1.0' } as never);
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('collections');
+      }
+    });
+
+    it('rejects a collection whose skills are not an array', () => {
+      const result = adapter.validate({
+        version: '1.0',
+        collections: { frontend: 'obra/react-patterns' } as never,
+      });
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('frontend');
+      }
+    });
+  });
 });

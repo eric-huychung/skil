@@ -669,17 +669,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: Invalid structure returns error Result
-- [ ] Test: Missing collections key returns error
-- [ ] Test: Non-array skill list returns error
-- [ ] Implementation: validate() checks schema constraints
-- [ ] Error messages specify what's wrong with config
+- [x] Test: Invalid structure returns error Result
+- [x] Test: Missing collections key returns error
+- [x] Test: Non-array skill list returns error
+- [x] Implementation: validate() checks schema constraints
+- [x] Error messages specify what's wrong with config
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- config-adapter.test.ts`
-- [ ] Invalid configs rejected
-- [ ] Error messages are clear
+- [x] Tests pass: `npm test -- config-adapter.test.ts`
+- [x] Invalid configs rejected
+- [x] Error messages are clear
 
 **Dependencies:** Task 19
 
