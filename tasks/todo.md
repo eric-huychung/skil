@@ -498,17 +498,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `createSymlink()` uses `fs.symlink()` to create symbolic link
-- [ ] `removeSymlink()` uses `fs.unlink()` to remove symlink
-- [ ] Error cases handled: permission denied, target doesn't exist, symlink already exists
-- [ ] Tests use temp directory (clean up after each test)
-- [ ] Tests verify real symlinks created on filesystem
+- [x] `createSymlink()` uses `fs.symlink()` to create symbolic link
+- [x] `removeSymlink()` uses `fs.unlink()` to remove symlink
+- [x] Error cases handled: permission denied, target doesn't exist, symlink already exists
+- [x] Tests use temp directory (clean up after each test)
+- [x] Tests verify real symlinks created on filesystem
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- real-fs-adapter.test.ts`
-- [ ] Build succeeds: `npm run build`
-- [ ] Manual check: Run test, inspect temp directory for symlinks
+- [x] Tests pass: `npm test -- real-fs-adapter.test.ts`
+- [x] Build succeeds: `npm run build`
+- [x] Manual check: Run test, inspect temp directory for symlinks
 
 **Dependencies:** Task 3 (needs interfaces)
 
@@ -529,16 +529,16 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `detectIDEs()` checks for existence of `.agents/`, `.claude/`, `.windsurf/`
-- [ ] Returns array of found IDEs with name and full path
-- [ ] Tests verify detection with temp directories
-- [ ] Handles case where no IDE directories exist (empty array)
+- [x] `detectIDEs()` checks for existence of `.agents/`, `.claude/`, `.windsurf/`
+- [x] Returns array of found IDEs with name and full path
+- [x] Tests verify detection with temp directories
+- [x] Handles case where no IDE directories exist (empty array)
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- real-fs-adapter.test.ts`
-- [ ] Multiple IDEs detected correctly
-- [ ] Empty directory handled gracefully
+- [x] Tests pass: `npm test -- real-fs-adapter.test.ts`
+- [x] Multiple IDEs detected correctly
+- [x] Empty directory handled gracefully
 
 **Dependencies:** Task 15
 
@@ -559,17 +559,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `readJSON()` reads file and parses JSON, returns Result
-- [ ] `writeJSON()` writes to temp file, then renames to target (atomic)
-- [ ] File not found returns error Result
-- [ ] Malformed JSON returns error Result
-- [ ] Tests verify atomic write (temp file used, then renamed)
+- [x] `readJSON()` reads file and parses JSON, returns Result
+- [x] `writeJSON()` writes to temp file, then renames to target (atomic)
+- [x] File not found returns error Result
+- [x] Malformed JSON returns error Result
+- [x] Tests verify atomic write (temp file used, then renamed)
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- real-fs-adapter.test.ts`
-- [ ] Atomic write verified (check for temp file pattern)
-- [ ] Error cases handled correctly
+- [x] Tests pass: `npm test -- real-fs-adapter.test.ts`
+- [x] Atomic write verified (check for temp file pattern)
+- [x] Error cases handled correctly
 
 **Dependencies:** Task 15
 
@@ -590,18 +590,18 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test creates temp directory with fake IDE directories
-- [ ] Test creates CollectionEngine with real FileSystemAdapter
-- [ ] Test runs full create → activate → deactivate flow
-- [ ] Test verifies symlinks physically exist after activate
-- [ ] Test verifies symlinks removed after deactivate
-- [ ] Test cleans up temp directory after completion
+- [x] Test creates temp directory with fake IDE directories
+- [x] Test creates CollectionEngine with real FileSystemAdapter
+- [x] Test runs full create → activate → deactivate flow
+- [x] Test verifies symlinks physically exist after activate
+- [x] Test verifies symlinks removed after deactivate
+- [x] Test cleans up temp directory after completion
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- integration.test.ts`
-- [ ] Manual check: Watch temp directory during test
-- [ ] All IDE directories get symlinks
+- [x] Tests pass: `npm test -- integration.test.ts`
+- [x] Manual check: Watch temp directory during test
+- [x] All IDE directories get symlinks
 
 **Dependencies:** Tasks 15, 16, 17, 14 (needs full engine + real adapter)
 
@@ -617,11 +617,11 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 ## Checkpoint: File System Works
 
-- [ ] Integration test passes with real FileSystemAdapter
-- [ ] Symlinks actually created and removed on disk
-- [ ] JSON state file correctly persisted
-- [ ] Multi-IDE support verified
-- [ ] Manual test: Create collection in temp directory, inspect symlinks
+- [x] Integration test passes with real FileSystemAdapter
+- [x] Symlinks actually created and removed on disk
+- [x] JSON state file correctly persisted
+- [x] Multi-IDE support verified
+- [x] Manual test: Create collection in temp directory, inspect symlinks
 
 ---
 
