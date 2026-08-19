@@ -74,7 +74,10 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   deactivate(): Result<void> {
-    return err(new Error('Not implemented yet'));
+    this.state.activeCollection = null;
+    this.persist();
+
+    return ok(undefined);
   }
 
   status(): Status {

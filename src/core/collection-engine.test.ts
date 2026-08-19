@@ -181,6 +181,33 @@ describe('CollectionEngine', () => {
     });
   });
 
+  describe('deactivate', () => {
+    it('deactivates the active collection', () => {
+      engine.create('frontend', []);
+      engine.activate('frontend');
+
+      const result = engine.deactivate();
+
+      expect(isOk(result)).toBe(true);
+    });
+
+    it('shows no active collection in status after deactivating', () => {
+      engine.create('frontend', []);
+      engine.activate('frontend');
+
+      engine.deactivate();
+
+      expect(engine.status().activeCollection).toBeNull();
+    });
+
+    it('is idempotent: deactivating when nothing is active still succeeds', () => {
+      const result = engine.deactivate();
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.status().activeCollection).toBeNull();
+    });
+  });
+
   describe('loading existing state', () => {
     it('starts with an empty list when no state file exists yet', () => {
       expect(engine.list()).toEqual([]);
