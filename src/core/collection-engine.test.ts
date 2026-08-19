@@ -155,6 +155,30 @@ describe('CollectionEngine', () => {
       expect(symlinks.has('/project/.agents/skills/skill-a')).toBe(true);
       expect(symlinks.has('/project/.agents/skills/skill-b')).toBe(true);
     });
+
+    it('removes the previously active collection symlinks when activating another', () => {
+      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
+      engine.create('frontend', ['skill-a']);
+      engine.create('backend', ['skill-b']);
+      engine.activate('frontend');
+
+      engine.activate('backend');
+
+      const symlinks = fs.getSymlinks();
+      expect(symlinks.has('/project/.agents/skills/skill-a')).toBe(false);
+      expect(symlinks.has('/project/.agents/skills/skill-b')).toBe(true);
+    });
+
+    it('shows the newly activated collection as active, not the old one', () => {
+      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
+      engine.create('frontend', ['skill-a']);
+      engine.create('backend', ['skill-b']);
+      engine.activate('frontend');
+
+      engine.activate('backend');
+
+      expect(engine.status().activeCollection).toBe('backend');
+    });
   });
 
   describe('loading existing state', () => {

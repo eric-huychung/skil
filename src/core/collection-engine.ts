@@ -59,6 +59,12 @@ export class CollectionEngine implements ICollectionEngine {
     }
 
     const ides = this.fs.detectIDEs(this.projectRoot);
+
+    const previouslyActive = this.state.collections.find((c) => c.name === this.state.activeCollection);
+    if (previouslyActive) {
+      this.removeSymlinksFor(previouslyActive, ides);
+    }
+
     this.createSymlinksFor(collection, ides);
 
     this.state.activeCollection = name;
@@ -83,6 +89,14 @@ export class CollectionEngine implements ICollectionEngine {
     for (const ide of ides) {
       for (const skillId of collection.skills) {
         this.fs.createSymlink(`${SKILLS_DIR}/${skillId}`, `${ide.path}/${skillId}`);
+      }
+    }
+  }
+
+  private removeSymlinksFor(collection: Collection, ides: IDEInfo[]): void {
+    for (const ide of ides) {
+      for (const skillId of collection.skills) {
+        this.fs.removeSymlink(`${ide.path}/${skillId}`);
       }
     }
   }
