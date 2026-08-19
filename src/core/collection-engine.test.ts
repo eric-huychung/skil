@@ -1,0 +1,78 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { isErr, isOk } from './result.js';
+import { CollectionEngine } from './collection-engine.js';
+import { InMemoryConfigAdapter } from '../adapters/in-memory-config.js';
+import { InMemoryFileSystemAdapter } from '../adapters/in-memory-fs.js';
+import { InMemorySkillsAdapter } from '../adapters/in-memory-skills.js';
+
+describe('CollectionEngine', () => {
+  let fs: InMemoryFileSystemAdapter;
+  let config: InMemoryConfigAdapter;
+  let skills: InMemorySkillsAdapter;
+  let engine: CollectionEngine;
+
+  beforeEach(() => {
+    fs = new InMemoryFileSystemAdapter();
+    config = new InMemoryConfigAdapter();
+    skills = new InMemorySkillsAdapter();
+    engine = new CollectionEngine(fs, config, skills);
+  });
+
+  describe('create', () => {
+    it('creates a collection with the given name and skills', () => {
+      const result = engine.create('frontend', ['obra/react-patterns']);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.name).toBe('frontend');
+        expect(result.value.skills).toEqual(['obra/react-patterns']);
+      }
+    });
+
+    it('sets a createdAt timestamp and null lastUsedAt', () => {
+      const result = engine.create('frontend', []);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.createdAt).toBeTruthy();
+        expect(new Date(result.value.createdAt).toString()).not.toBe('Invalid Date');
+        expect(result.value.lastUsedAt).toBeNull();
+      }
+    });
+
+    it('creating a duplicate collection returns an error', () => {
+      engine.create('frontend', []);
+
+      const result = engine.create('frontend', ['some-skill']);
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toBe("Collection 'frontend' already exists");
+      }
+    });
+
+    it('leaves state unchanged after a failed duplicate creation', () => {
+      engine.create('frontend', []);
+
+      engine.create('frontend', ['some-skill']);
+
+      expect(engine.list()).toHaveLength(1);
+      expect(engine.list()[0]?.skills).toEqual([]);
+    });
+  });
+
+  describe('list', () => {
+    it('returns an empty array when no collections exist', () => {
+      expect(engine.list()).toEqual([]);
+    });
+
+    it('returns all created collections', () => {
+      engine.create('frontend', ['react-patterns']);
+      engine.create('backend', ['api-design']);
+
+      const collections = engine.list();
+
+      expect(collections.map((c) => c.name)).toEqual(['frontend', 'backend']);
+    });
+  });
+});
