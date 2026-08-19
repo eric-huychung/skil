@@ -126,6 +126,35 @@ describe('CollectionEngine', () => {
         expect(result.error.message).toBe("Collection 'missing' does not exist");
       }
     });
+
+    it('creates a symlink for each skill in each detected IDE directory', () => {
+      fs.setDetectedIDEs([
+        { name: 'cursor', path: '/project/.agents/skills' },
+        { name: 'claude', path: '/project/.claude/skills' },
+      ]);
+      engine.create('frontend', ['obra/react-patterns']);
+
+      engine.activate('frontend');
+
+      const symlinks = fs.getSymlinks();
+      expect(symlinks.get('/project/.agents/skills/obra/react-patterns')).toBe(
+        '.contextkit/skills/obra/react-patterns'
+      );
+      expect(symlinks.get('/project/.claude/skills/obra/react-patterns')).toBe(
+        '.contextkit/skills/obra/react-patterns'
+      );
+    });
+
+    it('creates a symlink for every skill in the collection', () => {
+      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
+      engine.create('frontend', ['skill-a', 'skill-b']);
+
+      engine.activate('frontend');
+
+      const symlinks = fs.getSymlinks();
+      expect(symlinks.has('/project/.agents/skills/skill-a')).toBe(true);
+      expect(symlinks.has('/project/.agents/skills/skill-b')).toBe(true);
+    });
   });
 
   describe('loading existing state', () => {
