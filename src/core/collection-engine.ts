@@ -69,6 +69,9 @@ export class CollectionEngine implements ICollectionEngine {
 
     const symlinkResult = this.createSymlinksFor(name, availableSkills, ides);
     if (!isOk(symlinkResult)) {
+      if (previouslyActive) {
+        this.createSymlinksFor(previouslyActive.name, previouslyActive.skills, ides);
+      }
       return err(symlinkResult.error);
     }
 
@@ -189,14 +192,25 @@ export class CollectionEngine implements ICollectionEngine {
     return { availableSkills, warnings };
   }
 
+  /**
+   * Creates a symlink for every (ide, skill) pair. If any creation fails
+   * partway through, removes every symlink it created in this call before
+   * returning the error, so a failed activation never leaves the new
+   * collection half-linked.
+   */
   private createSymlinksFor(collectionName: string, skillIds: string[], ides: IDEInfo[]): Result<void> {
+    const created: string[] = [];
     for (const ide of ides) {
       for (const skillId of skillIds) {
         const target = `${ide.path}/${skillId}`;
         const result = this.fs.createSymlink(`${SKILLS_DIR}/${skillId}`, target);
         if (!isOk(result)) {
+          for (const rollbackTarget of created) {
+            this.fs.removeSymlink(rollbackTarget);
+          }
           return err(new Error(`Failed to activate '${collectionName}': ${result.error.message}. Remove the conflicting file and try again.`));
         }
+        created.push(target);
       }
     }
     return ok(undefined);

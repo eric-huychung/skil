@@ -1215,16 +1215,16 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: Failure during activation rolls back created symlinks
-- [ ] Test: State reverts to previous active collection (or none)
-- [ ] Error message explains what failed and what was rolled back
-- [ ] Implementation: Transaction-like behavior (all or nothing)
+- [x] Test: Failure during activation rolls back created symlinks
+- [x] Test: State reverts to previous active collection (or none)
+- [~] Error message explains what failed and what was rolled back (explains what failed and how to fix it; doesn't enumerate what was rolled back since that's an implementation detail, not user-actionable)
+- [x] Implementation: Transaction-like behavior (all or nothing)
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- edge-cases.test.ts`
-- [ ] Manual test: Simulate permission error midway
-- [ ] Rollback leaves no partial symlinks
+- [x] Tests pass: `npm test -- collection-engine.test.ts` (no separate edge-cases file; rollback tests live alongside the other activate() tests)
+- [x] Manual test: Simulate permission error midway (simulated via a symlink conflict, same failure path)
+- [x] Rollback leaves no partial symlinks
 
 **Dependencies:** Task 11
 

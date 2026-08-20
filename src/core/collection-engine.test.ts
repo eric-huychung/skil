@@ -212,6 +212,34 @@ describe('CollectionEngine', () => {
       }
     });
 
+    it('rolls back newly created symlinks and restores the previous collection on partial failure', () => {
+      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
+      engine.create('frontend', ['skill-a']);
+      engine.create('backend', ['skill-b', 'skill-c']);
+      engine.activate('frontend');
+      fs.setConflict('/project/.agents/skills/skill-c');
+
+      const result = engine.activate('backend');
+
+      expect(isErr(result)).toBe(true);
+      const symlinks = fs.getSymlinks();
+      expect(symlinks.has('/project/.agents/skills/skill-b')).toBe(false);
+      expect(symlinks.has('/project/.agents/skills/skill-c')).toBe(false);
+      expect(symlinks.get('/project/.agents/skills/skill-a')).toBe('.contextkit/skills/skill-a');
+      expect(engine.status().activeCollection).toBe('frontend');
+    });
+
+    it('leaves no active collection after a failed activation when none was active before', () => {
+      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
+      engine.create('backend', ['skill-b']);
+      fs.setConflict('/project/.agents/skills/skill-b');
+
+      const result = engine.activate('backend');
+
+      expect(isErr(result)).toBe(true);
+      expect(engine.status().activeCollection).toBeNull();
+    });
+
     it('shows the newly activated collection as active, not the old one', () => {
       fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
       engine.create('frontend', ['skill-a']);
