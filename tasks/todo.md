@@ -1412,14 +1412,14 @@ Deferred from the original architecture until the CLI (Phases 1-8) is stable. Sa
 
 **Acceptance criteria:**
 
-- [ ] Test: submitting a valid form calls `engine.create()` with the parsed values
-- [ ] Test: a duplicate-name error Result surfaces as a form validation error
-- [ ] Test: skill picker allows selecting multiple skill IDs
-- [ ] Implementation: `CreateCollectionForm` component
+- [x] Test: submitting a valid form calls `engine.create()` with the parsed values
+- [x] Test: a duplicate-name error Result surfaces as a form validation error
+- [x] Test: skill picker allows selecting multiple skill IDs
+- [x] Implementation: `CreateCollectionForm` component
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- CreateCollectionForm.test.tsx`
+- [x] Tests pass: `npm test -- CreateCollectionForm.test.tsx`
 - [ ] Manual check: form works end-to-end in dev mode
 
 **Dependencies:** Task 39
