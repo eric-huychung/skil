@@ -62,3 +62,9 @@ export interface SyncResult {
   /** Actionable messages about local collections not present in the config. */
   warnings: string[];
 }
+
+/** Outcome of a successful activate() call. */
+export interface ActivateResult {
+  /** Actionable messages about skills that were skipped (e.g. missing source directory). */
+  warnings: string[];
+}

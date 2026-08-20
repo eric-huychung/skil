@@ -14,6 +14,7 @@ export function runUse(engine: ICollectionEngine, name: string): CommandOutcome 
   return {
     message: `Activated collection '${name}' (${count} skill${count === 1 ? '' : 's'})`,
     isError: false,
+    warnings: result.value.warnings,
   };
 }
 

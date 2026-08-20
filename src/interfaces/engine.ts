@@ -1,5 +1,5 @@
 import type { Result } from '../core/result.js';
-import type { Collection, Skill, Status, SyncResult } from '../types/index.js';
+import type { ActivateResult, Collection, Skill, Status, SyncResult } from '../types/index.js';
 
 /**
  * CollectionEngine is ContextKit's deep module: a small interface backed by
@@ -16,10 +16,12 @@ export interface ICollectionEngine {
   /**
    * Activates the named collection: deactivates any currently active
    * collection, then creates symlinks for this collection's skills in every
-   * detected IDE directory.
-   * Returns an error Result if the collection doesn't exist.
+   * detected IDE directory. Skills whose source directory is missing are
+   * skipped with a warning rather than failing the whole activation.
+   * Returns an error Result if the collection doesn't exist, or if creating
+   * a symlink fails (e.g. a conflicting file already exists at the target).
    */
-  activate(name: string): Result<void>;
+  activate(name: string): Result<ActivateResult>;
 
   /**
    * Deactivates the currently active collection, removing its symlinks.

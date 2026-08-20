@@ -24,6 +24,9 @@ export interface IFileSystemAdapter {
   /** Scans `projectRoot` for known IDE directories and returns those found. */
   detectIDEs(projectRoot: string): IDEInfo[];
 
+  /** Returns whether a file or directory exists at `path`. */
+  exists(path: string): boolean;
+
   /**
    * Reads and parses a JSON file.
    * Returns an error Result if the file is missing or contains malformed JSON.

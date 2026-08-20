@@ -35,6 +35,10 @@ export class RealFileSystemAdapter implements IFileSystemAdapter {
     }
   }
 
+  exists(path: string): boolean {
+    return existsSync(path);
+  }
+
   detectIDEs(projectRoot: string): IDEInfo[] {
     const ides: IDEInfo[] = [];
     for (const [name, dirName] of Object.entries(IDE_DIRS) as [IDE, string][]) {

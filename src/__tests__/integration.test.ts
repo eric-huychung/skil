@@ -19,6 +19,10 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
     // Simulate IDE-managed skill directories already existing in the project.
     mkdirSync(join(tmpDir, '.agents', 'skills'), { recursive: true });
     mkdirSync(join(tmpDir, '.claude', 'skills'), { recursive: true });
+    // Simulate skills already installed under ContextKit's managed directory,
+    // since activate() now skips symlinking any skill whose source is missing.
+    mkdirSync(join(tmpDir, '.contextkit', 'skills', 'react-patterns'), { recursive: true });
+    mkdirSync(join(tmpDir, '.contextkit', 'skills', 'api-design'), { recursive: true });
     // CollectionEngine resolves its state/skills paths relative to cwd,
     // matching how the real CLI is invoked from within a project root.
     process.chdir(tmpDir);
@@ -87,6 +91,22 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
     const backendTarget = join(tmpDir, '.agents', 'skills', 'api-design');
     expect(() => lstatSync(frontendTarget)).toThrow();
     expect(lstatSync(backendTarget).isSymbolicLink()).toBe(true);
+  });
+
+  it('warns and skips a skill with no installed source directory, activating the rest', () => {
+    const engine = buildEngine();
+    engine.create('frontend', ['react-patterns', 'never-installed']);
+
+    const result = engine.activate('frontend');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.warnings).toEqual(
+        expect.arrayContaining([expect.stringContaining('never-installed')])
+      );
+    }
+    expect(lstatSync(join(tmpDir, '.agents', 'skills', 'react-patterns')).isSymbolicLink()).toBe(true);
+    expect(() => lstatSync(join(tmpDir, '.agents', 'skills', 'never-installed'))).toThrow();
   });
 
   it('syncs collections from a real .contextkit.yml file on disk', () => {

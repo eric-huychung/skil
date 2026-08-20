@@ -182,6 +182,36 @@ describe('CollectionEngine', () => {
       }
     });
 
+    it('warns and skips a skill whose source directory is missing', () => {
+      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
+      engine.create('frontend', ['skill-a', 'skill-b']);
+      fs.setMissing('.contextkit/skills/skill-a');
+
+      const result = engine.activate('frontend');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.warnings).toEqual(
+          expect.arrayContaining([expect.stringContaining('skill-a')])
+        );
+      }
+      const symlinks = fs.getSymlinks();
+      expect(symlinks.has('/project/.agents/skills/skill-a')).toBe(false);
+      expect(symlinks.has('/project/.agents/skills/skill-b')).toBe(true);
+    });
+
+    it('does not warn when every skill in the collection is present', () => {
+      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
+      engine.create('frontend', ['skill-a']);
+
+      const result = engine.activate('frontend');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.warnings).toEqual([]);
+      }
+    });
+
     it('shows the newly activated collection as active, not the old one', () => {
       fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
       engine.create('frontend', ['skill-a']);

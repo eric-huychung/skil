@@ -1,6 +1,6 @@
 import type { ICollectionEngine } from '../interfaces/engine.js';
 import type { IFileSystemAdapter, IConfigAdapter, ISkillsAdapter } from '../interfaces/adapters.js';
-import type { Collection, IDEInfo, Skill, State, Status, SyncResult } from '../types/index.js';
+import type { ActivateResult, Collection, IDEInfo, Skill, State, Status, SyncResult } from '../types/index.js';
 import { err, isOk, ok, type Result } from './result.js';
 
 /** Path to the persisted engine state, relative to the project root. */
@@ -53,20 +53,21 @@ export class CollectionEngine implements ICollectionEngine {
     return [...this.state.collections];
   }
 
-  activate(name: string): Result<void> {
+  activate(name: string): Result<ActivateResult> {
     const collection = this.state.collections.find((c) => c.name === name);
     if (!collection) {
       return err(new Error(`Collection '${name}' does not exist`));
     }
 
     const ides = this.fs.detectIDEs(this.projectRoot);
+    const { availableSkills, warnings } = this.partitionBySourceAvailability(collection);
 
     const previouslyActive = this.state.collections.find((c) => c.name === this.state.activeCollection);
     if (previouslyActive) {
       this.removeSymlinksFor(previouslyActive, ides);
     }
 
-    const symlinkResult = this.createSymlinksFor(collection, ides);
+    const symlinkResult = this.createSymlinksFor(name, availableSkills, ides);
     if (!isOk(symlinkResult)) {
       return err(symlinkResult.error);
     }
@@ -74,7 +75,7 @@ export class CollectionEngine implements ICollectionEngine {
     this.state.activeCollection = name;
     this.persist();
 
-    return ok(undefined);
+    return ok({ warnings });
   }
 
   deactivate(): Result<void> {
@@ -171,13 +172,30 @@ export class CollectionEngine implements ICollectionEngine {
     }
   }
 
-  private createSymlinksFor(collection: Collection, ides: IDEInfo[]): Result<void> {
+  /**
+   * Splits a collection's skills into those whose source directory exists
+   * (safe to symlink) and those that don't (skipped, with a warning).
+   */
+  private partitionBySourceAvailability(collection: Collection): { availableSkills: string[]; warnings: string[] } {
+    const availableSkills: string[] = [];
+    const warnings: string[] = [];
+    for (const skillId of collection.skills) {
+      if (this.fs.exists(`${SKILLS_DIR}/${skillId}`)) {
+        availableSkills.push(skillId);
+      } else {
+        warnings.push(`Skill '${skillId}' not found in '${SKILLS_DIR}/${skillId}'. Run 'contextkit install ${skillId}' or remove it from the collection.`);
+      }
+    }
+    return { availableSkills, warnings };
+  }
+
+  private createSymlinksFor(collectionName: string, skillIds: string[], ides: IDEInfo[]): Result<void> {
     for (const ide of ides) {
-      for (const skillId of collection.skills) {
+      for (const skillId of skillIds) {
         const target = `${ide.path}/${skillId}`;
         const result = this.fs.createSymlink(`${SKILLS_DIR}/${skillId}`, target);
         if (!isOk(result)) {
-          return err(new Error(`Failed to activate '${collection.name}': ${result.error.message}. Remove the conflicting file and try again.`));
+          return err(new Error(`Failed to activate '${collectionName}': ${result.error.message}. Remove the conflicting file and try again.`));
         }
       }
     }

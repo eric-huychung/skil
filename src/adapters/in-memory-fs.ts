@@ -11,6 +11,7 @@ export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
   private files = new Map<string, unknown>();
   private detectedIDEs: IDEInfo[] = [];
   private conflictedTargets = new Set<string>();
+  private missingPaths = new Set<string>();
 
   createSymlink(source: string, target: string): Result<void> {
     if (this.conflictedTargets.has(target)) {
@@ -30,6 +31,11 @@ export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
 
   detectIDEs(_projectRoot: string): IDEInfo[] {
     return this.detectedIDEs;
+  }
+
+  /** Defaults to true (as if every path exists), so tests only need setMissing() for the paths they care about. */
+  exists(path: string): boolean {
+    return !this.missingPaths.has(path);
   }
 
   readJSON<T>(path: string): Result<T> {
@@ -54,6 +60,11 @@ export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
     this.conflictedTargets.add(target);
   }
 
+  /** Test helper: makes exists() return false for `path`. */
+  setMissing(path: string): void {
+    this.missingPaths.add(path);
+  }
+
   /** Test helper: inspects current symlinks (target -> source). */
   getSymlinks(): Map<string, string> {
     return new Map(this.symlinks);
@@ -65,5 +76,6 @@ export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
     this.files.clear();
     this.detectedIDEs = [];
     this.conflictedTargets.clear();
+    this.missingPaths.clear();
   }
 }

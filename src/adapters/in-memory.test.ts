@@ -59,6 +59,16 @@ describe('InMemoryFileSystemAdapter', () => {
     expect(isErr(result)).toBe(true);
   });
 
+  it('exists() returns true by default for any path', () => {
+    expect(fs.exists('/skills/react')).toBe(true);
+  });
+
+  it('exists() returns false for a path marked missing', () => {
+    fs.setMissing('/skills/react');
+
+    expect(fs.exists('/skills/react')).toBe(false);
+  });
+
   it('reset() clears symlinks and files', () => {
     fs.createSymlink('/skills/react', '/cursor/react');
     fs.writeJSON('/state.json', { foo: 'bar' });

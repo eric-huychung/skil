@@ -5,13 +5,15 @@ import { InMemoryFileSystemAdapter } from '../../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../../adapters/in-memory-skills.js';
 import { runUse } from './use.js';
 
-function buildEngine(): CollectionEngine {
-  return new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+function buildEngine(): { engine: CollectionEngine; fs: InMemoryFileSystemAdapter } {
+  const fs = new InMemoryFileSystemAdapter();
+  const engine = new CollectionEngine(fs, new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+  return { engine, fs };
 }
 
 describe('runUse', () => {
   it('activates an existing collection and reports its skill count', () => {
-    const engine = buildEngine();
+    const { engine } = buildEngine();
     engine.create('frontend', ['obra/react-patterns', 'addyosmani/perf']);
 
     const outcome = runUse(engine, 'frontend');
@@ -21,8 +23,21 @@ describe('runUse', () => {
     expect(engine.status().activeCollection).toBe('frontend');
   });
 
+  it('surfaces warnings for skills missing their source directory', () => {
+    const { engine, fs } = buildEngine();
+    engine.create('frontend', ['obra/react-patterns']);
+    fs.setMissing('.contextkit/skills/obra/react-patterns');
+
+    const outcome = runUse(engine, 'frontend');
+
+    expect(outcome.isError).toBe(false);
+    expect(outcome.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('obra/react-patterns')])
+    );
+  });
+
   it('reports an error for a non-existent collection', () => {
-    const engine = buildEngine();
+    const { engine } = buildEngine();
 
     const outcome = runUse(engine, 'missing');
 

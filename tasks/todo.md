@@ -1184,16 +1184,16 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: Activating collection with missing skill directory shows warning
-- [ ] Warning: "Skill 'skill-id' not found in directory"
-- [ ] Collection still activates (skip missing skills)
-- [ ] Tests verify warning generated
+- [x] Test: Activating collection with missing skill directory shows warning
+- [x] Warning: "Skill 'skill-id' not found in directory"
+- [x] Collection still activates (skip missing skills)
+- [x] Tests verify warning generated
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- edge-cases.test.ts`
-- [ ] Manual test: Activate collection with missing skill
-- [ ] Warning displayed, doesn't crash
+- [x] Tests pass: `npm test -- collection-engine.test.ts` (and `integration.test.ts` for the real-fs case; no separate edge-cases file, kept alongside existing activate() tests)
+- [x] Manual test: Activate collection with missing skill
+- [x] Warning displayed, doesn't crash
 
 **Dependencies:** Task 18
 

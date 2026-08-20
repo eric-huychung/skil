@@ -88,6 +88,19 @@ describe('RealFileSystemAdapter', () => {
     });
   });
 
+  describe('exists', () => {
+    it('returns true for a path that exists', () => {
+      const path = join(tmpDir, 'present.md');
+      writeFileSync(path, 'content');
+
+      expect(adapter.exists(path)).toBe(true);
+    });
+
+    it('returns false for a path that does not exist', () => {
+      expect(adapter.exists(join(tmpDir, 'missing.md'))).toBe(false);
+    });
+  });
+
   describe('detectIDEs', () => {
     it('returns an empty array when no IDE directories exist', () => {
       expect(adapter.detectIDEs(tmpDir)).toEqual([]);
