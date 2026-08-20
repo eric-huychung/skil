@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Moon, Sun } from '@phosphor-icons/react';
 import { useTheme } from './theme';
+import { useBridge } from './bridge-context';
 import type { Collection } from '../../shared/ipc';
 
 function ThemeToggle() {
@@ -18,11 +19,12 @@ function ThemeToggle() {
 }
 
 export default function App() {
+  const bridge = useBridge();
   const [collections, setCollections] = useState<Collection[] | null>(null);
 
   useEffect(() => {
-    window.contextkit.listCollections().then(setCollections);
-  }, []);
+    bridge.listCollections().then(setCollections);
+  }, [bridge]);
 
   return (
     <div className="flex h-screen flex-col">

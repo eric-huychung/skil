@@ -12,6 +12,14 @@ import { IPC_CHANNELS } from '../shared/ipc.js';
 const engine = new CollectionEngine(new RealFileSystemAdapter(), new ConfigAdapter(), new SkillsAdapter());
 
 ipcMain.handle(IPC_CHANNELS.listCollections, () => engine.list());
+ipcMain.handle(IPC_CHANNELS.getStatus, () => engine.status());
+ipcMain.handle(IPC_CHANNELS.activateCollection, (_event, name: string) => engine.activate(name));
+ipcMain.handle(IPC_CHANNELS.deactivateCollection, () => engine.deactivate());
+ipcMain.handle(IPC_CHANNELS.createCollection, (_event, name: string, skillIds: string[]) =>
+  engine.create(name, skillIds)
+);
+ipcMain.handle(IPC_CHANNELS.searchSkills, (_event, query: string) => engine.search(query));
+ipcMain.handle(IPC_CHANNELS.installSkill, (_event, skillId: string) => engine.install(skillId));
 
 function createWindow(): void {
   const window = new BrowserWindow({
