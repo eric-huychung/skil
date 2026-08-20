@@ -35,6 +35,6 @@ describe('runCreate', () => {
     const outcome = runCreate(engine, 'frontend', []);
 
     expect(outcome.isError).toBe(true);
-    expect(outcome.message).toBe("Collection 'frontend' already exists");
+    expect(outcome.message).toContain("Collection 'frontend' already exists");
   });
 });

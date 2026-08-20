@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  chmodSync,
   mkdtempSync,
   mkdirSync,
   readdirSync,
@@ -51,6 +52,27 @@ describe('RealFileSystemAdapter', () => {
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.message).toContain(target);
+      }
+    });
+
+    it('returns an actionable error when the directory is not writable', () => {
+      const source = join(tmpDir, 'source.md');
+      const readonlyDir = join(tmpDir, 'readonly');
+      writeFileSync(source, 'skill content');
+      mkdirSync(readonlyDir);
+      chmodSync(readonlyDir, 0o555);
+
+      try {
+        const result = adapter.createSymlink(source, join(readonlyDir, 'target.md'));
+
+        if (isErr(result)) {
+          expect(result.error.message).toContain('Permission denied');
+        } else {
+          // Running as root (e.g. some CI containers) bypasses permission checks; skip the assertion.
+          expect(isOk(result)).toBe(true);
+        }
+      } finally {
+        chmodSync(readonlyDir, 0o755);
       }
     });
 

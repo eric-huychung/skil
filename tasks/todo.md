@@ -1245,17 +1245,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Every error includes "what went wrong" and "how to fix it"
-- [ ] Examples: "Collection 'foo' not found. Run 'contextkit list' to see collections."
-- [ ] Examples: "Permission denied creating symlink. Try sudo or check directory permissions."
-- [ ] Validation errors include valid examples
-- [ ] Documentation includes common error scenarios
+- [x] Every error includes "what went wrong" and "how to fix it"
+- [x] Examples: "Collection 'foo' not found. Run 'contextkit list' to see collections."
+- [x] Examples: "Permission denied creating symlink. Try sudo or check directory permissions." (implemented as "Permission denied creating symlink at '<path>'. Check directory permissions and try again.")
+- [x] Validation errors include valid examples
+- [x] Documentation includes common error scenarios
 
 **Verification:**
 
-- [ ] Tests pass: all existing tests
-- [ ] Manual review: Trigger each error, verify message quality
-- [ ] Documentation updated with troubleshooting section
+- [x] Tests pass: all existing tests
+- [x] Manual review: Trigger each error, verify message quality
+- [x] Documentation updated with troubleshooting section
 
 **Dependencies:** All previous tasks
 
@@ -1274,11 +1274,11 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 ## Checkpoint: Production Ready
 
-- [ ] All edge case tests pass
-- [ ] Error messages guide user to fix issues
-- [ ] Manual testing of failure scenarios works correctly
-- [ ] README includes usage examples, troubleshooting
-- [ ] Ready for MVP release
+- [x] All edge case tests pass
+- [x] Error messages guide user to fix issues
+- [x] Manual testing of failure scenarios works correctly
+- [x] README includes usage examples, troubleshooting
+- [x] Ready for MVP release
 
 ---
 

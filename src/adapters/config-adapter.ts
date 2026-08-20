@@ -31,11 +31,13 @@ export class ConfigAdapter implements IConfigAdapter {
 
   validate(config: Config): Result<void> {
     if (typeof config.collections !== 'object' || config.collections === null) {
-      return err(new Error("Config must have a 'collections' object"));
+      return err(new Error(
+        "Config must have a 'collections' object mapping collection names to skill ID arrays, e.g.:\ncollections:\n  frontend:\n    - owner/skill-name"
+      ));
     }
     for (const [name, skills] of Object.entries(config.collections)) {
       if (!Array.isArray(skills)) {
-        return err(new Error(`Collection '${name}' must be an array of skill IDs`));
+        return err(new Error(`Collection '${name}' must be an array of skill IDs, e.g. ['owner/skill-name']`));
       }
     }
     return ok(undefined);

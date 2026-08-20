@@ -47,7 +47,7 @@ describe('CollectionEngine', () => {
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe("Collection 'frontend' already exists");
+        expect(result.error.message).toContain("Collection 'frontend' already exists");
       }
     });
 
@@ -123,7 +123,7 @@ describe('CollectionEngine', () => {
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe("Collection 'missing' does not exist");
+        expect(result.error.message).toContain("Collection 'missing' not found");
       }
     });
 

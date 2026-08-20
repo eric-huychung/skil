@@ -15,7 +15,7 @@ export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
 
   createSymlink(source: string, target: string): Result<void> {
     if (this.conflictedTargets.has(target)) {
-      return err(new Error(`File already exists at '${target}'`));
+      return err(new Error(`File already exists at '${target}'. Remove it manually and try again.`));
     }
     this.symlinks.set(target, source);
     return ok(undefined);

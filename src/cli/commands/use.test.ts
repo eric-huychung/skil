@@ -42,6 +42,6 @@ describe('runUse', () => {
     const outcome = runUse(engine, 'missing');
 
     expect(outcome.isError).toBe(true);
-    expect(outcome.message).toBe("Collection 'missing' does not exist");
+    expect(outcome.message).toContain("Collection 'missing' not found");
   });
 });

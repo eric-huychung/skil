@@ -34,7 +34,7 @@ export class CollectionEngine implements ICollectionEngine {
 
   create(name: string, skillIds: string[]): Result<Collection> {
     if (this.state.collections.some((c) => c.name === name)) {
-      return err(new Error(`Collection '${name}' already exists`));
+      return err(new Error(`Collection '${name}' already exists. Choose a different name or run 'contextkit list' to see existing collections.`));
     }
 
     const collection: Collection = {
@@ -56,7 +56,7 @@ export class CollectionEngine implements ICollectionEngine {
   activate(name: string): Result<ActivateResult> {
     const collection = this.state.collections.find((c) => c.name === name);
     if (!collection) {
-      return err(new Error(`Collection '${name}' does not exist`));
+      return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
     }
 
     const ides = this.fs.detectIDEs(this.projectRoot);
@@ -208,7 +208,7 @@ export class CollectionEngine implements ICollectionEngine {
           for (const rollbackTarget of created) {
             this.fs.removeSymlink(rollbackTarget);
           }
-          return err(new Error(`Failed to activate '${collectionName}': ${result.error.message}. Remove the conflicting file and try again.`));
+          return err(new Error(`Failed to activate '${collectionName}': ${result.error.message}`));
         }
         created.push(target);
       }

@@ -22,6 +22,13 @@ export class RealFileSystemAdapter implements IFileSystemAdapter {
       symlinkSync(source, target);
       return ok(undefined);
     } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST') {
+        return err(new Error(`File already exists at '${target}'. Remove it manually and try again.`));
+      }
+      if (code === 'EACCES' || code === 'EPERM') {
+        return err(new Error(`Permission denied creating symlink at '${target}'. Check directory permissions and try again.`));
+      }
       return err(new Error(`Failed to create symlink at '${target}': ${(error as Error).message}`));
     }
   }
