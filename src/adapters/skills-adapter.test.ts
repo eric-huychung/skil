@@ -1,11 +1,15 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
+import { execa } from 'execa';
 import { isErr, isOk } from '../core/result.js';
 import { SkillsAdapter } from './skills-adapter.js';
+
+vi.mock('execa', () => ({ execa: vi.fn() }));
 
 describe('SkillsAdapter', () => {
   afterEach(() => {
     nock.cleanAll();
+    vi.mocked(execa).mockReset();
   });
 
   describe('search', () => {
@@ -65,6 +69,31 @@ describe('SkillsAdapter', () => {
         }
       } finally {
         if (original !== undefined) process.env.SKILLS_API_KEY = original;
+      }
+    });
+  });
+
+  describe('install', () => {
+    it('installs a skill by running npx skills add', async () => {
+      vi.mocked(execa).mockResolvedValue({} as never);
+
+      const adapter = new SkillsAdapter('test-key');
+      const result = await adapter.install('obra/react-patterns');
+
+      expect(isOk(result)).toBe(true);
+      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/react-patterns']);
+    });
+
+    it('returns an error when the subprocess fails', async () => {
+      vi.mocked(execa).mockRejectedValue(new Error('npx: command failed with exit code 1'));
+
+      const adapter = new SkillsAdapter('test-key');
+      const result = await adapter.install('obra/react-patterns');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('obra/react-patterns');
+        expect(result.error.message).toContain('command failed');
       }
     });
   });

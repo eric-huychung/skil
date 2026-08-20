@@ -809,17 +809,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `install(skillId)` executes `npx skills add <skillId>`
-- [ ] Returns success Result on successful install
-- [ ] Returns error Result if subprocess fails
-- [ ] Tests mock subprocess with vi.mock (Vitest)
-- [ ] Parses error output from npx
+- [x] `install(skillId)` executes `npx skills add <skillId>`
+- [x] Returns success Result on successful install
+- [x] Returns error Result if subprocess fails
+- [x] Tests mock subprocess with vi.mock (Vitest)
+- [x] Parses error output from npx
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- skills-adapter.test.ts`
-- [ ] Subprocess mocked correctly
-- [ ] Error handling works
+- [x] Tests pass: `npm test -- skills-adapter.test.ts`
+- [x] Subprocess mocked correctly
+- [x] Error handling works
 
 **Dependencies:** Task 3
 

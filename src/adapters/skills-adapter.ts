@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { execa } from 'execa';
 import type { ISkillsAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
 import type { IDE, Skill } from '../types/index.js';
@@ -41,8 +42,13 @@ export class SkillsAdapter implements ISkillsAdapter {
     }
   }
 
-  async install(_skillId: string): Promise<Result<void>> {
-    return err(new Error('SkillsAdapter.install is not implemented yet'));
+  async install(skillId: string): Promise<Result<void>> {
+    try {
+      await execa('npx', ['skills', 'add', skillId]);
+      return ok(undefined);
+    } catch (error) {
+      return err(new Error(`Failed to install skill '${skillId}': ${(error as Error).message}`));
+    }
   }
 
   async convert(_skillId: string, _targetIDE: IDE): Promise<Result<void>> {
