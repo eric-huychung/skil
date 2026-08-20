@@ -12,18 +12,18 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `package.json` created with TypeScript and Vitest dependencies
-- [ ] `tsconfig.json` configured for Node.js with strict mode
-- [ ] Vitest configured (`vitest.config.ts`)
-- [ ] `npm test` runs successfully (even with no tests)
-- [ ] `npm run build` compiles TypeScript to `dist/`
-- [ ] `.gitignore` includes `node_modules/`, `dist/`, `.contextkit/`
+- [x] `package.json` created with TypeScript and Vitest dependencies
+- [x] `tsconfig.json` configured for Node.js with strict mode
+- [x] Vitest configured (`vitest.config.ts`)
+- [x] `npm test` runs successfully (even with no tests)
+- [x] `npm run build` compiles TypeScript to `dist/`
+- [x] `.gitignore` includes `node_modules/`, `dist/`, `.contextkit/`
 
 **Verification:**
 
-- [ ] Tests pass: `npm test`
-- [ ] Build succeeds: `npm run build`
-- [ ] TypeScript compiles without errors
+- [x] Tests pass: `npm test`
+- [x] Build succeeds: `npm run build`
+- [x] TypeScript compiles without errors
 
 **Dependencies:** None
 
@@ -46,17 +46,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `Result<T>` type defined as discriminated union
-- [ ] Helper functions: `ok<T>(value: T)`, `err(error: Error)`
-- [ ] Helper functions: `isOk(result)`, `isErr(result)`
-- [ ] Test cases verify type narrowing works correctly
-- [ ] Documentation with usage examples
+- [x] `Result<T>` type defined as discriminated union
+- [x] Helper functions: `ok<T>(value: T)`, `err(error: Error)`
+- [x] Helper functions: `isOk(result)`, `isErr(result)`
+- [x] Test cases verify type narrowing works correctly
+- [x] Documentation with usage examples
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- result.test.ts`
-- [ ] TypeScript type checking catches misuse of Result type
-- [ ] Manual check: Example code compiles and runs
+- [x] Tests pass: `npm test -- result.test.ts`
+- [x] TypeScript type checking catches misuse of Result type
+- [x] Manual check: Example code compiles and runs
 
 **Dependencies:** Task 1
 
@@ -77,18 +77,18 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `ICollectionEngine` interface with 5 methods: create, activate, deactivate, list, status
-- [ ] `IFileSystemAdapter` interface with symlink, IDE detection, and JSON methods
-- [ ] `IConfigAdapter` interface with read, write, validate
-- [ ] `ISkillsAdapter` interface with search, install, convert, getInstalled
-- [ ] All data types defined: `Collection`, `State`, `Config`, `Status`, `IDEInfo`, `Skill`
-- [ ] JSDoc comments explain expected behavior and error cases
+- [x] `ICollectionEngine` interface with 5 methods: create, activate, deactivate, list, status (later grew to include sync, install, search as those phases landed)
+- [x] `IFileSystemAdapter` interface with symlink, IDE detection, and JSON methods
+- [x] `IConfigAdapter` interface with read, write, validate
+- [x] `ISkillsAdapter` interface with search, install, convert, getInstalled
+- [x] All data types defined: `Collection`, `State`, `Config`, `Status`, `IDEInfo`, `Skill`
+- [x] JSDoc comments explain expected behavior and error cases
 
 **Verification:**
 
-- [ ] Build succeeds: `npm run build`
-- [ ] No TypeScript errors
-- [ ] Manual check: Interfaces are clear and well-documented
+- [x] Build succeeds: `npm run build`
+- [x] No TypeScript errors
+- [x] Manual check: Interfaces are clear and well-documented
 
 **Dependencies:** Task 2 (needs Result type)
 
@@ -110,18 +110,18 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `InMemoryFileSystemAdapter` stores symlinks and files in Map
-- [ ] `InMemoryConfigAdapter` stores config in memory
-- [ ] `InMemorySkillsAdapter` returns hardcoded skill list
-- [ ] All adapters implement their interfaces correctly
-- [ ] Helper method to reset in-memory state between tests
-- [ ] Basic tests verify adapters work as expected
+- [x] `InMemoryFileSystemAdapter` stores symlinks and files in Map
+- [x] `InMemoryConfigAdapter` stores config in memory
+- [x] `InMemorySkillsAdapter` returns hardcoded skill list
+- [x] All adapters implement their interfaces correctly
+- [x] Helper method to reset in-memory state between tests
+- [x] Basic tests verify adapters work as expected
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- adapters/in-memory.test.ts`
-- [ ] TypeScript confirms adapters satisfy interfaces
-- [ ] Manual check: Can create and query in-memory data
+- [x] Tests pass: `npm test -- adapters/in-memory.test.ts`
+- [x] TypeScript confirms adapters satisfy interfaces
+- [x] Manual check: Can create and query in-memory data
 
 **Dependencies:** Task 3 (needs interfaces)
 
@@ -140,11 +140,11 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 ## Checkpoint: Foundation Complete
 
-- [ ] `npm test` passes
-- [ ] `npm run build` succeeds with no errors
-- [ ] Result type works correctly
-- [ ] All interfaces defined
-- [ ] In-memory adapters ready for use
+- [x] `npm test` passes
+- [x] `npm run build` succeeds with no errors
+- [x] Result type works correctly
+- [x] All interfaces defined
+- [x] In-memory adapters ready for use
 
 ---
 
@@ -160,18 +160,18 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: `engine.create('frontend', [])` returns success
-- [ ] Test: Created collection stored in state with correct name and empty skills
-- [ ] Test: Collection has `createdAt` timestamp
-- [ ] Implementation: CollectionEngine class with create method
-- [ ] Implementation: State structure initialized correctly
-- [ ] Follow TDD: test written first, implementation second
+- [x] Test: `engine.create('frontend', [])` returns success
+- [x] Test: Created collection stored in state with correct name and empty skills
+- [x] Test: Collection has `createdAt` timestamp
+- [x] Implementation: CollectionEngine class with create method
+- [x] Implementation: State structure initialized correctly
+- [x] Follow TDD: test written first, implementation second
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Can create collection with in-memory adapters
-- [ ] State includes new collection
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Can create collection with in-memory adapters
+- [x] State includes new collection
 
 **Dependencies:** Task 4 (needs in-memory adapters)
 
@@ -192,16 +192,16 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: `engine.list()` returns empty array when no collections
-- [ ] Test: `engine.list()` returns all created collections
-- [ ] Test: Returned collections have correct properties (name, skills, timestamps)
-- [ ] Implementation: list() method reads from state
+- [x] Test: `engine.list()` returns empty array when no collections
+- [x] Test: `engine.list()` returns all created collections
+- [x] Test: Returned collections have correct properties (name, skills, timestamps)
+- [x] Implementation: list() method reads from state
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] List correctly shows all collections
-- [ ] Empty state handled correctly
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] List correctly shows all collections
+- [x] Empty state handled correctly
 
 **Dependencies:** Task 5
 
@@ -222,16 +222,16 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: Creating collection with duplicate name returns error Result
-- [ ] Test: Error message is clear: "Collection 'frontend' already exists"
-- [ ] Test: State unchanged after failed creation attempt
-- [ ] Implementation: Validation checks collection names before creating
+- [x] Test: Creating collection with duplicate name returns error Result
+- [x] Test: Error message is clear: "Collection 'frontend' already exists"
+- [x] Test: State unchanged after failed creation attempt
+- [x] Implementation: Validation checks collection names before creating
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Duplicate creation fails gracefully
-- [ ] Error message is actionable
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Duplicate creation fails gracefully
+- [x] Error message is actionable
 
 **Dependencies:** Task 5
 
@@ -252,17 +252,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: Creating collection calls `fs.writeJSON()` with correct state
-- [ ] Test: State written to `.contextkit/state.json` path
-- [ ] Test: JSON structure matches State type
-- [ ] Implementation: Engine writes state after every mutation
-- [ ] Mock assertion verifies write was called
+- [x] Test: Creating collection calls `fs.writeJSON()` with correct state
+- [x] Test: State written to `.contextkit/state.json` path
+- [x] Test: JSON structure matches State type
+- [x] Implementation: Engine writes state after every mutation
+- [x] Mock assertion verifies write was called
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Mock assertion confirms writeJSON called
-- [ ] State structure is correct JSON
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Mock assertion confirms writeJSON called
+- [x] State structure is correct JSON
 
 **Dependencies:** Task 5
 
@@ -283,17 +283,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: Engine constructor loads existing state from file
-- [ ] Test: Collections from file appear in list()
-- [ ] Test: Missing state file handled gracefully (empty state)
-- [ ] Test: Corrupted JSON returns error during construction
-- [ ] Implementation: Constructor calls fs.readJSON() and initializes state
+- [x] Test: Engine constructor loads existing state from file
+- [x] Test: Collections from file appear in list()
+- [x] Test: Missing state file handled gracefully (empty state)
+- [~] Test: Corrupted JSON returns error during construction (no test for this; actual behavior falls back to empty state silently rather than erroring - worth a follow-up task)
+- [x] Implementation: Constructor calls fs.readJSON() and initializes state
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Existing state loaded on startup
-- [ ] Missing file doesn't crash
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Existing state loaded on startup
+- [x] Missing file doesn't crash
 
 **Dependencies:** Task 8
 
@@ -310,11 +310,11 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 ## Checkpoint: Basic Engine Works
 
-- [ ] All CollectionEngine tests pass (5+ tests)
-- [ ] Can create and list collections programmatically
-- [ ] State persists and loads correctly
-- [ ] No file system operations in tests (fully mocked via in-memory adapter)
-- [ ] Error cases handled with Result type
+- [x] All CollectionEngine tests pass (5+ tests)
+- [x] Can create and list collections programmatically
+- [x] State persists and loads correctly
+- [x] No file system operations in tests (fully mocked via in-memory adapter)
+- [x] Error cases handled with Result type
 
 ---
 
@@ -330,17 +330,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: `engine.activate('frontend')` returns success
-- [ ] Test: Status shows 'frontend' as active collection
-- [ ] Test: Activating non-existent collection returns error
-- [ ] Implementation: activate() updates state.activeCollection
-- [ ] Implementation: Validation checks collection exists
+- [x] Test: `engine.activate('frontend')` returns success
+- [x] Test: Status shows 'frontend' as active collection
+- [x] Test: Activating non-existent collection returns error
+- [x] Implementation: activate() updates state.activeCollection
+- [x] Implementation: Validation checks collection exists
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Status correctly shows active collection
-- [ ] Error on non-existent collection
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Status correctly shows active collection
+- [x] Error on non-existent collection
 
 **Dependencies:** Task 9
 
@@ -361,17 +361,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: Activating collection calls `fs.createSymlink()` for each skill
-- [ ] Test: Symlinks created in all detected IDE directories
-- [ ] Test: Mock assertions verify correct source and target paths
-- [ ] Implementation: Engine calls adapter.detectIDEs() then creates symlinks
-- [ ] Implementation: Handles multiple IDE directories
+- [x] Test: Activating collection calls `fs.createSymlink()` for each skill
+- [x] Test: Symlinks created in all detected IDE directories
+- [x] Test: Mock assertions verify correct source and target paths
+- [x] Implementation: Engine calls adapter.detectIDEs() then creates symlinks
+- [x] Implementation: Handles multiple IDE directories
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Mock assertions confirm symlinks created
-- [ ] Correct paths passed to adapter
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Mock assertions confirm symlinks created
+- [x] Correct paths passed to adapter
 
 **Dependencies:** Task 10
 
@@ -392,16 +392,16 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: Activating collection B when A is active removes A's symlinks
-- [ ] Test: Only B's symlinks exist after activation
-- [ ] Test: Status shows B as active, not A
-- [ ] Implementation: activate() calls deactivate internally if collection already active
+- [x] Test: Activating collection B when A is active removes A's symlinks
+- [x] Test: Only B's symlinks exist after activation
+- [x] Test: Status shows B as active, not A
+- [x] Implementation: activate() calls deactivate internally if collection already active
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Only one collection active at a time
-- [ ] Symlinks correctly swapped
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Only one collection active at a time
+- [x] Symlinks correctly swapped
 
 **Dependencies:** Task 11
 
@@ -422,16 +422,16 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: `engine.deactivate()` returns success
-- [ ] Test: Status shows no active collection after deactivate
-- [ ] Test: Deactivating when nothing active returns success (idempotent)
-- [ ] Implementation: deactivate() sets state.activeCollection to null
+- [x] Test: `engine.deactivate()` returns success
+- [x] Test: Status shows no active collection after deactivate
+- [x] Test: Deactivating when nothing active returns success (idempotent)
+- [x] Implementation: deactivate() sets state.activeCollection to null
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Deactivate clears active status
-- [ ] Idempotent behavior works
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Deactivate clears active status
+- [x] Idempotent behavior works
 
 **Dependencies:** Task 10
 
@@ -452,16 +452,16 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: Deactivating calls `fs.removeSymlink()` for each skill in active collection
-- [ ] Test: All symlinks removed from all IDE directories
-- [ ] Test: Mock assertions verify removeSymlink called with correct paths
-- [ ] Implementation: Engine iterates over active collection skills and removes symlinks
+- [x] Test: Deactivating calls `fs.removeSymlink()` for each skill in active collection
+- [x] Test: All symlinks removed from all IDE directories
+- [x] Test: Mock assertions verify removeSymlink called with correct paths
+- [x] Implementation: Engine iterates over active collection skills and removes symlinks
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Mock confirms symlinks removed
-- [ ] All IDE directories handled
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Mock confirms symlinks removed
+- [x] All IDE directories handled
 
 **Dependencies:** Task 13
 
@@ -478,11 +478,11 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 ## Checkpoint: Activation Works
 
-- [ ] All activation tests pass
-- [ ] Activate/deactivate lifecycle complete
-- [ ] Symlink creation/removal verified via mocks
-- [ ] Status correctly reflects active collection
-- [ ] Ready for real FileSystemAdapter integration
+- [x] All activation tests pass
+- [x] Activate/deactivate lifecycle complete
+- [x] Symlink creation/removal verified via mocks
+- [x] Status correctly reflects active collection
+- [x] Ready for real FileSystemAdapter integration
 
 ---
 
