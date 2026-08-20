@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Moon, Sun } from '@phosphor-icons/react';
 import { useTheme } from './theme';
+import { FOCUS_RING } from './lib/focus-ring';
 import CollectionList from './components/CollectionList';
 import CreateCollectionForm from './components/CreateCollectionForm';
 import SkillSearch from './components/SkillSearch';
@@ -12,7 +13,7 @@ function ThemeToggle() {
       type="button"
       onClick={toggleTheme}
       aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-accent"
+      className={`inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-accent ${FOCUS_RING}`}
     >
       {theme === 'dark' ? <Sun size={16} weight="regular" /> : <Moon size={16} weight="regular" />}
     </button>

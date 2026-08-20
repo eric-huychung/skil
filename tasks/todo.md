@@ -1468,15 +1468,15 @@ Deferred from the original architecture until the CLI (Phases 1-8) is stable. Sa
 
 **Acceptance criteria:**
 
-- [ ] Design decisions documented (palette, font pairing, spacing scale)
-- [ ] Existing components updated to use the chosen design tokens
-- [ ] Accessibility check: keyboard navigation and aria labels on interactive elements
-- [ ] No regressions in existing component tests
+- [x] Design decisions documented (palette, font pairing, spacing scale) — see `docs/design/architecture.md` Decision Log
+- [x] Existing components updated to use the chosen design tokens (already applied incrementally while building Tasks 40-43; this pass added a shared `FOCUS_RING` utility across all buttons/inputs for consistency)
+- [x] Accessibility check: keyboard navigation and aria labels on interactive elements (visible focus ring on every control; labelled inputs; `aria-label` on icon-only/ambiguous buttons; `role="alert"`/`role="status"` for errors and async state)
+- [x] No regressions in existing component tests
 
 **Verification:**
 
-- [ ] Tests pass: full GUI test suite
-- [ ] Manual visual review against the documented design decisions
+- [x] Tests pass: full GUI test suite
+- [~] Manual visual review against the documented design decisions (not verifiable from this sandbox — see Task 38/40 notes; please eyeball `npm run gui:dev` locally)
 
 **Dependencies:** Tasks 40, 41, 42, 43
 

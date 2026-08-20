@@ -252,8 +252,10 @@ interface CLICommand {
 
 ### 6. GUI (Thin Interface)
 
+**Status:** Scheduled as Phase 9 (Tasks 38-45 in `tasks/todo.md`), built after the CLI (Phases 1-8) is stable. See "Decision Log" below.
+
 **Structure:**
-- Electron app or Tauri app
+- Electron app or Tauri app (decided in Task 38)
 - React UI components
 - Same CollectionEngine as CLI
 
@@ -262,11 +264,12 @@ interface CLICommand {
 - Event handlers call CollectionEngine methods
 - No GUI-specific business logic
 - State management for UI only (selected items, search filters)
+- Design decisions (color, typography, layout, accessibility) sourced from the `.cursor/skills/build/ui/ui-ux-pro-max/` and `.cursor/skills/build/ui/ui-styling/` skills
 
 **Why thin:**
 - GUI is just a different presentation layer
 - All logic lives in CollectionEngine
-- Can develop and test CLI first, add GUI later
+- Developed and tested CLI first, GUI second
 - GUI tests focus on rendering and user interaction, not business logic
 
 **Test strategy:**
@@ -511,6 +514,13 @@ State file is the single source of truth:
 2. **Symlink conflicts:** What if user manually created symlinks? Overwrite, skip, or error?
 3. **Config merge strategy:** Should sync be fully additive, or offer a "destructive sync" mode that matches config exactly?
 4. **Error recovery:** If symlink creation fails halfway through (e.g., permissions), should we rollback or leave partial state?
+5. **GUI shell:** Electron vs Tauri — resolve in Task 38, once Phase 9 starts.
+
+## Decision Log
+
+- **GUI timing (resolved):** Originally deferred indefinitely ("wait for CLI MVP"). Now explicitly scheduled as Phase 9, after Phases 1-8 are complete. No change to the thin-GUI design above — only the timing was in question.
+- **GUI design system (resolved, Task 44):** Minimalist neutral-grayscale palette in the shadcn/Vercel/v0 style — oklch grayscale tokens (`--background`/`--foreground`/`--border`/`--muted`/`--destructive`, etc.) defined once in `gui/src/renderer/src/styles/globals.css` and consumed everywhere as Tailwind v4 theme tokens (`bg-background`, `text-muted-foreground`, `border-border`, …), never hardcoded hex values. Light/dark are the same token names swapped via a `.dark` class on `<html>`, toggled by `ThemeProvider`/`useTheme` and persisted to `localStorage`. Typography is Geist Sans (UI text) + Geist Mono (code/identifiers), both self-hosted via `@fontsource` — the same family Vercel/v0/Cursor use, which is why it reads as that family of product. Spacing follows Tailwind's default 4px scale, used at a small set of steps for a consistent rhythm: `gap-1`/`gap-2` (4-8px) inside a control, `gap-3` (12px) between a control and its label or between list rows, `gap-8`/`gap-10` (32-40px) between page sections. Radius is a single `rounded-md` (0.5rem) on every card/input/button — no mixed radii. Icons are Phosphor (`@phosphor-icons/react`), one weight (`regular`), used only for the theme toggle so far.
+- **Focus visibility (Task 44):** Every interactive control (buttons, inputs) uses a shared `FOCUS_RING` class (`gui/src/renderer/src/lib/focus-ring.ts`) — a 2px ring in the `--ring` token with a background-colored offset — instead of relying on the browser default outline, so keyboard focus is unambiguous in both themes.
 
 **Answer these through:**
 - Prototype with real IDEs (Task 3)

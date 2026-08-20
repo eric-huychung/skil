@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useBridge } from '../bridge-context';
+import { FOCUS_RING } from '../lib/focus-ring';
 import type { Skill } from '../../../shared/ipc';
 
 type InstallState = { status: 'success' } | { status: 'error'; message: string };
@@ -50,12 +51,12 @@ export default function SkillSearch() {
             id="skill-search-query"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={`rounded-md border border-input bg-transparent px-3 py-2 text-sm ${FOCUS_RING}`}
           />
         </div>
         <button
           type="submit"
-          className="rounded-md border border-input px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+          className={`rounded-md border border-input px-3 py-2 text-sm font-medium transition-colors hover:bg-accent ${FOCUS_RING}`}
         >
           Search
         </button>
@@ -100,7 +101,7 @@ export default function SkillSearch() {
                     onClick={() => handleInstall(skill.id)}
                     disabled={isInstalling}
                     aria-label={`Install ${skill.id}`}
-                    className="rounded-md border border-input px-2 py-1 text-xs transition-colors hover:bg-accent disabled:opacity-50"
+                    className={`rounded-md border border-input px-2 py-1 text-xs transition-colors hover:bg-accent disabled:opacity-50 ${FOCUS_RING}`}
                   >
                     Install
                   </button>

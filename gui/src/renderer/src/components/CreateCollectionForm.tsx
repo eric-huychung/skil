@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useBridge } from '../bridge-context';
+import { FOCUS_RING } from '../lib/focus-ring';
 import type { Collection } from '../../../shared/ipc';
 
 export default function CreateCollectionForm({ onCreated }: { onCreated?: (collection: Collection) => void }) {
@@ -56,7 +57,7 @@ export default function CreateCollectionForm({ onCreated }: { onCreated?: (colle
           onChange={(event) => setName(event.target.value)}
           aria-invalid={nameError ? true : undefined}
           aria-describedby={nameError ? 'collection-name-error' : undefined}
-          className="rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={`rounded-md border border-input bg-transparent px-3 py-2 text-sm ${FOCUS_RING}`}
         />
         {nameError && (
           <p id="collection-name-error" role="alert" className="text-sm text-destructive">
@@ -69,7 +70,7 @@ export default function CreateCollectionForm({ onCreated }: { onCreated?: (colle
         <label htmlFor="collection-skills" className="text-sm font-medium">
           Skills
         </label>
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-input bg-transparent px-2 py-2">
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-input bg-transparent px-2 py-2 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
           {skillIds.map((skillId) => (
             <span
               key={skillId}
@@ -80,7 +81,7 @@ export default function CreateCollectionForm({ onCreated }: { onCreated?: (colle
                 type="button"
                 onClick={() => removeSkill(skillId)}
                 aria-label={`Remove ${skillId}`}
-                className="text-muted-foreground hover:text-foreground"
+                className={`rounded-sm text-muted-foreground hover:text-foreground ${FOCUS_RING}`}
               >
                 ×
               </button>
@@ -100,7 +101,7 @@ export default function CreateCollectionForm({ onCreated }: { onCreated?: (colle
 
       <button
         type="submit"
-        className="self-start rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90"
+        className={`self-start rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 ${FOCUS_RING}`}
       >
         Create collection
       </button>
