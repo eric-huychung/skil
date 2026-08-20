@@ -1,4 +1,12 @@
+import { afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+
+// vitest.config.ts doesn't enable `test.globals`, so testing-library's
+// automatic afterEach cleanup (which detects a global `afterEach`) never
+// registers. Without this, rendered DOM from one `it` leaks into the next
+// within the same test file.
+afterEach(cleanup);
 
 // Newer Node versions ship an experimental built-in `localStorage` that
 // leaks onto jsdom's `window` without a backing file, shadowing jsdom's real

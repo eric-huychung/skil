@@ -1328,13 +1328,13 @@ Deferred from the original architecture until the CLI (Phases 1-8) is stable. Sa
 
 **Acceptance criteria:**
 
-- [ ] React Testing Library configured for the GUI project
-- [ ] Test helper builds a `CollectionEngine` with in-memory adapters
-- [ ] Smoke test renders `<App>` and asserts it mounts without crashing
+- [x] React Testing Library configured for the GUI project
+- [x] Test helper builds a `CollectionEngine` with in-memory adapters
+- [x] Smoke test renders `<App>` and asserts it mounts without crashing
 
 **Verification:**
 
-- [ ] `npm test -- gui` passes
+- [x] `npm test -- gui` passes (via `npm run gui:test`)
 
 **Dependencies:** Task 38
 
@@ -1355,14 +1355,14 @@ Deferred from the original architecture until the CLI (Phases 1-8) is stable. Sa
 
 **Acceptance criteria:**
 
-- [ ] Test: renders one row per collection from `engine.list()`
-- [ ] Test: active collection is visually indicated
-- [ ] Test: empty state shows "No collections yet"
-- [ ] Implementation: `CollectionList` component
+- [x] Test: renders one row per collection from `engine.list()`
+- [x] Test: active collection is visually indicated
+- [x] Test: empty state shows "No collections yet"
+- [x] Implementation: `CollectionList` component
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- CollectionList.test.tsx`
+- [x] Tests pass: `npm test -- CollectionList.test.tsx`
 - [ ] Manual check: renders correctly in dev mode
 
 **Dependencies:** Task 39
