@@ -66,7 +66,10 @@ export class CollectionEngine implements ICollectionEngine {
       this.removeSymlinksFor(previouslyActive, ides);
     }
 
-    this.createSymlinksFor(collection, ides);
+    const symlinkResult = this.createSymlinksFor(collection, ides);
+    if (!isOk(symlinkResult)) {
+      return err(symlinkResult.error);
+    }
 
     this.state.activeCollection = name;
     this.persist();
@@ -168,12 +171,17 @@ export class CollectionEngine implements ICollectionEngine {
     }
   }
 
-  private createSymlinksFor(collection: Collection, ides: IDEInfo[]): void {
+  private createSymlinksFor(collection: Collection, ides: IDEInfo[]): Result<void> {
     for (const ide of ides) {
       for (const skillId of collection.skills) {
-        this.fs.createSymlink(`${SKILLS_DIR}/${skillId}`, `${ide.path}/${skillId}`);
+        const target = `${ide.path}/${skillId}`;
+        const result = this.fs.createSymlink(`${SKILLS_DIR}/${skillId}`, target);
+        if (!isOk(result)) {
+          return err(new Error(`Failed to activate '${collection.name}': ${result.error.message}. Remove the conflicting file and try again.`));
+        }
       }
     }
+    return ok(undefined);
   }
 
   private removeSymlinksFor(collection: Collection, ides: IDEInfo[]): void {

@@ -10,8 +10,12 @@ export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
   private symlinks = new Map<string, string>();
   private files = new Map<string, unknown>();
   private detectedIDEs: IDEInfo[] = [];
+  private conflictedTargets = new Set<string>();
 
   createSymlink(source: string, target: string): Result<void> {
+    if (this.conflictedTargets.has(target)) {
+      return err(new Error(`File already exists at '${target}'`));
+    }
     this.symlinks.set(target, source);
     return ok(undefined);
   }
@@ -45,6 +49,11 @@ export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
     this.detectedIDEs = ides;
   }
 
+  /** Test helper: makes createSymlink() fail for `target` as if a file already exists there. */
+  setConflict(target: string): void {
+    this.conflictedTargets.add(target);
+  }
+
   /** Test helper: inspects current symlinks (target -> source). */
   getSymlinks(): Map<string, string> {
     return new Map(this.symlinks);
@@ -55,5 +64,6 @@ export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
     this.symlinks.clear();
     this.files.clear();
     this.detectedIDEs = [];
+    this.conflictedTargets.clear();
   }
 }

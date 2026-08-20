@@ -169,6 +169,19 @@ describe('CollectionEngine', () => {
       expect(symlinks.has('/project/.agents/skills/skill-b')).toBe(true);
     });
 
+    it('returns an error when a symlink target already exists', () => {
+      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
+      engine.create('frontend', ['skill-a']);
+      fs.setConflict('/project/.agents/skills/skill-a');
+
+      const result = engine.activate('frontend');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('/project/.agents/skills/skill-a');
+      }
+    });
+
     it('shows the newly activated collection as active, not the old one', () => {
       fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
       engine.create('frontend', ['skill-a']);

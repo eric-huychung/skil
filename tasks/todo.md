@@ -1153,16 +1153,16 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Test: Creating symlink when file exists returns specific error
-- [ ] Error message: "File already exists at . Remove manually or use --force"
-- [ ] Optional --force flag to overwrite (future enhancement)
-- [ ] Tests verify conflict detection
+- [x] Test: Creating symlink when file exists returns specific error
+- [x] Error message: "File already exists at . Remove manually or use --force"
+- [~] Optional --force flag to overwrite (future enhancement; not implemented, out of MVP scope)
+- [x] Tests verify conflict detection
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- edge-cases.test.ts`
-- [ ] Manual test: Create conflicting file, try activation
-- [ ] Error message is actionable
+- [x] Tests pass: `npm test -- collection-engine.test.ts` (conflict now surfaces via `activate()`, covered there rather than a separate edge-cases file)
+- [x] Manual test: Create conflicting file, try activation
+- [x] Error message is actionable
 
 **Dependencies:** Task 18
 
