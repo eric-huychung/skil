@@ -390,6 +390,30 @@ describe('CollectionEngine', () => {
     });
   });
 
+  describe('search', () => {
+    it('returns skills matching the query from the skills adapter', async () => {
+      const result = await engine.search('react');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.map((s) => s.id)).toEqual(
+          expect.arrayContaining(['obra/react-patterns'])
+        );
+      }
+    });
+
+    it('returns an error when the skills adapter search fails', async () => {
+      skills.setSearchError(new Error('network unreachable'));
+
+      const result = await engine.search('react');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('network unreachable');
+      }
+    });
+  });
+
   describe('loading installed skills on startup', () => {
     it('merges skills already installed by external tooling into state', async () => {
       skills.seedInstalled([{ id: 'obra/react-patterns', source: 'skills.sh', installedAt: '2024-01-01T00:00:00.000Z' }]);

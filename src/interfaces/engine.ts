@@ -47,4 +47,10 @@ export interface ICollectionEngine {
    * install command fails.
    */
   install(skillId: string): Promise<Result<Skill>>;
+
+  /**
+   * Searches skills.sh for skills matching `query`, via the SkillsAdapter.
+   * Returns an error Result if the search fails.
+   */
+  search(query: string): Promise<Result<Skill[]>>;
 }

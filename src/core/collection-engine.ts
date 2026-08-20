@@ -145,6 +145,10 @@ export class CollectionEngine implements ICollectionEngine {
     return ok(skill);
   }
 
+  search(query: string): Promise<Result<Skill[]>> {
+    return this.skills.search(query);
+  }
+
   private persist(): void {
     this.fs.writeJSON(STATE_PATH, this.state);
   }

@@ -918,17 +918,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] CLI entry point at `src/cli/index.ts`
-- [ ] Commander.js configured
-- [ ] Version flag works: `contextkit --version`
-- [ ] Help text works: `contextkit --help`
-- [ ] Executable script configured in package.json
+- [x] CLI entry point at `src/cli/index.ts`
+- [x] Commander.js configured
+- [x] Version flag works: `contextkit --version`
+- [x] Help text works: `contextkit --help`
+- [x] Executable script configured in package.json
 
 **Verification:**
 
-- [ ] Build succeeds: `npm run build`
-- [ ] Manual check: `node dist/cli/index.js --version`
-- [ ] Help text displays correctly
+- [x] Build succeeds: `npm run build`
+- [x] Manual check: `node dist/cli/index.js --version`
+- [x] Help text displays correctly
 
 **Dependencies:** All Phase 2-6 tasks (needs engine and adapters ready)
 
@@ -949,17 +949,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `contextkit create <name> --skills skill1,skill2` works
-- [ ] Calls engine.create() with parsed args
-- [ ] Success message: "Created collection 'name' with N skills"
-- [ ] Error message displays if creation fails
-- [ ] Tests mock engine and verify command routing
+- [x] `contextkit create <name> --skills skill1,skill2` works
+- [x] Calls engine.create() with parsed args
+- [x] Success message: "Created collection 'name' with N skills"
+- [x] Error message displays if creation fails
+- [x] Tests mock engine and verify command routing
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- cli-create.test.ts`
-- [ ] Manual check: `contextkit create test-collection --skills skill1`
-- [ ] Output is user-friendly
+- [x] Tests pass: `npm test -- cli-create.test.ts`
+- [x] Manual check: `contextkit create test-collection --skills skill1`
+- [x] Output is user-friendly
 
 **Dependencies:** Task 27
 
@@ -980,17 +980,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `contextkit use <name>` activates collection
-- [ ] Success message: "Activated collection 'name' (N skills)"
-- [ ] `contextkit disable` deactivates current collection
-- [ ] Success message: "Deactivated collection"
-- [ ] Error messages for failures
+- [x] `contextkit use <name>` activates collection
+- [x] Success message: "Activated collection 'name' (N skills)"
+- [x] `contextkit disable` deactivates current collection
+- [x] Success message: "Deactivated collection"
+- [x] Error messages for failures
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- cli-use.test.ts`
-- [ ] Manual check: Commands work end-to-end
-- [ ] Error cases handled
+- [x] Tests pass: `npm test -- cli-use.test.ts`
+- [x] Manual check: Commands work end-to-end
+- [x] Error cases handled
 
 **Dependencies:** Task 27
 
@@ -1012,17 +1012,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `contextkit list` displays table of collections
-- [ ] Table includes: name, skill count, last used
-- [ ] `contextkit status` shows active collection or "No active collection"
-- [ ] Output formatted with cli-table3 or similar
-- [ ] Tests verify correct data passed to formatter
+- [x] `contextkit list` displays table of collections
+- [x] Table includes: name, skill count, last used
+- [x] `contextkit status` shows active collection or "No active collection"
+- [x] Output formatted with cli-table3 or similar
+- [x] Tests verify correct data passed to formatter
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- cli-list.test.ts`
-- [ ] Manual check: Table renders correctly
-- [ ] Empty state handled
+- [x] Tests pass: `npm test -- cli-list.test.ts`
+- [x] Manual check: Table renders correctly
+- [x] Empty state handled
 
 **Dependencies:** Task 27
 
@@ -1044,17 +1044,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `contextkit search [query]` displays skills from skills.sh
-- [ ] Search results formatted as table (name, description)
-- [ ] `contextkit install <skillId>` installs skill via adapter
-- [ ] Progress indicator during install
-- [ ] Success/error messages
+- [x] `contextkit search [query]` displays skills from skills.sh
+- [x] Search results formatted as table (name, description)
+- [x] `contextkit install <skillId>` installs skill via adapter
+- [x] Progress indicator during install
+- [x] Success/error messages
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- cli-search.test.ts`
-- [ ] Manual check: Search displays results
-- [ ] Install completes (or errors correctly)
+- [x] Tests pass: `npm test -- cli-search.test.ts`
+- [x] Manual check: Search displays results
+- [x] Install completes (or errors correctly)
 
 **Dependencies:** Task 27, Task 23, Task 24
 
@@ -1076,16 +1076,16 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `contextkit sync` reads .contextkit.yml and syncs
-- [ ] Success message: "Synced N collections from config"
-- [ ] Warnings displayed if local collections not in config
-- [ ] Error if .contextkit.yml missing or invalid
+- [x] `contextkit sync` reads .contextkit.yml and syncs
+- [x] Success message: "Synced N collections from config"
+- [x] Warnings displayed if local collections not in config
+- [x] Error if .contextkit.yml missing or invalid
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- cli-sync.test.ts`
-- [ ] Manual check: Create .contextkit.yml, run sync
-- [ ] Warnings displayed correctly
+- [x] Tests pass: `npm test -- cli-sync.test.ts`
+- [x] Manual check: Create .contextkit.yml, run sync
+- [x] Warnings displayed correctly
 
 **Dependencies:** Task 27, Task 21
 
@@ -1106,17 +1106,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] Success messages colored green
-- [ ] Error messages colored red
-- [ ] Warnings colored yellow
-- [ ] Error formatting includes actionable advice
-- [ ] Colors disabled when not in TTY (CI/CD friendly)
+- [x] Success messages colored green
+- [x] Error messages colored red
+- [x] Warnings colored yellow
+- [~] Error formatting includes actionable advice (basic messages only; richer "how to fix it" text is Task 37 scope)
+- [x] Colors disabled when not in TTY (CI/CD friendly)
 
 **Verification:**
 
-- [ ] Tests pass: all CLI tests
-- [ ] Manual check: Run commands, verify colors
-- [ ] No colors in non-TTY output
+- [x] Tests pass: all CLI tests
+- [x] Manual check: Run commands, verify colors
+- [x] No colors in non-TTY output
 
 **Dependencies:** Tasks 28-32
 
@@ -1133,11 +1133,11 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 ## Checkpoint: CLI Complete
 
-- [ ] All CLI commands implemented and tested
-- [ ] Manual testing of each command works
-- [ ] Error messages are user-friendly
-- [ ] Colors and formatting look good
-- [ ] Help text and examples correct
+- [x] All CLI commands implemented and tested
+- [x] Manual testing of each command works
+- [x] Error messages are user-friendly
+- [x] Colors and formatting look good
+- [x] Help text and examples correct
 
 ---
 
@@ -1284,15 +1284,260 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 
 
+## Phase 9: GUI (Desktop App)
+
+Deferred from the original architecture until the CLI (Phases 1-8) is stable. Same `CollectionEngine` and adapters as the CLI — this phase is presentation-only, per `docs/design/architecture.md`'s "GUI (Thin Interface)" module. Use the `.cursor/skills/build/ui/ui-ux-pro-max/` and `.cursor/skills/build/ui/ui-styling/` skills for design decisions (color, typography, layout, accessibility).
+
+
+
+### Task 38: Decide and scaffold desktop GUI shell (Electron vs Tauri) with React
+
+**Description:** Resolve the open question from `architecture.md`: Electron vs Tauri. Scaffold the chosen shell with a React renderer that imports `CollectionEngine` and adapters directly from the existing `src/` package — no duplicated business logic.
+
+**Acceptance criteria:**
+
+- [ ] Decision recorded (Electron or Tauri) with rationale
+- [ ] `gui/` directory scaffolded with the chosen shell + React
+- [ ] Renderer boots to a blank window in dev mode
+- [ ] GUI imports `CollectionEngine`/adapters from `src/` without duplication
+- [ ] `npm run gui:dev` (or equivalent) launches the app
+
+**Verification:**
+
+- [ ] App window opens showing placeholder content
+- [ ] Build succeeds for the GUI target
+- [ ] TypeScript compiles across CLI + GUI
+
+**Dependencies:** Phase 7 complete (needs stable CollectionEngine + adapters)
+
+**Files likely touched:**
+
+- `gui/package.json`
+- `gui/src/main.tsx`, `gui/src/App.tsx`
+- Root `package.json` (workspaces), `tsconfig` references
+
+**Estimated scope:** Medium (project scaffolding)
+
+---
+
+
+
+### Task 39: Set up component test harness with in-memory CollectionEngine
+
+**Description:** Configure React Testing Library. Build a test helper that constructs a `CollectionEngine` backed by in-memory adapters (same test doubles the CLI/engine tests use) for injecting into components.
+
+**Acceptance criteria:**
+
+- [ ] React Testing Library configured for the GUI project
+- [ ] Test helper builds a `CollectionEngine` with in-memory adapters
+- [ ] Smoke test renders `<App>` and asserts it mounts without crashing
+
+**Verification:**
+
+- [ ] `npm test -- gui` passes
+
+**Dependencies:** Task 38
+
+**Files likely touched:**
+
+- `gui/src/test-utils.tsx`
+- `gui/src/App.test.tsx`
+
+**Estimated scope:** Small (2 files)
+
+---
+
+
+
+### Task 40: TDD - Collection list view
+
+**Description:** RED: failing test that a `CollectionList` component renders `engine.list()` results with the active collection (per `engine.status()`) visually indicated. GREEN: implement the component.
+
+**Acceptance criteria:**
+
+- [ ] Test: renders one row per collection from `engine.list()`
+- [ ] Test: active collection is visually indicated
+- [ ] Test: empty state shows "No collections yet"
+- [ ] Implementation: `CollectionList` component
+
+**Verification:**
+
+- [ ] Tests pass: `npm test -- CollectionList.test.tsx`
+- [ ] Manual check: renders correctly in dev mode
+
+**Dependencies:** Task 39
+
+**Files likely touched:**
+
+- `gui/src/components/CollectionList.tsx`
+- `gui/src/components/CollectionList.test.tsx`
+
+**Estimated scope:** Medium (2 files)
+
+---
+
+
+
+### Task 41: TDD - Activate/deactivate controls
+
+**Description:** RED/GREEN: clicking a collection row calls `engine.activate(name)`; a "Deactivate" button calls `engine.deactivate()`. UI re-renders to reflect the new status, and engine errors surface inline.
+
+**Acceptance criteria:**
+
+- [ ] Test: clicking a collection calls `engine.activate()` with the correct name
+- [ ] Test: deactivate button calls `engine.deactivate()`
+- [ ] Test: UI reflects updated active state after the action
+- [ ] Test: an error Result from `engine.activate()` shows an inline error message
+
+**Verification:**
+
+- [ ] Tests pass: `npm test -- CollectionList.test.tsx`
+
+**Dependencies:** Task 40
+
+**Files likely touched:**
+
+- `gui/src/components/CollectionList.tsx` (extended)
+- `gui/src/components/CollectionList.test.tsx`
+
+**Estimated scope:** Small (adding to existing component)
+
+---
+
+
+
+### Task 42: TDD - Create collection flow
+
+**Description:** RED/GREEN: a form (name + skill picker) that calls `engine.create(name, skillIds)` on submit. Duplicate-name errors from the engine surface as validation errors in the form.
+
+**Acceptance criteria:**
+
+- [ ] Test: submitting a valid form calls `engine.create()` with the parsed values
+- [ ] Test: a duplicate-name error Result surfaces as a form validation error
+- [ ] Test: skill picker allows selecting multiple skill IDs
+- [ ] Implementation: `CreateCollectionForm` component
+
+**Verification:**
+
+- [ ] Tests pass: `npm test -- CreateCollectionForm.test.tsx`
+- [ ] Manual check: form works end-to-end in dev mode
+
+**Dependencies:** Task 39
+
+**Files likely touched:**
+
+- `gui/src/components/CreateCollectionForm.tsx`
+- `gui/src/components/CreateCollectionForm.test.tsx`
+
+**Estimated scope:** Medium (2 files, form + validation)
+
+---
+
+
+
+### Task 43: TDD - Skill search and install panel
+
+**Description:** RED/GREEN: a search input that calls the skills search (via the engine) and lists results; an install button that calls `engine.install(skillId)`. Show loading and error states for both async calls.
+
+**Acceptance criteria:**
+
+- [ ] Test: typing a query triggers search and renders results
+- [ ] Test: clicking install calls `engine.install(skillId)` and shows success/error
+- [ ] Test: loading state shown while search/install is pending
+
+**Verification:**
+
+- [ ] Tests pass: `npm test -- SkillSearch.test.tsx`
+
+**Dependencies:** Task 39
+
+**Files likely touched:**
+
+- `gui/src/components/SkillSearch.tsx`
+- `gui/src/components/SkillSearch.test.tsx`
+
+**Estimated scope:** Medium (2 files, async states)
+
+---
+
+
+
+### Task 44: Apply design system with the ui-ux-pro-max skill
+
+**Description:** Use `.cursor/skills/build/ui/ui-ux-pro-max/` and `.cursor/skills/build/ui/ui-styling/` to choose a coherent color palette, typography, and spacing scale, then apply it consistently across the collection list, forms, and search panel. Cover keyboard navigation and screen-reader labels for interactive elements.
+
+**Acceptance criteria:**
+
+- [ ] Design decisions documented (palette, font pairing, spacing scale)
+- [ ] Existing components updated to use the chosen design tokens
+- [ ] Accessibility check: keyboard navigation and aria labels on interactive elements
+- [ ] No regressions in existing component tests
+
+**Verification:**
+
+- [ ] Tests pass: full GUI test suite
+- [ ] Manual visual review against the documented design decisions
+
+**Dependencies:** Tasks 40, 41, 42, 43
+
+**Files likely touched:**
+
+- `gui/src/styles/*`
+- Existing component files (style updates only)
+
+**Estimated scope:** Medium (styling pass across existing components)
+
+---
+
+
+
+### Task 45: E2E test - full GUI workflow with real engine
+
+**Description:** End-to-end test: render the app with a real `CollectionEngine` (in-memory or temp-dir adapters, not mocked), then drive create → activate → deactivate through the rendered components, asserting UI state matches engine state at each step.
+
+**Acceptance criteria:**
+
+- [ ] Test drives the full create → activate → deactivate flow through rendered components
+- [ ] Test uses a real `CollectionEngine`, not a mocked one
+- [ ] Test verifies UI state matches engine state after each action
+
+**Verification:**
+
+- [ ] Tests pass: `npm test -- gui/e2e`
+
+**Dependencies:** Tasks 40, 41, 42
+
+**Files likely touched:**
+
+- `gui/src/__tests__/e2e.test.tsx`
+
+**Estimated scope:** Medium (1 file, comprehensive test)
+
+---
+
+
+
+## Checkpoint: GUI MVP Complete
+
+- [ ] All GUI component tests pass
+- [ ] E2E flow works end-to-end through rendered components
+- [ ] Design system applied consistently, with accessibility covered
+- [ ] GUI shares 100% of business logic with the CLI (no duplicated engine code)
+- [ ] App builds/packages for at least one platform
+
+---
+
+
+
 ## Summary
 
-**Total tasks:** 37
-**Estimated duration:** 6-8 focused work days (assuming 4-5 tasks per day)
+**Total tasks:** 45
+**Estimated duration:** 8-11 focused work days (assuming 4-5 tasks per day)
 
 **Task size distribution:**
 
-- Small: 27 tasks (1-2 files, <1 hour each)
-- Medium: 10 tasks (3-5 files, 1-2 hours each)
+- Small: 29 tasks (1-2 files, <1 hour each)
+- Medium: 16 tasks (3-5 files, 1-2 hours each)
 - Large: 0 tasks (broken down further if needed)
 
 **Parallelization opportunities:**
@@ -1300,5 +1545,6 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 - Phase 4 (FileSystem) and Phase 5 (Config) can run in parallel after Phase 3
 - Phase 6 (Skills) can start after Phase 2
 - Phase 7 (CLI) needs Phases 2-6 complete
+- Phase 9 (GUI) needs Phase 7-8 complete (shares the same engine/adapters, but the CLI must be stable first)
 
-**Critical path:** Phase 2 → Phase 3 → Phase 4 → Phase 7
+**Critical path:** Phase 2 → Phase 3 → Phase 4 → Phase 7 → Phase 9

@@ -14,8 +14,12 @@ const HARDCODED_SEARCH_RESULTS: Skill[] = [
 export class InMemorySkillsAdapter implements ISkillsAdapter {
   private installed: Skill[] = [];
   private installError: Error | null = null;
+  private searchError: Error | null = null;
 
   async search(_query: string): Promise<Result<Skill[]>> {
+    if (this.searchError) {
+      return err(this.searchError);
+    }
     return ok(HARDCODED_SEARCH_RESULTS);
   }
 
@@ -40,6 +44,11 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     this.installError = error;
   }
 
+  /** Test helper: makes the next search() call(s) fail with `error`. */
+  setSearchError(error: Error): void {
+    this.searchError = error;
+  }
+
   /** Test helper: seeds skills as if already installed by external tooling. */
   seedInstalled(skills: Skill[]): void {
     this.installed.push(...skills);
@@ -49,5 +58,6 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
   reset(): void {
     this.installed = [];
     this.installError = null;
+    this.searchError = null;
   }
 }
