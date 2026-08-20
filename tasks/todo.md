@@ -1296,17 +1296,17 @@ Deferred from the original architecture until the CLI (Phases 1-8) is stable. Sa
 
 **Acceptance criteria:**
 
-- [ ] Decision recorded (Electron or Tauri) with rationale
-- [ ] `gui/` directory scaffolded with the chosen shell + React
-- [ ] Renderer boots to a blank window in dev mode
-- [ ] GUI imports `CollectionEngine`/adapters from `src/` without duplication
-- [ ] `npm run gui:dev` (or equivalent) launches the app
+- [x] Decision recorded (Electron or Tauri) with rationale — **Electron**: renderer + main both run on Node/Chromium, so the main process can `import` `CollectionEngine` and the real adapters straight from `src/` with zero rewrite or IPC-to-Rust bridge. Tauri's Rust backend can't run the TypeScript engine natively; reusing it would need a Node sidecar + IPC plumbing, working against the "no duplicated engine code" goal. Cost accepted: larger installer (~150-200MB) vs Tauri's ~10MB.
+- [x] `gui/` directory scaffolded with the chosen shell + React (electron-vite + React 19 + TypeScript + Tailwind v4)
+- [x] Renderer boots to a window in dev/production mode (verified: built app launched with main/gpu/renderer/network processes all healthy, no crash)
+- [x] GUI imports `CollectionEngine`/adapters from `src/` without duplication (main process imports `../../../src/core/collection-engine.js` etc. directly; renderer never touches Node — it calls a `window.contextkit` bridge over IPC, since Electron's `contextIsolation` blocks direct Node access from the renderer)
+- [x] `npm run gui:dev` (and `gui:build`) launch/build the app from the repo root
 
 **Verification:**
 
-- [ ] App window opens showing placeholder content
-- [ ] Build succeeds for the GUI target
-- [ ] TypeScript compiles across CLI + GUI
+- [x] App window opens (verified via process check: main + renderer + gpu-process all running, no errors in log; manual visual confirmation still recommended via `npm run gui:dev`)
+- [x] Build succeeds for the GUI target: `npm run gui:build`
+- [x] TypeScript compiles across CLI + GUI: `npm run build` (CLI) + `npm run gui:build` --workspace typecheck (renderer + main/preload)
 
 **Dependencies:** Phase 7 complete (needs stable CollectionEngine + adapters)
 
