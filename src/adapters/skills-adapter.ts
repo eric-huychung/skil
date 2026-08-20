@@ -51,8 +51,16 @@ export class SkillsAdapter implements ISkillsAdapter {
     }
   }
 
-  async convert(_skillId: string, _targetIDE: IDE): Promise<Result<void>> {
-    return err(new Error('SkillsAdapter.convert is not implemented yet'));
+  async convert(skillId: string, targetIDE: IDE): Promise<Result<void>> {
+    try {
+      await execa('skillsmith', ['convert', skillId, '--to', targetIDE]);
+      return ok(undefined);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return err(new Error("skillsmith is not installed. Run 'npm install -g skillsmith' and try again."));
+      }
+      return err(new Error(`Failed to convert skill '${skillId}' for ${targetIDE}: ${(error as Error).message}`));
+    }
   }
 
   getInstalled(): Skill[] {

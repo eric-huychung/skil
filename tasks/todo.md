@@ -840,17 +840,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] `convert(skillId, targetIDE)` executes `skillsmith convert ...`
-- [ ] Supports target IDEs: cursor, claude, windsurf
-- [ ] Returns success/error Result
-- [ ] Tests mock subprocess
-- [ ] Handles missing skillsmith binary
+- [x] `convert(skillId, targetIDE)` executes `skillsmith convert ...`
+- [x] Supports target IDEs: cursor, claude, windsurf
+- [x] Returns success/error Result
+- [x] Tests mock subprocess
+- [x] Handles missing skillsmith binary
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- skills-adapter.test.ts`
-- [ ] Conversion command correct
-- [ ] Missing binary handled
+- [x] Tests pass: `npm test -- skills-adapter.test.ts`
+- [x] Conversion command correct
+- [x] Missing binary handled
 
 **Dependencies:** Task 3
 

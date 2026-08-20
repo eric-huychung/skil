@@ -97,4 +97,43 @@ describe('SkillsAdapter', () => {
       }
     });
   });
+
+  describe('convert', () => {
+    it('converts a skill by running skillsmith convert', async () => {
+      vi.mocked(execa).mockResolvedValue({} as never);
+
+      const adapter = new SkillsAdapter('test-key');
+      const result = await adapter.convert('obra/react-patterns', 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      expect(execa).toHaveBeenCalledWith('skillsmith', ['convert', 'obra/react-patterns', '--to', 'cursor']);
+    });
+
+    it('returns an actionable error when skillsmith is not installed', async () => {
+      const enoent = Object.assign(new Error('spawn skillsmith ENOENT'), { code: 'ENOENT' });
+      vi.mocked(execa).mockRejectedValue(enoent);
+
+      const adapter = new SkillsAdapter('test-key');
+      const result = await adapter.convert('obra/react-patterns', 'claude');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('skillsmith');
+        expect(result.error.message).toContain('npm install');
+      }
+    });
+
+    it('returns an error when the subprocess fails for another reason', async () => {
+      vi.mocked(execa).mockRejectedValue(new Error('conversion failed: unsupported format'));
+
+      const adapter = new SkillsAdapter('test-key');
+      const result = await adapter.convert('obra/react-patterns', 'windsurf');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('obra/react-patterns');
+        expect(result.error.message).toContain('unsupported format');
+      }
+    });
+  });
 });
