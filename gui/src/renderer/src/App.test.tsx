@@ -19,6 +19,6 @@ describe('App', () => {
 
     renderWithProviders(<App />);
 
-    await waitFor(() => expect(screen.getByText('1 collection')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('frontend')).toBeInTheDocument());
   });
 });

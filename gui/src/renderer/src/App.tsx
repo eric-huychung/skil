@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Moon, Sun } from '@phosphor-icons/react';
 import { useTheme } from './theme';
-import { useBridge } from './bridge-context';
-import type { Collection } from '../../shared/ipc';
+import CollectionList from './components/CollectionList';
+import CreateCollectionForm from './components/CreateCollectionForm';
+import SkillSearch from './components/SkillSearch';
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -18,13 +19,19 @@ function ThemeToggle() {
   );
 }
 
-export default function App() {
-  const bridge = useBridge();
-  const [collections, setCollections] = useState<Collection[] | null>(null);
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h2>
+      {children}
+    </section>
+  );
+}
 
-  useEffect(() => {
-    bridge.listCollections().then(setCollections);
-  }, [bridge]);
+export default function App() {
+  // Remounting CollectionList via key is the simplest way to refresh it
+  // after a mutation elsewhere (create) without a shared state store.
+  const [collectionsVersion, setCollectionsVersion] = useState(0);
 
   return (
     <div className="flex h-screen flex-col">
@@ -32,14 +39,18 @@ export default function App() {
         <h1 className="text-sm font-medium">ContextKit</h1>
         <ThemeToggle />
       </header>
-      <main className="flex flex-1 items-center justify-center">
-        <p className="font-mono text-sm text-muted-foreground">
-          {collections === null
-            ? 'Loading collections\u2026'
-            : collections.length === 0
-              ? 'No collections yet'
-              : `${collections.length} collection${collections.length === 1 ? '' : 's'}`}
-        </p>
+      <main className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="mx-auto flex max-w-2xl flex-col gap-10">
+          <Section title="Collections">
+            <CollectionList key={collectionsVersion} />
+          </Section>
+          <Section title="New collection">
+            <CreateCollectionForm onCreated={() => setCollectionsVersion((version) => version + 1)} />
+          </Section>
+          <Section title="Find skills">
+            <SkillSearch />
+          </Section>
+        </div>
       </main>
     </div>
   );

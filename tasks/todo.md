@@ -1363,7 +1363,7 @@ Deferred from the original architecture until the CLI (Phases 1-8) is stable. Sa
 **Verification:**
 
 - [x] Tests pass: `npm test -- CollectionList.test.tsx`
-- [ ] Manual check: renders correctly in dev mode
+- [~] Manual check: renders correctly in dev mode (not verifiable from this sandbox — `electron-vite dev` can't launch the real Electron binary here, falls back to plain Node and fails on the `electron` module's native exports; please run `npm run gui:dev` locally to confirm)
 
 **Dependencies:** Task 39
 
