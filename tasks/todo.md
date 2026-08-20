@@ -1497,13 +1497,13 @@ Deferred from the original architecture until the CLI (Phases 1-8) is stable. Sa
 
 **Acceptance criteria:**
 
-- [ ] Test drives the full create → activate → deactivate flow through rendered components
-- [ ] Test uses a real `CollectionEngine`, not a mocked one
-- [ ] Test verifies UI state matches engine state after each action
+- [x] Test drives the full create → activate → deactivate flow through rendered components
+- [x] Test uses a real `CollectionEngine`, not a mocked one
+- [x] Test verifies UI state matches engine state after each action
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- gui/e2e`
+- [x] Tests pass: `npm test -- gui/e2e`
 
 **Dependencies:** Tasks 40, 41, 42
 
@@ -1519,11 +1519,11 @@ Deferred from the original architecture until the CLI (Phases 1-8) is stable. Sa
 
 ## Checkpoint: GUI MVP Complete
 
-- [ ] All GUI component tests pass
-- [ ] E2E flow works end-to-end through rendered components
-- [ ] Design system applied consistently, with accessibility covered
-- [ ] GUI shares 100% of business logic with the CLI (no duplicated engine code)
-- [ ] App builds/packages for at least one platform
+- [x] All GUI component tests pass (18 tests: `npm run gui:test`)
+- [x] E2E flow works end-to-end through rendered components
+- [x] Design system applied consistently, with accessibility covered
+- [x] GUI shares 100% of business logic with the CLI (no duplicated engine code — main process imports `CollectionEngine`/adapters from `src/` directly)
+- [~] App builds for at least one platform (`npm run gui:build` succeeds and produces a runnable `out/`; no installer/packaging step via electron-builder yet — out of scope for this phase, not requested)
 
 ---
 
