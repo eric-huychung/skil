@@ -1441,13 +1441,13 @@ Deferred from the original architecture until the CLI (Phases 1-8) is stable. Sa
 
 **Acceptance criteria:**
 
-- [ ] Test: typing a query triggers search and renders results
-- [ ] Test: clicking install calls `engine.install(skillId)` and shows success/error
-- [ ] Test: loading state shown while search/install is pending
+- [x] Test: typing a query triggers search and renders results
+- [x] Test: clicking install calls `engine.install(skillId)` and shows success/error
+- [x] Test: loading state shown while search/install is pending
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- SkillSearch.test.tsx`
+- [x] Tests pass: `npm test -- SkillSearch.test.tsx`
 
 **Dependencies:** Task 39
 
