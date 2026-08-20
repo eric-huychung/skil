@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import CollectionList from './CollectionList';
 import { createInMemoryEngine, createTestBridge, renderWithProviders } from '../test-utils';
+import { err } from '../../../../../src/core/result.js';
 
 describe('CollectionList', () => {
   it('shows the empty state when there are no collections', async () => {
@@ -41,5 +43,52 @@ describe('CollectionList', () => {
     expect(backendRow).not.toBeNull();
     expect(within(frontendRow!).getByText('Active')).toBeInTheDocument();
     expect(within(backendRow!).queryByText('Active')).not.toBeInTheDocument();
+  });
+
+  it('activates a collection when its row is clicked', async () => {
+    const engine = createInMemoryEngine();
+    engine.create('frontend', []);
+    engine.create('backend', []);
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CollectionList />, { bridge });
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2));
+
+    await userEvent.click(screen.getByRole('button', { name: 'frontend' }));
+
+    await waitFor(() => expect(engine.status().activeCollection).toBe('frontend'));
+    const frontendRow = screen.getByText('frontend').closest('li');
+    expect(within(frontendRow!).getByText('Active')).toBeInTheDocument();
+  });
+
+  it('deactivates the active collection when Deactivate is clicked', async () => {
+    const engine = createInMemoryEngine();
+    engine.create('frontend', []);
+    engine.activate('frontend');
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CollectionList />, { bridge });
+    await waitFor(() => expect(screen.getByText('Active')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
+
+    await waitFor(() => expect(engine.status().activeCollection).toBeNull());
+    expect(screen.queryByText('Active')).not.toBeInTheDocument();
+  });
+
+  it('shows an inline error when activation fails', async () => {
+    const engine = createInMemoryEngine();
+    engine.create('frontend', []);
+    const bridge = {
+      ...createTestBridge(engine),
+      activateCollection: async () => err(new Error("Collection 'frontend' not found. Run 'contextkit list'.")),
+    };
+
+    renderWithProviders(<CollectionList />, { bridge });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'frontend' })).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: 'frontend' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/not found/));
   });
 });

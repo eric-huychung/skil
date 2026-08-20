@@ -1384,14 +1384,14 @@ Deferred from the original architecture until the CLI (Phases 1-8) is stable. Sa
 
 **Acceptance criteria:**
 
-- [ ] Test: clicking a collection calls `engine.activate()` with the correct name
-- [ ] Test: deactivate button calls `engine.deactivate()`
-- [ ] Test: UI reflects updated active state after the action
-- [ ] Test: an error Result from `engine.activate()` shows an inline error message
+- [x] Test: clicking a collection calls `engine.activate()` with the correct name
+- [x] Test: deactivate button calls `engine.deactivate()`
+- [x] Test: UI reflects updated active state after the action
+- [x] Test: an error Result from `engine.activate()` shows an inline error message
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- CollectionList.test.tsx`
+- [x] Tests pass: `npm test -- CollectionList.test.tsx`
 
 **Dependencies:** Task 40
 
