@@ -342,4 +342,68 @@ describe('CollectionEngine', () => {
       expect(isErr(result)).toBe(true);
     });
   });
+
+  describe('install', () => {
+    it('installs a skill via the skills adapter and returns it', async () => {
+      const result = await engine.install('obra/react-patterns');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.id).toBe('obra/react-patterns');
+        expect(result.value.source).toBe('skills.sh');
+        expect(result.value.installedAt).toBeTruthy();
+      }
+    });
+
+    it('records the installed skill in state', async () => {
+      await engine.install('obra/react-patterns');
+
+      const persisted = fs.readJSON<{ installedSkills: Array<{ id: string }> }>(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.installedSkills.map((s) => s.id)).toContain('obra/react-patterns');
+      }
+    });
+
+    it('returns an error when the skills adapter fails to install', async () => {
+      skills.setInstallError(new Error('npx: command failed'));
+
+      const result = await engine.install('obra/react-patterns');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('command failed');
+      }
+    });
+
+    it('does not record the skill in state when install fails', async () => {
+      engine.create('frontend', []);
+      skills.setInstallError(new Error('npx: command failed'));
+
+      await engine.install('obra/react-patterns');
+
+      const persisted = fs.readJSON<{ installedSkills: unknown[] }>(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.installedSkills).toEqual([]);
+      }
+    });
+  });
+
+  describe('loading installed skills on startup', () => {
+    it('merges skills already installed by external tooling into state', async () => {
+      skills.seedInstalled([{ id: 'obra/react-patterns', source: 'skills.sh', installedAt: '2024-01-01T00:00:00.000Z' }]);
+      const loadedEngine = new CollectionEngine(fs, config, skills);
+
+      await loadedEngine.install('addyosmani/performance-review');
+
+      const persisted = fs.readJSON<{ installedSkills: Array<{ id: string }> }>(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.installedSkills.map((s) => s.id)).toEqual(
+          expect.arrayContaining(['obra/react-patterns', 'addyosmani/performance-review'])
+        );
+      }
+    });
+  });
 });

@@ -871,17 +871,17 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 **Acceptance criteria:**
 
-- [ ] State includes `installedSkills: Skill[]`
-- [ ] Engine calls adapter.getInstalled() on startup
-- [ ] Install operation adds skill to state.installedSkills
-- [ ] Tests verify tracking works
-- [ ] State persistence includes installed skills
+- [x] State includes `installedSkills: Skill[]`
+- [x] Engine calls adapter.getInstalled() on startup
+- [x] Install operation adds skill to state.installedSkills
+- [x] Tests verify tracking works
+- [x] State persistence includes installed skills
 
 **Verification:**
 
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Installed skills tracked in state
-- [ ] State file includes installed skills
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Installed skills tracked in state
+- [x] State file includes installed skills
 
 **Dependencies:** Task 24
 
@@ -899,10 +899,10 @@ Tasks follow TDD: write failing test first, then minimal implementation. Each ta
 
 ## Checkpoint: Skills Management Works
 
-- [ ] Skills adapter tests pass with mocked external calls
-- [ ] Search returns results
-- [ ] Install and convert wrappers work
-- [ ] Installed skills tracked in state
+- [x] Skills adapter tests pass with mocked external calls
+- [x] Search returns results
+- [x] Install and convert wrappers work
+- [x] Installed skills tracked in state
 
 ---
 

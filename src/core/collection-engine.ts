@@ -1,6 +1,6 @@
 import type { ICollectionEngine } from '../interfaces/engine.js';
 import type { IFileSystemAdapter, IConfigAdapter, ISkillsAdapter } from '../interfaces/adapters.js';
-import type { Collection, IDEInfo, State, Status, SyncResult } from '../types/index.js';
+import type { Collection, IDEInfo, Skill, State, Status, SyncResult } from '../types/index.js';
 import { err, isOk, ok, type Result } from './result.js';
 
 /** Path to the persisted engine state, relative to the project root. */
@@ -29,6 +29,7 @@ export class CollectionEngine implements ICollectionEngine {
   ) {
     const loaded = this.fs.readJSON<State>(STATE_PATH);
     this.state = isOk(loaded) ? loaded.value : emptyState();
+    this.mergeExternallyInstalledSkills();
   }
 
   create(name: string, skillIds: string[]): Result<Collection> {
@@ -126,8 +127,41 @@ export class CollectionEngine implements ICollectionEngine {
     return ok({ synced, warnings });
   }
 
+  async install(skillId: string): Promise<Result<Skill>> {
+    const result = await this.skills.install(skillId);
+    if (!isOk(result)) {
+      return err(result.error);
+    }
+
+    const skill: Skill = { id: skillId, source: 'skills.sh', installedAt: new Date().toISOString() };
+    const existingIndex = this.state.installedSkills.findIndex((s) => s.id === skillId);
+    if (existingIndex >= 0) {
+      this.state.installedSkills[existingIndex] = skill;
+    } else {
+      this.state.installedSkills.push(skill);
+    }
+    this.persist();
+
+    return ok(skill);
+  }
+
   private persist(): void {
     this.fs.writeJSON(STATE_PATH, this.state);
+  }
+
+  /**
+   * Picks up skills already installed by external tooling (e.g. a bare
+   * `npx skills add` run outside ContextKit) so state stays in sync.
+   * In-memory only: persisted on the next mutation, not on construction.
+   */
+  private mergeExternallyInstalledSkills(): void {
+    const known = new Set(this.state.installedSkills.map((s) => s.id));
+    for (const skill of this.skills.getInstalled()) {
+      if (!known.has(skill.id)) {
+        this.state.installedSkills.push(skill);
+        known.add(skill.id);
+      }
+    }
   }
 
   private createSymlinksFor(collection: Collection, ides: IDEInfo[]): void {

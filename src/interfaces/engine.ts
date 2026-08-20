@@ -1,5 +1,5 @@
 import type { Result } from '../core/result.js';
-import type { Collection, Status, SyncResult } from '../types/index.js';
+import type { Collection, Skill, Status, SyncResult } from '../types/index.js';
 
 /**
  * CollectionEngine is ContextKit's deep module: a small interface backed by
@@ -40,4 +40,11 @@ export interface ICollectionEngine {
    * Returns an error Result if the config file is missing or invalid.
    */
   sync(configPath: string): Result<SyncResult>;
+
+  /**
+   * Installs a skill via the SkillsAdapter and records it in
+   * `state.installedSkills`. Returns an error Result if the underlying
+   * install command fails.
+   */
+  install(skillId: string): Promise<Result<Skill>>;
 }

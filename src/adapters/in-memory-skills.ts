@@ -1,5 +1,5 @@
 import type { ISkillsAdapter } from '../interfaces/adapters.js';
-import { ok, type Result } from '../core/result.js';
+import { err, ok, type Result } from '../core/result.js';
 import type { IDE, Skill } from '../types/index.js';
 
 const HARDCODED_SEARCH_RESULTS: Skill[] = [
@@ -13,12 +13,16 @@ const HARDCODED_SEARCH_RESULTS: Skill[] = [
  */
 export class InMemorySkillsAdapter implements ISkillsAdapter {
   private installed: Skill[] = [];
+  private installError: Error | null = null;
 
   async search(_query: string): Promise<Result<Skill[]>> {
     return ok(HARDCODED_SEARCH_RESULTS);
   }
 
   async install(skillId: string): Promise<Result<void>> {
+    if (this.installError) {
+      return err(this.installError);
+    }
     this.installed.push({ id: skillId, source: 'skills.sh', installedAt: new Date().toISOString() });
     return ok(undefined);
   }
@@ -31,8 +35,19 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     return [...this.installed];
   }
 
+  /** Test helper: makes the next install() call(s) fail with `error`. */
+  setInstallError(error: Error): void {
+    this.installError = error;
+  }
+
+  /** Test helper: seeds skills as if already installed by external tooling. */
+  seedInstalled(skills: Skill[]): void {
+    this.installed.push(...skills);
+  }
+
   /** Test helper: clears all in-memory state between tests. */
   reset(): void {
     this.installed = [];
+    this.installError = null;
   }
 }
