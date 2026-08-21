@@ -2,6 +2,12 @@
 
 All notable changes to ContextKit are documented here. Versions follow [Semantic Versioning](https://semver.org/) (0.x minors may include breaking CLI changes).
 
+## [0.2.2] - 2026-08-21
+
+### Fixed
+- Vercel API endpoints crashing with `Invalid URL` error when `request.url` contains relative paths (e.g., `/api/skills/search?q=react`) — now handle both absolute and relative URLs
+- GUI skill search staying stuck on "Searching..." when API errors occur — added proper error handling with try-catch-finally
+
 ## [0.2.1] - 2026-08-21
 
 ### Fixed

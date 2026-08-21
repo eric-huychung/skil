@@ -198,4 +198,22 @@ describe('handleBrowseRequest', () => {
     expect(response.headers.get('Cache-Control')).toBeNull();
     expect(await response.json()).toMatchObject({ error: 'upstream_error', message: expect.stringContaining('leaderboard unavailable') });
   });
+
+  it('handles relative URLs (as seen in Vercel production)', async () => {
+    const body = { data: [{ id: 'obra/react-patterns', installs: 1200 }] };
+    const fetchImpl = fakeFetch({ status: 200, body });
+    const getOidcToken = vi.fn(async () => 'test-oidc-token');
+
+    // Vercel sometimes provides relative URLs in request.url
+    const request = new Request('http://placeholder.local/api/skills?view=all-time');
+    Object.defineProperty(request, 'url', { value: '/api/skills?view=all-time', writable: false });
+
+    const response = await handleBrowseRequest(request, {
+      fetchImpl,
+      getOidcToken,
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(body);
+  });
 });

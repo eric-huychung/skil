@@ -1,6 +1,6 @@
 {
   "name": "contextkit",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "CLI-first AI skill collection manager for Cursor, Claude, and Windsurf",
   "type": "module",
   "bin": {

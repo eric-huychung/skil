@@ -29,18 +29,23 @@ export default function SkillSearch() {
     }
 
     setIsSearching(true);
-    const result = await bridge.browseSkills(view);
-    setIsSearching(false);
+    try {
+      const result = await bridge.browseSkills(view);
+      if (!result.ok) {
+        setSearchError(result.error.message);
+        setResults(null);
+        return;
+      }
 
-    if (!result.ok) {
-      setSearchError(result.error.message);
+      const sliced = result.value.slice(0, BROWSE_DISPLAY_LIMIT);
+      browseCache.current[view] = sliced;
+      setResults(sliced);
+    } catch (error) {
+      setSearchError((error as Error).message);
       setResults(null);
-      return;
+    } finally {
+      setIsSearching(false);
     }
-
-    const sliced = result.value.slice(0, BROWSE_DISPLAY_LIMIT);
-    browseCache.current[view] = sliced;
-    setResults(sliced);
   }
 
   useEffect(() => {
@@ -59,16 +64,21 @@ export default function SkillSearch() {
 
     setSearchError(null);
     setIsSearching(true);
-    const result = await bridge.searchSkills(trimmed);
-    setIsSearching(false);
-
-    if (!result.ok) {
-      setSearchError(result.error.message);
+    try {
+      const result = await bridge.searchSkills(trimmed);
+      if (!result.ok) {
+        setSearchError(result.error.message);
+        setResults(null);
+        return;
+      }
+      setResultSource('search');
+      setResults(result.value);
+    } catch (error) {
+      setSearchError((error as Error).message);
       setResults(null);
-      return;
+    } finally {
+      setIsSearching(false);
     }
-    setResultSource('search');
-    setResults(result.value);
   }
 
   async function handleInstall(skillId: string) {

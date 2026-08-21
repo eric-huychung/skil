@@ -80,7 +80,8 @@ export async function browseSkills(view: BrowseView, deps: SkillsProxyDeps): Pro
  * must not pick up these headers.
  */
 export async function handleBrowseRequest(request: Request, deps: SkillsProxyDeps): Promise<Response> {
-  const view = new URL(request.url).searchParams.get('view');
+  // request.url may be relative in Vercel production; provide a dummy base to parse params
+  const view = new URL(request.url, 'http://localhost').searchParams.get('view');
   if (view !== 'all-time' && view !== 'trending') {
     return Response.json(
       { error: 'invalid_request', message: "Missing or invalid 'view' query parameter. Expected 'all-time' or 'trending'." },

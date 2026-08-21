@@ -13,7 +13,8 @@ import { searchSkills } from '../../dist/backend/skills-proxy.js';
  */
 export default async function handler(request: Request): Promise<Response> {
   try {
-    const query = new URL(request.url).searchParams.get('q');
+    // request.url may be relative in Vercel production; provide a dummy base to parse params
+    const query = new URL(request.url, 'http://localhost').searchParams.get('q');
     if (!query) {
       return Response.json({ error: 'invalid_request', message: "Missing required 'q' query parameter." }, { status: 400 });
     }
