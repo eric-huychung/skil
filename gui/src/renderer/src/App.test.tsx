@@ -20,7 +20,7 @@ describe('App', () => {
 
     renderWithProviders(<App />);
 
-    await waitFor(() => expect(screen.getByText('frontend')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('listitem', { name: 'Collection frontend' })).toBeInTheDocument());
   });
 
   it('defaults to the Collections workspace so existing collection tools stay on the first screen', async () => {

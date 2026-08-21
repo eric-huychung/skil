@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { ArrowDown, Check, X } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import type { Collection, IDE } from '../../../shared/ipc';
@@ -7,7 +8,7 @@ const IDE_OPTIONS: IDE[] = ['cursor', 'claude', 'windsurf'];
 
 type ExportState = { status: 'success'; ide: IDE } | { status: 'error'; message: string };
 
-function CollectionRow({ collection, onChange }: { collection: Collection; onChange: () => void }) {
+function CollectionDetail({ collection, onChange }: { collection: Collection; onChange: () => void }) {
   const bridge = useBridge();
   const [skillInput, setSkillInput] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -59,11 +60,16 @@ function CollectionRow({ collection, onChange }: { collection: Collection; onCha
   }
 
   return (
-    <li
-      aria-label={`Collection ${collection.name}`}
-      className="flex flex-col gap-2 rounded-md border border-border px-3 py-2"
-    >
-      <span className="text-sm font-medium">{collection.name}</span>
+    <section className="detail-panel panel-section" aria-label={`Collection ${collection.name} details`}>
+      <div className="detail-header">
+        <div>
+          <p className="eyebrow">Collection / {collection.name}</p>
+          <h2>{collection.name}</h2>
+          <p className="muted-copy">
+            {collection.skills.length === 1 ? '1 skill' : `${collection.skills.length} skills`}
+          </p>
+        </div>
+      </div>
 
       {error && (
         <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -71,39 +77,8 @@ function CollectionRow({ collection, onChange }: { collection: Collection; onCha
         </p>
       )}
 
-      <ul className="flex flex-wrap items-center gap-2">
-        {collection.skills.map((skillId) => (
-          <li
-            key={skillId}
-            className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-xs text-secondary-foreground"
-          >
-            {skillId}
-            <button
-              type="button"
-              onClick={() => handleRemoveSkill(skillId)}
-              aria-label={`Remove ${skillId}`}
-              className={`rounded-sm text-muted-foreground hover:text-foreground ${FOCUS_RING}`}
-            >
-              ×
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      <form onSubmit={handleAddSkill} className="flex items-center gap-2">
-        <label htmlFor={`add-skill-${collection.name}`} className="sr-only">
-          {`Add skill to ${collection.name}`}
-        </label>
-        <input
-          id={`add-skill-${collection.name}`}
-          value={skillInput}
-          onChange={(event) => setSkillInput(event.target.value)}
-          placeholder="Add a skill id"
-          className={`flex-1 rounded-md border border-input bg-transparent px-2 py-1 text-xs ${FOCUS_RING}`}
-        />
-      </form>
-
-      <div className="flex items-center gap-2">
+      <div className="target-row">
+        <span>Target IDE</span>
         <label htmlFor={`export-ide-${collection.name}`} className="sr-only">
           {`Export ${collection.name} to`}
         </label>
@@ -111,7 +86,7 @@ function CollectionRow({ collection, onChange }: { collection: Collection; onCha
           id={`export-ide-${collection.name}`}
           value={exportIde}
           onChange={(event) => setExportIde(event.target.value as IDE)}
-          className={`rounded-md border border-input bg-transparent px-2 py-1 text-xs ${FOCUS_RING}`}
+          className={FOCUS_RING}
         >
           {IDE_OPTIONS.map((ide) => (
             <option key={ide} value={ide}>
@@ -119,54 +94,147 @@ function CollectionRow({ collection, onChange }: { collection: Collection; onCha
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={isExporting}
-          aria-label={`Export ${collection.name}`}
-          className={`rounded-md border border-input px-2 py-1 text-xs transition-colors hover:bg-accent disabled:opacity-50 ${FOCUS_RING}`}
-        >
-          Export
-        </button>
-        {isExporting && <span className="text-xs text-muted-foreground">Exporting&hellip;</span>}
-        {!isExporting && exportState?.status === 'success' && (
-          <span className="text-xs text-foreground">{`Exported to ${exportState.ide}`}</span>
-        )}
-        {!isExporting && exportState?.status === 'error' && (
-          <span role="alert" className="text-xs text-destructive">
-            {exportState.message}
-          </span>
-        )}
       </div>
-    </li>
+
+      <div className="active-skills">
+        <div className="subheading">
+          <span>Included skills</span>
+          <span className="count-pill">{collection.skills.length}</span>
+        </div>
+        {collection.skills.map((skillId) => (
+          <div className="included-skill" key={skillId}>
+            <span className="checkmark" aria-hidden="true">
+              <Check size={11} weight="bold" />
+            </span>
+            <span>{skillId}</span>
+            <button
+              type="button"
+              onClick={() => handleRemoveSkill(skillId)}
+              aria-label={`Remove ${skillId}`}
+              className={FOCUS_RING}
+            >
+              <X size={14} weight="regular" />
+            </button>
+          </div>
+        ))}
+        <form onSubmit={handleAddSkill} className="add-skill-form">
+          <label htmlFor={`add-skill-${collection.name}`} className="sr-only">
+            {`Add skill to ${collection.name}`}
+          </label>
+          <div className="search-box">
+            <input
+              id={`add-skill-${collection.name}`}
+              value={skillInput}
+              onChange={(event) => setSkillInput(event.target.value)}
+              placeholder="Add a skill id"
+              className={FOCUS_RING}
+            />
+          </div>
+        </form>
+      </div>
+
+      <button
+        type="button"
+        onClick={handleExport}
+        disabled={isExporting}
+        aria-label={`Export ${collection.name}`}
+        className={`primary-button export-button ${FOCUS_RING}`}
+      >
+        <ArrowDown size={16} weight="regular" />
+        {isExporting ? 'Exporting…' : 'Export Collection'}
+      </button>
+      {!isExporting && exportState?.status === 'success' && (
+        <p className="muted-copy">{`Exported to ${exportState.ide}`}</p>
+      )}
+      {!isExporting && exportState?.status === 'error' && (
+        <p role="alert" className="muted-copy text-destructive">
+          {exportState.message}
+        </p>
+      )}
+    </section>
   );
 }
 
-export default function CollectionList() {
+function selectCollection(event: KeyboardEvent<HTMLLIElement>, name: string, onSelect: (name: string) => void) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    onSelect(name);
+  }
+}
+
+function CollectionsPanel({ children }: { children: ReactNode }) {
+  return (
+    <section className="collections-panel panel-section">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Workspace</p>
+          <h1>Collections</h1>
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export default function CollectionList({ children }: { children?: ReactNode }) {
   const bridge = useBridge();
   const [collections, setCollections] = useState<Collection[] | null>(null);
+  const [selectedName, setSelectedName] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    setCollections(await bridge.listCollections());
+    const next = await bridge.listCollections();
+    setCollections(next);
+    setSelectedName((current) => {
+      if (current && next.some((collection) => collection.name === current)) return current;
+      return next[0]?.name ?? null;
+    });
   }, [bridge]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
+  const form = children ? <div className="create-collection">{children}</div> : null;
+
   if (collections === null) {
-    return null;
+    return <CollectionsPanel>{form}</CollectionsPanel>;
   }
 
-  if (collections.length === 0) {
-    return <p className="text-sm text-muted-foreground">No collections yet</p>;
-  }
+  const selected = collections.find((collection) => collection.name === selectedName) ?? null;
 
   return (
-    <ul className="flex flex-col gap-2">
-      {collections.map((collection) => (
-        <CollectionRow key={collection.name} collection={collection} onChange={refresh} />
-      ))}
-    </ul>
+    <>
+      <CollectionsPanel>
+        {collections.length === 0 ? (
+          <p className="muted-copy">No collections yet</p>
+        ) : (
+          <ul className="collection-list">
+            {collections.map((collection) => (
+              <li
+                key={collection.name}
+                aria-label={`Collection ${collection.name}`}
+                aria-current={collection.name === selectedName ? 'true' : undefined}
+                className={`collection-card ${collection.name === selectedName ? 'selected' : ''}`}
+                tabIndex={0}
+                onClick={() => setSelectedName(collection.name)}
+                onKeyDown={(event) => selectCollection(event, collection.name, setSelectedName)}
+              >
+                <div className="card-title">
+                  <span>{collection.name}</span>
+                </div>
+                <div className="skill-count">
+                  <span>
+                    {collection.skills.length} {collection.skills.length === 1 ? 'skill' : 'skills'}
+                  </span>
+                  <span className="mini-dot" aria-hidden="true" />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {form}
+      </CollectionsPanel>
+      {selected && <CollectionDetail collection={selected} onChange={refresh} />}
+    </>
   );
 }

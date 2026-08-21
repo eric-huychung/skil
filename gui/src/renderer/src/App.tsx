@@ -133,18 +133,9 @@ export default function App() {
         )}
 
         {tab === 'collections' && (
-          <section className="collections-panel panel-section">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Workspace</p>
-                <h1>Collections</h1>
-              </div>
-            </div>
-            <CollectionList key={collectionsVersion} />
-            <div className="create-collection">
-              <CreateCollectionForm onCreated={() => setCollectionsVersion((version) => version + 1)} />
-            </div>
-          </section>
+          <CollectionList key={collectionsVersion}>
+            <CreateCollectionForm onCreated={() => setCollectionsVersion((version) => version + 1)} />
+          </CollectionList>
         )}
       </div>
 

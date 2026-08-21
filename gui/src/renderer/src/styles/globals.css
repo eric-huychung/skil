@@ -396,6 +396,10 @@
   margin-top: 28px;
 }
 
+.add-skill-form .search-box {
+  margin-top: 8px;
+}
+
 .detail-panel {
   background: linear-gradient(150deg, var(--surface-soft), transparent 55%);
 }
