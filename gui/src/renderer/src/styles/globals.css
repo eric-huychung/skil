@@ -558,6 +558,53 @@
   font-size: 12px;
 }
 
+.skill-name-button {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.skill-name-button:hover {
+  text-decoration: underline;
+}
+
+.skill-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+
+.skill-details > div {
+  display: grid;
+  gap: 2px;
+}
+
+.skill-details dt {
+  color: var(--muted-ink);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.skill-details dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.skill-details a {
+  color: inherit;
+}
+
 .skill-meta {
   gap: 7px;
   color: var(--muted-ink);

@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { createEngine } from '../../../src/create-engine.js';
 import { SkillsAdapter } from '../../../src/adapters/skills-adapter.js';
 import { getApiBaseUrl } from '../../../src/config/website.js';
@@ -68,6 +68,10 @@ function createWindow(): void {
   });
 
   window.on('ready-to-show', () => window.show());
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url);
+    return { action: 'deny' };
+  });
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     window.loadURL(process.env['ELECTRON_RENDERER_URL']);

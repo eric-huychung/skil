@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SkillSearch from './SkillSearch';
 import { createInMemoryEngine, createTestBridge, renderWithProviders } from '../test-utils';
@@ -199,5 +199,43 @@ describe('SkillSearch', () => {
     renderWithProviders(<SkillSearch />, { bridge });
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/leaderboard unreachable/));
+  });
+
+  it('opens a details dialog with listing metadata when the skill name is clicked', async () => {
+    const engine = createInMemoryEngine();
+    const bridge = {
+      ...createTestBridge(engine),
+      browseSkills: async () =>
+        ok([
+          {
+            id: 'vercel-labs/skills/find-skills',
+            source: 'skills.sh' as const,
+            installedAt: '',
+            installs: 3052722,
+            name: 'find-skills',
+            repo: 'vercel-labs/skills',
+            installUrl: 'https://github.com/vercel-labs/skills',
+            url: 'https://www.skills.sh/vercel-labs/skills/find-skills',
+          },
+        ]),
+    };
+
+    renderWithProviders(<SkillSearch />, { bridge });
+
+    await waitFor(() => expect(screen.getByText('vercel-labs/skills/find-skills')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'vercel-labs/skills/find-skills' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'find-skills' });
+    expect(within(dialog).getByText('vercel-labs/skills/find-skills')).toBeInTheDocument();
+    expect(within(dialog).getByText('vercel-labs/skills')).toBeInTheDocument();
+    expect(within(dialog).getByRole('link', { name: 'GitHub' })).toHaveAttribute(
+      'href',
+      'https://github.com/vercel-labs/skills',
+    );
+    expect(within(dialog).getByRole('link', { name: 'skills.sh' })).toHaveAttribute(
+      'href',
+      'https://www.skills.sh/vercel-labs/skills/find-skills',
+    );
+    expect(within(dialog).getByText('3.1m')).toBeInTheDocument();
   });
 });

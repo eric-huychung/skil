@@ -23,6 +23,7 @@ export default function SkillSearch() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [addingId, setAddingId] = useState<string | null>(null);
   const [addStates, setAddStates] = useState<Record<string, AddState>>({});
+  const [selected, setSelected] = useState<Skill | null>(null);
   const browseCache = useRef<Partial<Record<BrowseView, Skill[]>>>({});
 
   useEffect(() => {
@@ -36,6 +37,20 @@ export default function SkillSearch() {
       });
     });
   }, [bridge]);
+
+  useEffect(() => {
+    if (!selected) return;
+
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setSelected(null);
+      }
+    }
+
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [selected]);
 
   async function loadBrowse(view: BrowseView) {
     setSearchError(null);
@@ -172,7 +187,14 @@ export default function SkillSearch() {
               <li className="library-skill" key={skill.id}>
                 <span className="skill-rank">{index + 1}</span>
                 <div className="skill-info">
-                  <div className="skill-name">{skill.id}</div>
+                  <button
+                    type="button"
+                    className={`skill-name skill-name-button ${FOCUS_RING}`}
+                    onClick={() => setSelected(skill)}
+                    aria-haspopup="dialog"
+                  >
+                    {skill.id}
+                  </button>
                   {skill.installs !== undefined && (
                     <div className="skill-meta">
                       <span>{formatInstalls(skill.installs)} installs</span>
@@ -206,7 +228,69 @@ export default function SkillSearch() {
           })}
         </ul>
       )}
+
+      {selected && <SkillDetailsDialog skill={selected} onClose={() => setSelected(null)} />}
     </section>
+  );
+}
+
+function SkillDetailsDialog({ skill, onClose }: { skill: Skill; onClose: () => void }) {
+  const title = skill.name ?? skill.id;
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div
+        className="help-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="skill-details-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button type="button" className={`modal-close ${FOCUS_RING}`} aria-label="Close details" onClick={onClose}>
+          <span aria-hidden="true">×</span>
+        </button>
+        <p className="eyebrow">Skill</p>
+        <h2 id="skill-details-title">{title}</h2>
+        <dl className="skill-details">
+          <div>
+            <dt>Route</dt>
+            <dd>{skill.id}</dd>
+          </div>
+          {skill.repo && (
+            <div>
+              <dt>Repo</dt>
+              <dd>{skill.repo}</dd>
+            </div>
+          )}
+          {skill.installs !== undefined && (
+            <div>
+              <dt>Installs</dt>
+              <dd>{formatInstalls(skill.installs)}</dd>
+            </div>
+          )}
+          {skill.installUrl && (
+            <div>
+              <dt>GitHub</dt>
+              <dd>
+                <a href={skill.installUrl} target="_blank" rel="noreferrer" className={FOCUS_RING}>
+                  GitHub
+                </a>
+              </dd>
+            </div>
+          )}
+          {skill.url && (
+            <div>
+              <dt>skills.sh</dt>
+              <dd>
+                <a href={skill.url} target="_blank" rel="noreferrer" className={FOCUS_RING}>
+                  skills.sh
+                </a>
+              </dd>
+            </div>
+          )}
+        </dl>
+      </div>
+    </div>
   );
 }
 

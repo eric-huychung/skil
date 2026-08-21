@@ -14,7 +14,7 @@ export interface Skill {
   source: SkillSource;
   /** ISO 8601 timestamp of when the skill was installed. */
   installedAt: string;
-  /** Install count from the skills.sh leaderboard. Absent on search hits and installed-skill records. */
+  /** Install count from the skills.sh listing. Absent on installed-skill records. */
   installs?: number;
   /**
    * Listing-only fields from skills.sh search/browse. Never persist these on
