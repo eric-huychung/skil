@@ -19,13 +19,28 @@ export function createInMemoryEngine(): ICollectionEngine {
   return new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
 }
 
+/** Default path a test Pick/Change click binds when `nextPick` is omitted. */
+export const DEFAULT_TEST_PROJECT_ROOT = '/tmp/test-project';
+
+export type TestBridgeOptions = {
+  /** Bound folder at start. `null` (default) means none picked yet. */
+  projectRoot?: string | null;
+  /**
+   * What the next Pick/Change click returns.
+   * Omitted → bind `DEFAULT_TEST_PROJECT_ROOT`. `null` → user canceled.
+   */
+  nextPick?: string | null;
+};
+
 /**
  * Wraps an engine as the `window.contextkit` bridge shape components call.
  * In production this wrapping happens in the Electron main process over
  * IPC (see `gui/src/main/index.ts`); tests skip IPC and call the engine
- * in-process instead.
+ * in-process instead. Folder pick is session state on the bridge — tests
+ * do not rebuild adapters (that wiring is `createEngine(projectRoot)`).
  */
-export function createTestBridge(engine: ICollectionEngine): ContextKitBridge {
+export function createTestBridge(engine: ICollectionEngine, options: TestBridgeOptions = {}): ContextKitBridge {
+  let projectRoot: string | null = options.projectRoot ?? null;
   return {
     listCollections: async () => engine.list(),
     createCollection: async (name, skillIds) => engine.create(name, skillIds),
@@ -35,12 +50,21 @@ export function createTestBridge(engine: ICollectionEngine): ContextKitBridge {
     searchSkills: async (query) => engine.search(query),
     browseSkills: async (view) => engine.browse(view),
     installSkill: async (skillId) => engine.install(skillId),
+    getProjectRoot: async () => projectRoot,
+    pickProjectFolder: async () => {
+      if (options.nextPick === null) return null;
+      projectRoot = options.nextPick ?? DEFAULT_TEST_PROJECT_ROOT;
+      return projectRoot;
+    },
   };
 }
 
 /** Installs a test bridge on `window.contextkit` for a test. Returns the engine so tests can drive it directly. */
-export function installTestBridge(engine: ICollectionEngine = createInMemoryEngine()): ICollectionEngine {
-  window.contextkit = createTestBridge(engine);
+export function installTestBridge(
+  engine: ICollectionEngine = createInMemoryEngine(),
+  options?: TestBridgeOptions
+): ICollectionEngine {
+  window.contextkit = createTestBridge(engine, options);
   return engine;
 }
 

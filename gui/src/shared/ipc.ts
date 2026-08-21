@@ -17,14 +17,15 @@ export const IPC_CHANNELS = {
   searchSkills: 'contextkit:search-skills',
   browseSkills: 'contextkit:browse-skills',
   installSkill: 'contextkit:install-skill',
+  pickProjectFolder: 'contextkit:pick-project-folder',
+  getProjectRoot: 'contextkit:get-project-root',
 } as const;
 
 /**
- * Shape of the bridge exposed to the renderer via `contextBridge`. Mirrors
- * `ICollectionEngine` 1:1 — each method forwards to the matching engine
- * method over IPC and returns the same `Result<T>` the engine returns, so
- * components handle bridge errors with the same `isOk`/`isErr` vocabulary
- * used everywhere else in the codebase.
+ * Shape of the bridge exposed to the renderer via `contextBridge`. Engine
+ * methods forward 1:1 over IPC and return the same `Result<T>` the engine
+ * returns. `pickProjectFolder` / `getProjectRoot` are GUI session state —
+ * project root is adapter config, not an engine method.
  */
 export interface ContextKitBridge {
   listCollections(): Promise<Collection[]>;
@@ -35,4 +36,8 @@ export interface ContextKitBridge {
   searchSkills(query: string): Promise<Result<Skill[]>>;
   browseSkills(view: BrowseView): Promise<Result<Skill[]>>;
   installSkill(skillId: string): Promise<Result<Skill>>;
+  /** Opens a directory dialog. Returns the picked path, or `null` if canceled. */
+  pickProjectFolder(): Promise<string | null>;
+  /** Currently bound project folder, or `null` if none has been picked this session. */
+  getProjectRoot(): Promise<string | null>;
 }

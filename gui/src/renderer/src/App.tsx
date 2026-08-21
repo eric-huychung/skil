@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Folder, GearSix, MagnifyingGlass, Moon, Question, Sparkle, Sun } from '@phosphor-icons/react';
+import { useEffect, useRef, useState } from 'react';
+import { Folder, FolderOpen, GearSix, MagnifyingGlass, Moon, Question, Sparkle, Sun } from '@phosphor-icons/react';
 import { useTheme } from './theme';
+import { useBridge } from './bridge-context';
 import { FOCUS_RING } from './lib/focus-ring';
 import CollectionList from './components/CollectionList';
 import CreateCollectionForm from './components/CreateCollectionForm';
@@ -9,10 +10,15 @@ import SkillSearch from './components/SkillSearch';
 type WorkspaceTab = 'config' | 'search' | 'collections';
 
 const TABS: { id: WorkspaceTab; label: string; icon: typeof Folder }[] = [
-  { id: 'config', label: 'Sync & Config', icon: GearSix },
-  { id: 'search', label: 'Search & Install', icon: MagnifyingGlass },
+  { id: 'config', label: 'Sync', icon: GearSix },
+  { id: 'search', label: 'Discover', icon: MagnifyingGlass },
   { id: 'collections', label: 'Collections', icon: Folder },
 ];
+
+function folderName(root: string): string {
+  const parts = root.replace(/\\/g, '/').split('/').filter(Boolean);
+  return parts.at(-1) ?? root;
+}
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -29,30 +35,14 @@ function ThemeToggle() {
 }
 
 function RailLabel({ tab }: { tab: (typeof TABS)[number] }) {
-  if (tab.id === 'config') {
-    return (
-      <span>
-        Sync &<br />
-        Config
-      </span>
-    );
-  }
-  if (tab.id === 'search') {
-    return (
-      <span>
-        Search &<br />
-        Install
-      </span>
-    );
-  }
-  return <span>Collections</span>;
+  return <span>{tab.label}</span>;
 }
 
 function ConfigPanel() {
   return (
     <section className="config-panel panel-section">
       <p className="eyebrow">Workspace</p>
-      <h1>Sync &amp; Config</h1>
+      <h1>Sync</h1>
       <div className="config-card">
         <span className="status-dot" aria-hidden="true" />
         <div>
@@ -64,13 +54,98 @@ function ConfigPanel() {
   );
 }
 
+function ProjectFolderControl({
+  root,
+  onPick,
+  disabled,
+}: {
+  root: string | null;
+  onPick: () => void;
+  disabled?: boolean;
+}) {
+  if (!root) {
+    return (
+      <button
+        type="button"
+        className={`outline-button folder-button ${FOCUS_RING}`}
+        onClick={onPick}
+        disabled={disabled}
+      >
+        <FolderOpen size={15} weight="regular" aria-hidden="true" />
+        Pick folder
+      </button>
+    );
+  }
+
+  return (
+    <div className="project-folder">
+      <span className="project-folder-name" title={root}>
+        {folderName(root)}
+      </span>
+      <button
+        type="button"
+        className={`outline-button folder-button ${FOCUS_RING}`}
+        aria-label="Change folder"
+        onClick={onPick}
+      >
+        Change
+      </button>
+    </div>
+  );
+}
+
+function PickProjectEmptyState({ onPick }: { onPick: () => void }) {
+  return (
+    <section className="config-panel panel-section">
+      <p className="eyebrow">Project</p>
+      <h1>Pick a project folder</h1>
+      <div className="config-card">
+        <span className="status-dot" aria-hidden="true" />
+        <div>
+          <h2>Collections stay in the repo</h2>
+          <p className="muted-copy">
+            Discover and Collections read and write this folder&apos;s .contextkit state. Sync is still team config —
+            it is not this picker.
+          </p>
+          <button type="button" className={`primary-button empty-pick-button ${FOCUS_RING}`} onClick={onPick}>
+            Pick folder
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function App() {
   const { theme } = useTheme();
+  const bridge = useBridge();
   const [tab, setTab] = useState<WorkspaceTab>('collections');
   const [helpOpen, setHelpOpen] = useState(false);
+  const [projectRoot, setProjectRoot] = useState<string | null | undefined>(undefined);
+  const rootLoadId = useRef(0);
   // Remounting CollectionList via key is the simplest way to refresh it
-  // after a mutation elsewhere (create) without a shared state store.
+  // after a mutation elsewhere (create) or after the engine is rebuilt
+  // against a newly picked folder.
   const [collectionsVersion, setCollectionsVersion] = useState(0);
+
+  useEffect(() => {
+    const id = ++rootLoadId.current;
+    void bridge.getProjectRoot().then((root) => {
+      if (id === rootLoadId.current) setProjectRoot(root);
+    });
+  }, [bridge]);
+
+  async function handlePickFolder() {
+    const picked = await bridge.pickProjectFolder();
+    rootLoadId.current += 1;
+    if (picked === null) return;
+    setProjectRoot(picked);
+    setCollectionsVersion((version) => version + 1);
+  }
+
+  const needsProject = tab === 'search' || tab === 'collections';
+  const showEmptyState = needsProject && projectRoot === null;
+  const boundRoot = typeof projectRoot === 'string' ? projectRoot : null;
 
   return (
     <div className={`app-shell ${theme === 'dark' ? 'dark-shell' : 'light-shell'}`}>
@@ -83,11 +158,16 @@ export default function App() {
           <span className="beta-pill">BETA</span>
         </div>
         <div className="top-actions">
+          <ProjectFolderControl
+            root={boundRoot}
+            onPick={() => void handlePickFolder()}
+            disabled={projectRoot === undefined}
+          />
           <ThemeToggle />
         </div>
       </header>
 
-      <div className={`workspace workspace-${tab}`}>
+      <div className={`workspace workspace-${showEmptyState ? 'config' : tab}`}>
         <nav className="rail" aria-label="Workspace">
           <div role="tablist" aria-label="Workspace">
             {TABS.map((item) => {
@@ -122,10 +202,12 @@ export default function App() {
 
         {tab === 'config' && <ConfigPanel />}
 
-        {tab === 'search' && <SkillSearch />}
+        {showEmptyState && <PickProjectEmptyState onPick={() => void handlePickFolder()} />}
 
-        {tab === 'collections' && (
-          <CollectionList key={collectionsVersion}>
+        {tab === 'search' && boundRoot !== null && <SkillSearch />}
+
+        {tab === 'collections' && boundRoot !== null && (
+          <CollectionList key={`${boundRoot}:${collectionsVersion}`}>
             <CreateCollectionForm onCreated={() => setCollectionsVersion((version) => version + 1)} />
           </CollectionList>
         )}

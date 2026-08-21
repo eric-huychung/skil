@@ -192,6 +192,35 @@
   gap: 8px;
 }
 
+.project-folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-folder-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted-ink);
+}
+
+.folder-button {
+  height: 38px;
+}
+
+.folder-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.empty-pick-button {
+  margin-top: 16px;
+}
+
 .icon-button,
 .small-icon {
   color: var(--ink);
@@ -218,11 +247,12 @@
 .workspace-search .library-panel,
 .workspace-config .config-panel {
   min-height: 0;
+  border-right: 0;
 }
 
 .workspace-search .library-panel {
-  max-width: 1180px;
   width: 100%;
+  max-width: none;
 }
 
 .workspace-collections .panel-section {
@@ -521,8 +551,14 @@
 
 .library-skill {
   justify-content: space-between;
-  padding: 18px 0;
-  gap: 20px;
+  padding: 14px 16px;
+  gap: 16px;
+}
+
+.skill-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .skill-info {
@@ -545,17 +581,23 @@
 }
 
 .skill-rank {
+  flex: 0 0 28px;
   width: 28px;
   color: var(--muted-ink);
   font-family: var(--font-mono);
   font-size: 13px;
+  text-align: right;
 }
 
 .install-button,
 .installed-button {
-  border-radius: 7px;
-  padding: 6px 10px;
-  font-size: 11px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  flex-shrink: 0;
 }
 
 .install-button {

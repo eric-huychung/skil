@@ -11,6 +11,8 @@ const bridge: ContextKitBridge = {
   searchSkills: (query) => ipcRenderer.invoke(IPC_CHANNELS.searchSkills, query),
   browseSkills: (view) => ipcRenderer.invoke(IPC_CHANNELS.browseSkills, view),
   installSkill: (skillId) => ipcRenderer.invoke(IPC_CHANNELS.installSkill, skillId),
+  pickProjectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.pickProjectFolder),
+  getProjectRoot: () => ipcRenderer.invoke(IPC_CHANNELS.getProjectRoot),
 };
 
 contextBridge.exposeInMainWorld('contextkit', bridge);
