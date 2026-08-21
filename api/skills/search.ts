@@ -11,7 +11,7 @@ import { searchSkills } from '../../dist/backend/skills-proxy.js';
  * in the Vercel project's dashboard settings; that's a one-time manual
  * step, not something this code can turn on itself.
  */
-export default async function handler(request: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   try {
     // request.url may be relative in Vercel production; provide a dummy base to parse params
     const query = new URL(request.url, 'http://localhost').searchParams.get('q');

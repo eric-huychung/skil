@@ -9,7 +9,7 @@ import { handleBrowseRequest } from '../../dist/backend/skills-proxy.js';
  * load-time miss is FUNCTION_INVOCATION_FAILED. Requires "OIDC Federation"
  * enabled in the Vercel project's dashboard settings.
  */
-export default async function handler(request: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   try {
     return await handleBrowseRequest(request, {
       fetchImpl: fetch,
