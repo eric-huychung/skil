@@ -5,12 +5,31 @@ import { err, ok, type Result } from '../core/result.js';
 import type { BrowseView, IDE, Skill } from '../types/index.js';
 import { getApiBaseUrl } from '../config/website.js';
 
-interface SkillsSearchResponse {
-  data: Array<{ id: string }>;
+/** skills.sh V1Skill listing fields. `source` here is owner/repo, not SkillSource. */
+interface SkillsShHit {
+  id: string;
+  name?: string;
+  source?: string;
+  installs?: number;
+  installUrl?: string;
+  url?: string;
 }
 
-interface SkillsBrowseResponse {
-  data: Array<{ id: string; installs?: number }>;
+interface SkillsListResponse {
+  data: SkillsShHit[];
+}
+
+function mapSkillsShHit(hit: SkillsShHit): Skill {
+  return {
+    id: hit.id,
+    source: 'skills.sh',
+    installedAt: '',
+    ...(hit.installs !== undefined ? { installs: hit.installs } : {}),
+    ...(hit.name ? { name: hit.name } : {}),
+    ...(hit.source ? { repo: hit.source } : {}),
+    ...(hit.installUrl ? { installUrl: hit.installUrl } : {}),
+    ...(hit.url ? { url: hit.url } : {}),
+  };
 }
 
 /**
@@ -30,16 +49,11 @@ export class SkillsAdapter implements ISkillsAdapter {
 
   async search(query: string): Promise<Result<Skill[]>> {
     try {
-      const response = await axios.get<SkillsSearchResponse>(`${this.apiBaseUrl}/api/skills/search`, {
+      const response = await axios.get<SkillsListResponse>(`${this.apiBaseUrl}/api/skills/search`, {
         params: { q: query },
       });
 
-      const skills: Skill[] = response.data.data.map((result) => ({
-        id: result.id,
-        source: 'skills.sh',
-        installedAt: '',
-      }));
-      return ok(skills);
+      return ok(response.data.data.map(mapSkillsShHit));
     } catch (error) {
       return err(new Error(`Failed to search skills for '${query}': ${(error as Error).message}`));
     }
@@ -47,17 +61,11 @@ export class SkillsAdapter implements ISkillsAdapter {
 
   async browse(view: BrowseView): Promise<Result<Skill[]>> {
     try {
-      const response = await axios.get<SkillsBrowseResponse>(`${this.apiBaseUrl}/api/skills`, {
+      const response = await axios.get<SkillsListResponse>(`${this.apiBaseUrl}/api/skills`, {
         params: { view },
       });
 
-      const skills: Skill[] = response.data.data.map((result) => ({
-        id: result.id,
-        source: 'skills.sh',
-        installedAt: '',
-        ...(result.installs !== undefined ? { installs: result.installs } : {}),
-      }));
-      return ok(skills);
+      return ok(response.data.data.map(mapSkillsShHit));
     } catch (error) {
       return err(new Error(`Failed to browse ${view} skills: ${(error as Error).message}`));
     }

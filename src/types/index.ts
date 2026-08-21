@@ -16,6 +16,15 @@ export interface Skill {
   installedAt: string;
   /** Install count from the skills.sh leaderboard. Absent on search hits and installed-skill records. */
   installs?: number;
+  /**
+   * Listing-only fields from skills.sh search/browse. Never persist these on
+   * `state.json` installed-skill records. `repo` is the GitHub owner/repo
+   * (skills.sh JSON `source`) — not `Skill.source`.
+   */
+  name?: string;
+  repo?: string;
+  installUrl?: string;
+  url?: string;
 }
 
 /** A named group of skills. */

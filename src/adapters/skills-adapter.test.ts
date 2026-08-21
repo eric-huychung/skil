@@ -19,7 +19,7 @@ describe('SkillsAdapter', () => {
         .get('/api/skills/search')
         .query({ q: 'react' })
         .reply(200, {
-          data: [{ id: 'obra/react-patterns', name: 'react-patterns', source: 'obra/react-patterns', sourceType: 'github' }],
+          data: [{ id: 'obra/react-patterns' }],
         });
 
       const adapter = new SkillsAdapter();
@@ -173,6 +173,45 @@ describe('SkillsAdapter', () => {
       if (isOk(result)) {
         expect(result.value).toEqual([
           { id: 'obra/react-patterns', source: 'skills.sh', installedAt: '', installs: 1200 },
+        ]);
+      }
+    });
+
+    it('maps listing metadata without treating skills.sh source as Skill.source', async () => {
+      nock(website.apiBaseUrl)
+        .get('/api/skills')
+        .query({ view: 'all-time' })
+        .reply(200, {
+          data: [
+            {
+              id: 'vercel-labs/skills/find-skills',
+              slug: 'find-skills',
+              name: 'find-skills',
+              source: 'vercel-labs/skills',
+              installs: 3052722,
+              sourceType: 'github',
+              installUrl: 'https://github.com/vercel-labs/skills',
+              url: 'https://www.skills.sh/vercel-labs/skills/find-skills',
+            },
+          ],
+        });
+
+      const adapter = new SkillsAdapter();
+      const result = await adapter.browse('all-time');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual([
+          {
+            id: 'vercel-labs/skills/find-skills',
+            source: 'skills.sh',
+            installedAt: '',
+            installs: 3052722,
+            name: 'find-skills',
+            repo: 'vercel-labs/skills',
+            installUrl: 'https://github.com/vercel-labs/skills',
+            url: 'https://www.skills.sh/vercel-labs/skills/find-skills',
+          },
         ]);
       }
     });
