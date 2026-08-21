@@ -101,7 +101,7 @@ export default function CreateCollectionForm({ onCreated }: { onCreated?: (colle
 
       <button
         type="submit"
-        className={`self-start rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 ${FOCUS_RING}`}
+        className={`self-start primary-button ${FOCUS_RING}`}
       >
         Create collection
       </button>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { MagnifyingGlass } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import type { BrowseView, Skill } from '../../../shared/ipc';
@@ -6,6 +7,12 @@ import type { BrowseView, Skill } from '../../../shared/ipc';
 type InstallState = { status: 'success' } | { status: 'error'; message: string };
 
 const BROWSE_DISPLAY_LIMIT = 20;
+
+function formatInstalls(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
+  return String(value);
+}
 
 export default function SkillSearch() {
   const bridge = useBridge();
@@ -93,28 +100,33 @@ export default function SkillSearch() {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <form onSubmit={handleSearch} className="flex items-end gap-2">
-        <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor="skill-search-query" className="text-sm font-medium">
-            Search skills
-          </label>
+    <section className="library-panel panel-section">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Discover</p>
+          <h1>Find Skills</h1>
+        </div>
+        {results !== null && <span className="library-count">{results.length} available</span>}
+      </div>
+
+      <form onSubmit={handleSearch}>
+        <label className="search-box" htmlFor="skill-search-query">
+          <MagnifyingGlass size={16} weight="regular" aria-hidden="true" />
+          <span className="sr-only">Search skills</span>
           <input
             id="skill-search-query"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className={`rounded-md border border-input bg-transparent px-3 py-2 text-sm ${FOCUS_RING}`}
+            placeholder="Search skills"
+            className={FOCUS_RING}
           />
-        </div>
-        <button
-          type="submit"
-          className={`rounded-md border border-input px-3 py-2 text-sm font-medium transition-colors hover:bg-accent ${FOCUS_RING}`}
-        >
-          Search
-        </button>
+          <button type="submit" className={`text-button search-submit ${FOCUS_RING}`}>
+            Search
+          </button>
+        </label>
       </form>
 
-      <div role="tablist" aria-label="Leaderboard" className="flex gap-1">
+      <div role="tablist" aria-label="Leaderboard" className="filter-row">
         <LeaderboardTab
           label="All time"
           selected={resultSource === 'all-time'}
@@ -127,42 +139,42 @@ export default function SkillSearch() {
         />
       </div>
 
-      {isSearching && <p role="status" className="text-sm text-muted-foreground">Searching&hellip;</p>}
+      {isSearching && (
+        <p role="status" className="muted-copy">
+          Searching&hellip;
+        </p>
+      )}
       {searchError && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="muted-copy text-destructive">
           {searchError}
         </p>
       )}
 
       {results !== null && !isSearching && (
-        <ul className="flex flex-col gap-1">
-          {results.map((skill) => {
+        <ul className="skill-list">
+          {results.map((skill, index) => {
             const installState = installStates[skill.id];
             const isInstalling = installingId === skill.id;
+            const installed = !isInstalling && installState?.status === 'success';
             return (
-              <li
-                key={skill.id}
-                className="flex items-center justify-between rounded-md border border-border px-3 py-2"
-              >
-                <span className="flex items-baseline gap-2 text-sm">
-                  <span>{skill.id}</span>
+              <li className="library-skill" key={skill.id}>
+                <span className="skill-rank">{index + 1}</span>
+                <div className="skill-info">
+                  <div className="skill-name">{skill.id}</div>
                   {skill.installs !== undefined && (
-                    <span className="text-xs text-muted-foreground">{skill.installs} installs</span>
+                    <div className="skill-meta">
+                      <span>{formatInstalls(skill.installs)} installs</span>
+                    </div>
                   )}
-                </span>
+                </div>
                 <div className="flex items-center gap-2">
                   {isInstalling && (
-                    <span role="status" className="text-xs text-muted-foreground">
+                    <span role="status" className="muted-copy">
                       Installing&hellip;
                     </span>
                   )}
-                  {!isInstalling && installState?.status === 'success' && (
-                    <span role="status" className="text-xs text-foreground">
-                      Installed
-                    </span>
-                  )}
                   {!isInstalling && installState?.status === 'error' && (
-                    <span role="alert" className="text-xs text-destructive">
+                    <span role="alert" className="muted-copy text-destructive">
                       {installState.message}
                     </span>
                   )}
@@ -171,9 +183,9 @@ export default function SkillSearch() {
                     onClick={() => handleInstall(skill.id)}
                     disabled={isInstalling}
                     aria-label={`Install ${skill.id}`}
-                    className={`rounded-md border border-input px-2 py-1 text-xs transition-colors hover:bg-accent disabled:opacity-50 ${FOCUS_RING}`}
+                    className={`${installed ? 'installed-button' : 'install-button'} ${FOCUS_RING}`}
                   >
-                    Install
+                    {installed ? 'Installed' : 'Install'}
                   </button>
                 </div>
               </li>
@@ -181,7 +193,7 @@ export default function SkillSearch() {
           })}
         </ul>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -200,9 +212,7 @@ function LeaderboardTab({
       role="tab"
       aria-selected={selected}
       onClick={onSelect}
-      className={`rounded-md px-3 py-1.5 text-sm transition-colors ${FOCUS_RING} ${
-        selected ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground hover:bg-accent'
-      }`}
+      className={`filter ${selected ? 'active-filter' : ''} ${FOCUS_RING}`}
     >
       {label}
     </button>

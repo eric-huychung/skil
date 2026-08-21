@@ -53,4 +53,13 @@ describe('App', () => {
     expect(screen.getByRole('tab', { name: 'Search & Install' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByLabelText('Search skills')).toBeInTheDocument();
   });
+
+  it('opens a help dialog from the rail', async () => {
+    installTestBridge(createInMemoryEngine());
+
+    renderWithProviders(<App />);
+    await userEvent.click(screen.getByRole('button', { name: 'Help' }));
+
+    expect(screen.getByRole('dialog', { name: 'How can we help?' })).toBeInTheDocument();
+  });
 });

@@ -90,7 +90,7 @@ function CollectionDetail({ collection, onChange }: { collection: Collection; on
         >
           {IDE_OPTIONS.map((ide) => (
             <option key={ide} value={ide}>
-              {ide}
+              {ide.charAt(0).toUpperCase() + ide.slice(1)}
             </option>
           ))}
         </select>
@@ -104,7 +104,7 @@ function CollectionDetail({ collection, onChange }: { collection: Collection; on
         {collection.skills.map((skillId) => (
           <div className="included-skill" key={skillId}>
             <span className="checkmark" aria-hidden="true">
-              <Check size={11} weight="bold" />
+              <Check size={11} weight="regular" />
             </span>
             <span>{skillId}</span>
             <button

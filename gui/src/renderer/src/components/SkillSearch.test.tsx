@@ -103,7 +103,7 @@ describe('SkillSearch', () => {
     renderWithProviders(<SkillSearch />, { bridge });
 
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
-    expect(screen.getByText(/1200/)).toBeInTheDocument();
+    expect(screen.getByText(/1\.2k/)).toBeInTheDocument();
     expect(screen.queryByText('vercel-labs/security-review')).not.toBeInTheDocument();
   });
 
@@ -112,11 +112,11 @@ describe('SkillSearch', () => {
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<SkillSearch />, { bridge });
-    await waitFor(() => expect(screen.getByText(/1200/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/1\.2k/)).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
 
-    expect(screen.getByText(/1200/)).toBeInTheDocument();
+    expect(screen.getByText(/1\.2k/)).toBeInTheDocument();
     expect(screen.queryByText('vercel-labs/security-review')).not.toBeInTheDocument();
   });
 

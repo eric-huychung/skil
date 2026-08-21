@@ -2,6 +2,11 @@
 
 All notable changes to ContextKit are documented here. Versions follow [Semantic Versioning](https://semver.org/) (0.x minors may include breaking CLI changes).
 
+## [Unreleased]
+
+### Changed
+- GUI layout now follows the example desktop shell: topbar, rail tabs (Collections / Search & Install / Sync & Config), collection list + detail, and a help dialog. Search still installs skills; collections still add/remove/export through the same engine.
+
 ## [0.2.2] - 2026-08-21
 
 ### Fixed

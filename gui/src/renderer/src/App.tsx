@@ -98,6 +98,7 @@ export default function App() {
                   key={item.id}
                   type="button"
                   role="tab"
+                  aria-label={item.label}
                   aria-selected={selected}
                   className={`rail-item ${selected ? 'active' : ''} ${FOCUS_RING}`}
                   onClick={() => setTab(item.id)}
@@ -108,11 +109,12 @@ export default function App() {
               );
             })}
           </div>
-          <button
-            type="button"
-            className={`rail-item help-item ${FOCUS_RING}`}
-            onClick={() => setHelpOpen(true)}
-          >
+        <button
+          type="button"
+          className={`rail-item help-item ${FOCUS_RING}`}
+          aria-label="Help"
+          onClick={() => setHelpOpen(true)}
+        >
             <Question size={17} weight="regular" aria-hidden="true" />
             <span>Help</span>
           </button>
@@ -120,17 +122,7 @@ export default function App() {
 
         {tab === 'config' && <ConfigPanel />}
 
-        {tab === 'search' && (
-          <section className="library-panel panel-section">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Discover</p>
-                <h1>Find Skills</h1>
-              </div>
-            </div>
-            <SkillSearch />
-          </section>
-        )}
+        {tab === 'search' && <SkillSearch />}
 
         {tab === 'collections' && (
           <CollectionList key={collectionsVersion}>
