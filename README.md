@@ -21,7 +21,7 @@ State lives in `.contextkit/state.json`; skill sources live in `.contextkit/skil
 
 `contextkit search` with no query lists the skills.sh all-time leaderboard (top 10, with install counts). `contextkit search --trending` lists trending. A typed query (`contextkit search react`) still searches and ignores `--trending`.
 
-`contextkit search` and `contextkit install` go through ContextKit's own backend, which authenticates to skills.sh with a Vercel OIDC token — no `SKILLS_API_KEY` needed. Typed search hits `GET /api/skills/search`; the leaderboard hits `GET /api/skills?view=` and is cached on Vercel's CDN. Point the CLI at a different backend with `CONTEXTKIT_API_URL` (defaults to `https://contextkit.dev`).
+`contextkit search` and `contextkit install` go through ContextKit's own backend, which authenticates to skills.sh with a Vercel OIDC token — no `SKILLS_API_KEY` needed. Typed search hits `GET /api/skills/search`; the leaderboard hits `GET /api/skills?view=` and is cached on Vercel's CDN. Default origin is `src/config/website.json` (`https://www.skil.website`). Override with `CONTEXTKIT_API_URL`.
 
 ## Desktop GUI
 

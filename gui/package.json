@@ -1,6 +1,6 @@
 {
   "name": "contextkit-gui",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Desktop GUI for ContextKit, sharing CollectionEngine with the CLI",
   "private": true,
   "type": "module",

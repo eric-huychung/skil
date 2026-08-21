@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { execa } from 'execa';
 import { isErr, isOk } from '../core/result.js';
+import { website } from '../config/website.js';
 import { SkillsAdapter } from './skills-adapter.js';
 
 vi.mock('execa', () => ({ execa: vi.fn() }));
@@ -14,7 +15,7 @@ describe('SkillsAdapter', () => {
 
   describe('search', () => {
     it('returns skills parsed from a successful backend response, with no auth required', async () => {
-      nock('https://contextkit.dev')
+      nock(website.apiBaseUrl)
         .get('/api/skills/search')
         .query({ q: 'react' })
         .reply(200, {
@@ -40,7 +41,7 @@ describe('SkillsAdapter', () => {
     });
 
     it('returns an empty array when no skills match', async () => {
-      nock('https://contextkit.dev').get('/api/skills/search').query(true).reply(200, { data: [] });
+      nock(website.apiBaseUrl).get('/api/skills/search').query(true).reply(200, { data: [] });
 
       const adapter = new SkillsAdapter();
       const result = await adapter.search('nonexistent-skill-xyz');
@@ -52,7 +53,7 @@ describe('SkillsAdapter', () => {
     });
 
     it('returns an error when the backend request fails', async () => {
-      nock('https://contextkit.dev').get('/api/skills/search').query(true).reply(502, { message: 'skills.sh unavailable' });
+      nock(website.apiBaseUrl).get('/api/skills/search').query(true).reply(502, { message: 'skills.sh unavailable' });
 
       const adapter = new SkillsAdapter();
       const result = await adapter.search('react');
@@ -130,7 +131,7 @@ describe('SkillsAdapter', () => {
 
   describe('browse', () => {
     it('maps leaderboard hits including install counts from a successful backend response', async () => {
-      nock('https://contextkit.dev')
+      nock(website.apiBaseUrl)
         .get('/api/skills')
         .query({ view: 'all-time' })
         .reply(200, {
@@ -149,7 +150,7 @@ describe('SkillsAdapter', () => {
     });
 
     it('requests the trending view from the same backend path', async () => {
-      nock('https://contextkit.dev')
+      nock(website.apiBaseUrl)
         .get('/api/skills')
         .query({ view: 'trending' })
         .reply(200, {
@@ -168,7 +169,7 @@ describe('SkillsAdapter', () => {
     });
 
     it('returns an error when the backend request fails', async () => {
-      nock('https://contextkit.dev')
+      nock(website.apiBaseUrl)
         .get('/api/skills')
         .query({ view: 'all-time' })
         .reply(502, { message: 'skills.sh unavailable' });

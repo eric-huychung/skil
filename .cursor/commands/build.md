@@ -15,7 +15,7 @@ See `.cursor/skills/philosophy/tdd/SKILL.md` for the full discipline.
 
 ## Process
 
-When invoked with `/build`, apply these three disciplines:
+When invoked with `/build`, apply these disciplines:
 
 ### 1. Test-Driven Development (Always)
 
@@ -76,6 +76,22 @@ Pair with, as needed:
 - `.cursor/skills/build/ui/ui-styling/SKILL.md` - shadcn/Tailwind component implementation
 - `.cursor/skills/build/ui/design-system/SKILL.md` - design token architecture (primitive → semantic → component)
 
+### 6. Git Workflow (Always)
+
+Follow commit and branching discipline from `.cursor/skills/productivity/git-workflow/`:
+
+- Commit each successful increment (save point)
+- Atomic commits, descriptive messages, separate concerns
+- Short-lived branches; `main` stays deployable
+
+**Reference**: `.cursor/skills/productivity/git-workflow/SKILL.md`
+
+### 7. Git Guardrail (Optional - use when blocking dangerous git ops)
+
+When the user wants to prevent destructive git commands (push, reset --hard, clean, branch -D), use `.cursor/skills/productivity/git-guardrail/`.
+
+**Reference**: `.cursor/skills/productivity/git-guardrail/SKILL.md`
+
 ## Execution Pattern
 
 For each task:
@@ -107,3 +123,5 @@ Working code with tests, following design specifications. Each increment is:
 - **Codebase Design**: `.cursor/skills/design/codebase-design/SKILL.md`
 - **Debug**: `.cursor/skills/testing/debug/SKILL.md`
 - **UI/UX**: `.cursor/skills/build/ui/ui-ux-pro-max/SKILL.md`
+- **Git Workflow**: `.cursor/skills/productivity/git-workflow/SKILL.md`
+- **Git Guardrail**: `.cursor/skills/productivity/git-guardrail/SKILL.md`

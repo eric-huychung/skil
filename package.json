@@ -1,6 +1,6 @@
 {
   "name": "contextkit",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "CLI-first AI skill collection manager for Cursor, Claude, and Windsurf",
   "type": "module",
   "bin": {
@@ -19,7 +19,7 @@
     "gui:test": "npm run test --workspace=gui"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "license": "MIT",
   "dependencies": {

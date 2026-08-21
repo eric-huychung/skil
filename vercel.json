@@ -1,4 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "outputDirectory": "public"
+  "buildCommand": "npm run build",
+  "outputDirectory": "public",
+  "functions": {
+    "api/skills/index.ts": {
+      "includeFiles": "dist/**"
+    },
+    "api/skills/search.ts": {
+      "includeFiles": "dist/**"
+    }
+  }
 }

@@ -107,6 +107,19 @@ describe('SkillSearch', () => {
     expect(screen.queryByText('vercel-labs/security-review')).not.toBeInTheDocument();
   });
 
+  it('submitting an empty query browses the leaderboard instead of typed-searching', async () => {
+    const engine = createInMemoryEngine();
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<SkillSearch />, { bridge });
+    await waitFor(() => expect(screen.getByText(/1200/)).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(screen.getByText(/1200/)).toBeInTheDocument();
+    expect(screen.queryByText('vercel-labs/security-review')).not.toBeInTheDocument();
+  });
+
   it('renders a different list when the Trending tab is selected', async () => {
     const engine = createInMemoryEngine();
     const bridge = createTestBridge(engine);

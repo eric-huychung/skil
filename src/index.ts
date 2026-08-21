@@ -1,4 +1,4 @@
-export const CONTEXTKIT_VERSION = '0.2.0';
+export const CONTEXTKIT_VERSION = '0.2.1';
 
 // Public API surface for consumers embedding ContextKit's engine directly
 // (currently: the GUI's Electron main process). CLI commands import from

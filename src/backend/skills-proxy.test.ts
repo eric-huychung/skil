@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { isErr, isOk } from '../core/result.js';
+import { website } from '../config/website.js';
 import { browseSkills, handleBrowseRequest, searchSkills } from './skills-proxy.js';
 
 function fakeFetch(response: { status: number; body: unknown }) {
@@ -132,7 +133,7 @@ describe('handleBrowseRequest', () => {
     const fetchImpl = fakeFetch({ status: 200, body });
     const getOidcToken = vi.fn(async () => 'test-oidc-token');
 
-    const response = await handleBrowseRequest(new Request('https://contextkit.dev/api/skills?view=all-time'), {
+    const response = await handleBrowseRequest(new Request(`${website.apiBaseUrl}/api/skills?view=all-time`), {
       fetchImpl,
       getOidcToken,
     });
@@ -147,7 +148,7 @@ describe('handleBrowseRequest', () => {
     const fetchImpl = fakeFetch({ status: 200, body });
     const getOidcToken = vi.fn(async () => 'test-oidc-token');
 
-    const response = await handleBrowseRequest(new Request('https://contextkit.dev/api/skills?view=trending'), {
+    const response = await handleBrowseRequest(new Request(`${website.apiBaseUrl}/api/skills?view=trending`), {
       fetchImpl,
       getOidcToken,
     });
@@ -161,7 +162,7 @@ describe('handleBrowseRequest', () => {
     const fetchImpl = fakeFetch({ status: 200, body: { data: [] } });
     const getOidcToken = vi.fn(async () => 'test-oidc-token');
 
-    const response = await handleBrowseRequest(new Request('https://contextkit.dev/api/skills'), {
+    const response = await handleBrowseRequest(new Request(`${website.apiBaseUrl}/api/skills`), {
       fetchImpl,
       getOidcToken,
     });
@@ -175,7 +176,7 @@ describe('handleBrowseRequest', () => {
     const fetchImpl = fakeFetch({ status: 200, body: { data: [] } });
     const getOidcToken = vi.fn(async () => 'test-oidc-token');
 
-    const response = await handleBrowseRequest(new Request('https://contextkit.dev/api/skills?view=hot'), {
+    const response = await handleBrowseRequest(new Request(`${website.apiBaseUrl}/api/skills?view=hot`), {
       fetchImpl,
       getOidcToken,
     });
@@ -188,7 +189,7 @@ describe('handleBrowseRequest', () => {
     const fetchImpl = fakeFetch({ status: 503, body: { message: 'leaderboard unavailable' } });
     const getOidcToken = vi.fn(async () => 'test-oidc-token');
 
-    const response = await handleBrowseRequest(new Request('https://contextkit.dev/api/skills?view=all-time'), {
+    const response = await handleBrowseRequest(new Request(`${website.apiBaseUrl}/api/skills?view=all-time`), {
       fetchImpl,
       getOidcToken,
     });

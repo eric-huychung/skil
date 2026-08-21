@@ -2,6 +2,16 @@
 
 All notable changes to ContextKit are documented here. Versions follow [Semantic Versioning](https://semver.org/) (0.x minors may include breaking CLI changes).
 
+## [0.2.1] - 2026-08-21
+
+### Fixed
+- Vercel function crash (FUNCTION_INVOCATION_FAILED) — functions now import compiled `dist/` instead of non-existent `src/*.js`
+- Vercel build now runs `npm run build` before deployment (`buildCommand` in `vercel.json`)
+
+### Changed
+- Website API origin moved from hardcoded constant to `src/config/website.json` for easier updates
+- Node engine requirement raised to `>=20` (required by `@vercel/oidc`)
+
 ## [0.2.0] - 2026-08-21
 
 ### Added

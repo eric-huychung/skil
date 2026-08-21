@@ -14,6 +14,10 @@ UI and design skills (component design, styling, design systems, branding, prese
 
 Build phase follows test-driven development (TDD) from `.cursor/skills/philosophy/tdd/` and references deep module design principles from `.cursor/skills/design/codebase-design/`.
 
+## Productivity References
+
+Build follows commit and branching discipline from `.cursor/skills/productivity/git-workflow/`. Optional git safety hooks live in `.cursor/skills/productivity/git-guardrail/`.
+
 ## Usage
 
 Access via `/build` command or read skills directly.

@@ -209,7 +209,7 @@ interface SkillsAdapter {
 ```
 
 **Implementation:**
-- `search` calls ContextKit's own Vercel-hosted backend (`GET /api/skills/search?q=`, see `src/backend/skills-proxy.ts`), not skills.sh directly — the backend mints a short-lived Vercel OIDC token server-side and forwards it to skills.sh, so no user ever needs a `SKILLS_API_KEY`. Base URL defaults to `https://contextkit.dev`, overridable via `CONTEXTKIT_API_URL`.
+- `search` calls ContextKit's own Vercel-hosted backend (`GET /api/skills/search?q=`, see `src/backend/skills-proxy.ts`), not skills.sh directly — the backend mints a short-lived Vercel OIDC token server-side and forwards it to skills.sh, so no user ever needs a `SKILLS_API_KEY`. Base URL defaults to `src/config/website.json` (`https://www.skil.website`), overridable via `CONTEXTKIT_API_URL`.
 - `browse` calls `GET /api/skills?view=all-time|trending` on the same backend. That route always requests `per_page=20` from skills.sh so CLI (display 10) and GUI (display 20) share one CDN cache key per view. On 200 it sets `Cache-Control: public, s-maxage=86400, stale-while-revalidate=3600`. The search route does **not** send these headers — typed queries are not a shared leaderboard.
 - Subprocess execution for `npx skills add` (`install`) and `skillsmith convert` (`convert`) — both run entirely locally; skills.sh has no HTTP endpoint for either, so there's nothing for the backend proxy to front for them.
 - Error parsing and user-friendly messages

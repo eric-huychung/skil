@@ -3,8 +3,7 @@ import { execa } from 'execa';
 import type { ISkillsAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
 import type { BrowseView, IDE, Skill } from '../types/index.js';
-
-const DEFAULT_API_BASE_URL = 'https://contextkit.dev';
+import { getApiBaseUrl } from '../config/website.js';
 
 interface SkillsSearchResponse {
   data: Array<{ id: string }>;
@@ -23,7 +22,7 @@ interface SkillsBrowseResponse {
  * CollectionEngine tests never hit the network or spawn subprocesses.
  */
 export class SkillsAdapter implements ISkillsAdapter {
-  constructor(private readonly apiBaseUrl: string = process.env.CONTEXTKIT_API_URL ?? DEFAULT_API_BASE_URL) {}
+  constructor(private readonly apiBaseUrl: string = getApiBaseUrl()) {}
 
   async search(query: string): Promise<Result<Skill[]>> {
     try {

@@ -51,9 +51,15 @@ export default function SkillSearch() {
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const trimmed = query.trim();
+    if (trimmed.length === 0) {
+      await loadBrowse(resultSource === 'trending' ? 'trending' : 'all-time');
+      return;
+    }
+
     setSearchError(null);
     setIsSearching(true);
-    const result = await bridge.searchSkills(query);
+    const result = await bridge.searchSkills(trimmed);
     setIsSearching(false);
 
     if (!result.ok) {

@@ -11,13 +11,23 @@ Production deployment with validation and rollback readiness.
 
 When invoked with `/deploy`:
 
-<!-- 1. **Run pre-deploy-checks skill** - validate readiness
+1. **Read git-workflow skill** (`.cursor/skills/productivity/git-workflow/SKILL.md`)
+   - Version bump matches the change (breaking → major, additive → minor, fix → patch)
+   - Tag the release; changelog is curated for consumers, not a dumped commit log
+   - Checkpoint: version, tag, and changelog agree
+
+2. **Read git-guardrail skill** (`.cursor/skills/productivity/git-guardrail/SKILL.md`)
+   - Do not run blocked git operations (push, force push, reset --hard, clean -f, branch -D)
+   - Set up hooks if the user wants them; otherwise just follow the blocked list
+   - Checkpoint: this deploy does not need a destructive git command
+
+<!-- 3. **Run pre-deploy-checks skill** - validate readiness
    - Checkpoint: All checks passing? -->
 
-<!-- 2. **Run deployment skill** - deploy to production
+<!-- 4. **Run deployment skill** - deploy to production
    - Checkpoint: Deployment successful? -->
 
-<!-- 3. **Run smoke-tests skill** - validate production health
+<!-- 5. **Run smoke-tests skill** - validate production health
    - Checkpoint: Production stable? -->
 
 ## Output
