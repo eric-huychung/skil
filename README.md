@@ -25,7 +25,7 @@ State lives in `.contextkit/state.json`; skill sources live in `.contextkit/skil
 
 ## Desktop GUI
 
-An Electron app (`gui/`) shares the same `CollectionEngine` as the CLI: create collections, add/remove skills, search and install from skills.sh (empty Search shows All time / Trending leaderboards), and export a collection to an IDE — all as thin UI over the same business logic. Connect a project folder from Sync when you want those writes in a repo; Discover and Collections work before that. Run it with `npm run gui:dev`.
+An Electron app (`gui/`) shares the same `CollectionEngine` as the CLI: create collections, add/remove skills, search and install from skills.sh (empty Search shows All time / Trending leaderboards; click a skill name for route / repo / GitHub / skills.sh links), and export a collection to an IDE — all as thin UI over the same business logic. Connect a project folder from Sync when you want those writes in a repo; Discover and Collections work before that. Run it with `npm run gui:dev`.
 
 ## Troubleshooting
 

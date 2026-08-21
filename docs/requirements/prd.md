@@ -128,6 +128,7 @@ collections:
 - Drag-drop skills into collection builder
 - In-app search (queries skills.sh)
 - Empty-state All time / Trending leaderboard tabs with install counts (fetched on first visit to Search; no folder required)
+- Click a Discover skill name to see route, repo, GitHub link, skills.sh page, and installs (listing fields only — no description, no GitHub stars)
 - Sync-tab Pick / Change folder control; Collections stays usable before a folder is connected
 - One-click install from search results
 - Per-collection export to a target IDE

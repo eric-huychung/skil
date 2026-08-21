@@ -4,6 +4,9 @@ All notable changes to ContextKit are documented here. Versions follow [Semantic
 
 ## [Unreleased]
 
+### Added
+- Discover: click a skill name to open a details dialog (route, repo, GitHub, skills.sh page, installs) from skills.sh listing fields already on the browse/search payload
+
 ### Changed
 - GUI layout now follows the example desktop shell: topbar, rail tabs (Collections / Search & Install / Sync & Config), collection list + detail, and a help dialog. Search still installs skills; collections still add/remove/export through the same engine.
 
