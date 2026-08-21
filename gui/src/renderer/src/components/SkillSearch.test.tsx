@@ -69,8 +69,9 @@ describe('SkillSearch', () => {
     const bridge = { ...createTestBridge(engine), searchSkills: () => deferred.promise };
 
     renderWithProviders(<SkillSearch />, { bridge });
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
 
-    await userEvent.type(screen.getByLabelText('Search skills'), 'react');
+    await userEvent.type(screen.getByLabelText('Search skills'), 'zzzz-not-on-the-leaderboard');
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     expect(screen.getByText('Searching\u2026')).toBeInTheDocument();
@@ -92,10 +93,10 @@ describe('SkillSearch', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Add obra/react-patterns' }));
 
-    expect(screen.getByText('Adding\u2026')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Adding obra/react-patterns' })).toBeDisabled();
 
     deferred.resolve(ok(['obra/react-patterns']));
-    await waitFor(() => expect(screen.queryByText('Adding\u2026')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Added obra/react-patterns' })).toBeInTheDocument());
   });
 
   it('renders all-time results with install counts on an empty query, without clicking Search', async () => {
@@ -154,13 +155,29 @@ describe('SkillSearch', () => {
     expect(browseSkills).toHaveBeenCalledTimes(2);
   });
 
-  it('shows at most 20 leaderboard rows', async () => {
+  it('refetches the leaderboard when Refresh is clicked, even if the view is cached', async () => {
+    const engine = createInMemoryEngine();
+    const inner = createTestBridge(engine);
+    const browseSkills = vi.fn(inner.browseSkills);
+    const bridge = { ...inner, browseSkills };
+
+    renderWithProviders(<SkillSearch />, { bridge });
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
+    expect(browseSkills).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh skills' }));
+
+    await waitFor(() => expect(browseSkills).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('obra/react-patterns')).toBeInTheDocument();
+  });
+
+  it('shows at most 100 leaderboard rows', async () => {
     const engine = createInMemoryEngine();
     const bridge = {
       ...createTestBridge(engine),
       browseSkills: async () =>
         ok(
-          Array.from({ length: 21 }, (_, index) => ({
+          Array.from({ length: 101 }, (_, index) => ({
             id: `skill/${index}`,
             source: 'skills.sh' as const,
             installedAt: '',
@@ -172,8 +189,45 @@ describe('SkillSearch', () => {
     renderWithProviders(<SkillSearch />, { bridge });
 
     await waitFor(() => expect(screen.getByText('skill/0')).toBeInTheDocument());
-    expect(screen.getByText('skill/19')).toBeInTheDocument();
-    expect(screen.queryByText('skill/20')).not.toBeInTheDocument();
+    expect(screen.getByText('skill/99')).toBeInTheDocument();
+    expect(screen.queryByText('skill/100')).not.toBeInTheDocument();
+  });
+
+  it('filters the cached leaderboard as you type without calling search', async () => {
+    const engine = createInMemoryEngine();
+    const inner = createTestBridge(engine);
+    const searchSkills = vi.fn(inner.searchSkills);
+    const bridge = { ...inner, searchSkills };
+
+    renderWithProviders(<SkillSearch />, { bridge });
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
+    expect(screen.getByText('addyosmani/performance-review')).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Search skills'), 'react');
+
+    expect(screen.getByText('obra/react-patterns')).toBeInTheDocument();
+    expect(screen.queryByText('addyosmani/performance-review')).not.toBeInTheDocument();
+    expect(searchSkills).not.toHaveBeenCalled();
+  });
+
+  it('calls search only when the cached list has no match', async () => {
+    const engine = createInMemoryEngine();
+    const inner = createTestBridge(engine);
+    const searchSkills = vi.fn(inner.searchSkills);
+    const bridge = { ...inner, searchSkills };
+
+    renderWithProviders(<SkillSearch />, { bridge });
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText('Search skills'), 'zzzz-not-on-the-leaderboard');
+    expect(screen.queryByText('obra/react-patterns')).not.toBeInTheDocument();
+    expect(searchSkills).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
+    expect(searchSkills).toHaveBeenCalledTimes(1);
+    expect(searchSkills).toHaveBeenCalledWith('zzzz-not-on-the-leaderboard');
   });
 
   it('shows a loading state while browse is pending', async () => {
@@ -201,7 +255,7 @@ describe('SkillSearch', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/leaderboard unreachable/));
   });
 
-  it('opens a details dialog with listing metadata when the skill name is clicked', async () => {
+  it('opens a details dialog from the skill card with a repository link', async () => {
     const engine = createInMemoryEngine();
     const bridge = {
       ...createTestBridge(engine),
@@ -222,20 +276,67 @@ describe('SkillSearch', () => {
 
     renderWithProviders(<SkillSearch />, { bridge });
 
-    await waitFor(() => expect(screen.getByText('vercel-labs/skills/find-skills')).toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: 'vercel-labs/skills/find-skills' }));
+    await waitFor(() => expect(screen.getByText('find-skills')).toBeInTheDocument());
+    expect(screen.queryByText('vercel-labs/skills/find-skills')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Details for find-skills' }));
 
     const dialog = screen.getByRole('dialog', { name: 'find-skills' });
-    expect(within(dialog).getByText('vercel-labs/skills/find-skills')).toBeInTheDocument();
-    expect(within(dialog).getByText('vercel-labs/skills')).toBeInTheDocument();
-    expect(within(dialog).getByRole('link', { name: 'GitHub' })).toHaveAttribute(
+    expect(within(dialog).getByText('Repository')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('link', { name: 'GitHub' })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('link', { name: 'vercel-labs/skills/find-skills' })).toHaveAttribute(
       'href',
       'https://github.com/vercel-labs/skills',
+    );
+    expect(within(dialog).getByRole('link', { name: 'vercel-labs/skills/find-skills' })).toHaveClass(
+      'skill-details-link',
     );
     expect(within(dialog).getByRole('link', { name: 'skills.sh' })).toHaveAttribute(
       'href',
       'https://www.skills.sh/vercel-labs/skills/find-skills',
     );
+    expect(within(dialog).getByRole('link', { name: 'skills.sh' })).toHaveClass('skill-details-link');
     expect(within(dialog).getByText('3.1m')).toBeInTheDocument();
+  });
+
+  it('opens details when clicking the skill name, not only the overlay control', async () => {
+    const engine = createInMemoryEngine();
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<SkillSearch />, { bridge });
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByText('obra/react-patterns'));
+
+    expect(screen.getByRole('dialog', { name: 'obra/react-patterns' })).toBeInTheDocument();
+  });
+
+  it('opens a second skill after closing the first details dialog', async () => {
+    const engine = createInMemoryEngine();
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<SkillSearch />, { bridge });
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByText('obra/react-patterns'));
+    expect(screen.getByRole('dialog', { name: 'obra/react-patterns' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close details' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('addyosmani/performance-review'));
+    expect(screen.getByRole('dialog', { name: 'addyosmani/performance-review' })).toBeInTheDocument();
+  });
+
+  it('does not open details when clicking Add', async () => {
+    const engine = createInMemoryEngine();
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<SkillSearch />, { bridge });
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add obra/react-patterns' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Added obra/react-patterns' })).toBeInTheDocument());
   });
 });

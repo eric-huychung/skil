@@ -1,17 +1,28 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { MagnifyingGlass } from '@phosphor-icons/react';
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowRight, ArrowSquareOut, ArrowsClockwise, Check, Plus } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import type { BrowseView, Skill } from '../../../shared/ipc';
 
 type AddState = { status: 'success' } | { status: 'error'; message: string };
 
-const BROWSE_DISPLAY_LIMIT = 20;
+const BROWSE_DISPLAY_LIMIT = 100;
 
 function formatInstalls(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
   return String(value);
+}
+
+function skillLabel(skill: Skill): string {
+  return skill.name ?? skill.id;
+}
+
+function skillMatchesQuery(skill: Skill, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) return true;
+  return `${skill.name ?? ''} ${skill.id}`.toLowerCase().includes(needle);
 }
 
 export default function SkillSearch() {
@@ -25,6 +36,18 @@ export default function SkillSearch() {
   const [addStates, setAddStates] = useState<Record<string, AddState>>({});
   const [selected, setSelected] = useState<Skill | null>(null);
   const browseCache = useRef<Partial<Record<BrowseView, Skill[]>>>({});
+  const lastBrowseView = useRef<BrowseView>('all-time');
+  const queryRef = useRef(query);
+  queryRef.current = query;
+
+  function showFromCache(view: BrowseView, q: string): boolean {
+    const cached = browseCache.current[view];
+    if (!cached) return false;
+    const trimmed = q.trim();
+    setResultSource(view);
+    setResults(trimmed.length === 0 ? cached : cached.filter((skill) => skillMatchesQuery(skill, trimmed)));
+    return true;
+  }
 
   useEffect(() => {
     void bridge.listInbox().then((ids) => {
@@ -54,11 +77,9 @@ export default function SkillSearch() {
 
   async function loadBrowse(view: BrowseView) {
     setSearchError(null);
-    setResultSource(view);
+    lastBrowseView.current = view;
 
-    const cached = browseCache.current[view];
-    if (cached) {
-      setResults(cached);
+    if (showFromCache(view, queryRef.current)) {
       return;
     }
 
@@ -73,7 +94,7 @@ export default function SkillSearch() {
 
       const sliced = result.value.slice(0, BROWSE_DISPLAY_LIMIT);
       browseCache.current[view] = sliced;
-      setResults(sliced);
+      showFromCache(view, queryRef.current);
     } catch (error) {
       setSearchError((error as Error).message);
       setResults(null);
@@ -88,11 +109,32 @@ export default function SkillSearch() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function handleQueryChange(value: string) {
+    setQuery(value);
+    setSearchError(null);
+    showFromCache(lastBrowseView.current, value);
+  }
+
+  async function handleSync() {
+    browseCache.current = {};
+    await loadBrowse(lastBrowseView.current);
+  }
+
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = query.trim();
+    const view = lastBrowseView.current;
     if (trimmed.length === 0) {
-      await loadBrowse(resultSource === 'trending' ? 'trending' : 'all-time');
+      await loadBrowse(view);
+      return;
+    }
+
+    const cached = browseCache.current[view];
+    const local = cached?.filter((skill) => skillMatchesQuery(skill, trimmed)) ?? [];
+    if (local.length > 0) {
+      setSearchError(null);
+      setResultSource(view);
+      setResults(local);
       return;
     }
 
@@ -133,22 +175,31 @@ export default function SkillSearch() {
           <p className="eyebrow">Discover</p>
           <h1>Find Skills</h1>
         </div>
-        {results !== null && <span className="library-count">{results.length} available</span>}
+        <div className="library-heading-actions">
+          {results !== null && <span className="library-count">{results.length} available</span>}
+          <button
+            type="button"
+            className={`icon-button ${FOCUS_RING}`}
+            aria-label="Refresh skills"
+            onClick={() => void handleSync()}
+            disabled={isSearching}
+          >
+            <ArrowsClockwise size={16} weight="regular" aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       <form onSubmit={handleSearch}>
         <label className="search-box" htmlFor="skill-search-query">
-          <MagnifyingGlass size={16} weight="regular" aria-hidden="true" />
           <span className="sr-only">Search skills</span>
           <input
             id="skill-search-query"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => handleQueryChange(event.target.value)}
             placeholder="Search skills"
-            className={FOCUS_RING}
           />
-          <button type="submit" className={`text-button search-submit ${FOCUS_RING}`}>
-            Search
+          <button type="submit" className="search-submit" aria-label="Search">
+            <ArrowRight size={16} weight="regular" aria-hidden="true" />
           </button>
         </label>
       </form>
@@ -183,44 +234,52 @@ export default function SkillSearch() {
             const addState = addStates[skill.id];
             const isAdding = addingId === skill.id;
             const added = !isAdding && addState?.status === 'success';
+            const label = skillLabel(skill);
             return (
-              <li className="library-skill" key={skill.id}>
+              <li
+                className="library-skill library-skill-interactive"
+                key={skill.id}
+                onClick={() => setSelected(skill)}
+              >
+                <button
+                  type="button"
+                  className={`library-skill-hit ${FOCUS_RING}`}
+                  onClick={() => setSelected(skill)}
+                  aria-haspopup="dialog"
+                  aria-label={`Details for ${label}`}
+                />
                 <span className="skill-rank">{index + 1}</span>
                 <div className="skill-info">
-                  <button
-                    type="button"
-                    className={`skill-name skill-name-button ${FOCUS_RING}`}
-                    onClick={() => setSelected(skill)}
-                    aria-haspopup="dialog"
-                  >
-                    {skill.id}
-                  </button>
-                  {skill.installs !== undefined && (
-                    <div className="skill-meta">
-                      <span>{formatInstalls(skill.installs)} installs</span>
-                    </div>
-                  )}
+                  <div className="skill-name">{label}</div>
                 </div>
                 <div className="skill-actions">
-                  {isAdding && (
-                    <span role="status" className="muted-copy">
-                      Adding&hellip;
-                    </span>
-                  )}
                   {!isAdding && addState?.status === 'error' && (
                     <span role="alert" className="muted-copy text-destructive">
                       {addState.message}
                     </span>
                   )}
+                  {skill.installs !== undefined && (
+                    <span className="skill-installs">{formatInstalls(skill.installs)}</span>
+                  )}
                   <button
                     type="button"
-                    onClick={() => handleAdd(skill.id)}
+                    onClick={(event: MouseEvent<HTMLButtonElement>) => {
+                      event.stopPropagation();
+                      void handleAdd(skill.id);
+                    }}
                     disabled={isAdding}
-                    aria-label={added ? `Added ${skill.id}` : `Add ${skill.id}`}
+                    aria-label={
+                      isAdding ? `Adding ${skill.id}` : added ? `Added ${skill.id}` : `Add ${skill.id}`
+                    }
                     aria-pressed={added}
-                    className={`${added ? 'installed-button' : 'install-button'} ${FOCUS_RING}`}
+                    aria-busy={isAdding || undefined}
+                    className={`add-icon-button ${FOCUS_RING}`}
                   >
-                    {added ? 'Added' : 'Add'}
+                    {added ? (
+                      <Check size={16} weight="regular" aria-hidden="true" />
+                    ) : (
+                      <Plus size={16} weight="regular" aria-hidden="true" />
+                    )}
                   </button>
                 </div>
               </li>
@@ -235,12 +294,13 @@ export default function SkillSearch() {
 }
 
 function SkillDetailsDialog({ skill, onClose }: { skill: Skill; onClose: () => void }) {
-  const title = skill.name ?? skill.id;
+  const title = skillLabel(skill);
+  const repositoryHref = skill.installUrl;
 
-  return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+  return createPortal(
+    <div className="skill-details-backdrop" role="presentation" onClick={onClose}>
       <div
-        className="help-modal"
+        className="skill-details-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="skill-details-title"
@@ -253,44 +313,42 @@ function SkillDetailsDialog({ skill, onClose }: { skill: Skill; onClose: () => v
         <h2 id="skill-details-title">{title}</h2>
         <dl className="skill-details">
           <div>
-            <dt>Route</dt>
-            <dd>{skill.id}</dd>
+            <dt>Repository</dt>
+            <dd>
+              {repositoryHref ? (
+                <ExternalLink href={repositoryHref}>{skill.id}</ExternalLink>
+              ) : (
+                skill.id
+              )}
+            </dd>
           </div>
-          {skill.repo && (
-            <div>
-              <dt>Repo</dt>
-              <dd>{skill.repo}</dd>
-            </div>
-          )}
           {skill.installs !== undefined && (
             <div>
               <dt>Installs</dt>
               <dd>{formatInstalls(skill.installs)}</dd>
             </div>
           )}
-          {skill.installUrl && (
-            <div>
-              <dt>GitHub</dt>
-              <dd>
-                <a href={skill.installUrl} target="_blank" rel="noreferrer" className={FOCUS_RING}>
-                  GitHub
-                </a>
-              </dd>
-            </div>
-          )}
           {skill.url && (
             <div>
               <dt>skills.sh</dt>
               <dd>
-                <a href={skill.url} target="_blank" rel="noreferrer" className={FOCUS_RING}>
-                  skills.sh
-                </a>
+                <ExternalLink href={skill.url}>skills.sh</ExternalLink>
               </dd>
             </div>
           )}
         </dl>
       </div>
-    </div>
+    </div>,
+    document.body,
+  );
+}
+
+function ExternalLink({ href, children }: { href: string; children: string }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className={`skill-details-link ${FOCUS_RING}`}>
+      <span>{children}</span>
+      <ArrowSquareOut size={14} weight="regular" aria-hidden="true" />
+    </a>
   );
 }
 
