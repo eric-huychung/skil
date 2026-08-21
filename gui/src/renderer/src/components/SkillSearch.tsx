@@ -4,7 +4,7 @@ import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import type { BrowseView, Skill } from '../../../shared/ipc';
 
-type InstallState = { status: 'success' } | { status: 'error'; message: string };
+type AddState = { status: 'success' } | { status: 'error'; message: string };
 
 const BROWSE_DISPLAY_LIMIT = 20;
 
@@ -21,9 +21,21 @@ export default function SkillSearch() {
   const [resultSource, setResultSource] = useState<'search' | BrowseView>('all-time');
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [installingId, setInstallingId] = useState<string | null>(null);
-  const [installStates, setInstallStates] = useState<Record<string, InstallState>>({});
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [addStates, setAddStates] = useState<Record<string, AddState>>({});
   const browseCache = useRef<Partial<Record<BrowseView, Skill[]>>>({});
+
+  useEffect(() => {
+    void bridge.listInbox().then((ids) => {
+      setAddStates((current) => {
+        const next = { ...current };
+        for (const id of ids) {
+          next[id] = { status: 'success' };
+        }
+        return next;
+      });
+    });
+  }, [bridge]);
 
   async function loadBrowse(view: BrowseView) {
     setSearchError(null);
@@ -88,12 +100,12 @@ export default function SkillSearch() {
     }
   }
 
-  async function handleInstall(skillId: string) {
-    setInstallingId(skillId);
-    const result = await bridge.installSkill(skillId);
-    setInstallingId(null);
+  async function handleAdd(skillId: string) {
+    setAddingId(skillId);
+    const result = await bridge.addToInbox(skillId);
+    setAddingId(null);
 
-    setInstallStates((current) => ({
+    setAddStates((current) => ({
       ...current,
       [skillId]: result.ok ? { status: 'success' } : { status: 'error', message: result.error.message },
     }));
@@ -153,9 +165,9 @@ export default function SkillSearch() {
       {results !== null && !isSearching && (
         <ul className="skill-list">
           {results.map((skill, index) => {
-            const installState = installStates[skill.id];
-            const isInstalling = installingId === skill.id;
-            const installed = !isInstalling && installState?.status === 'success';
+            const addState = addStates[skill.id];
+            const isAdding = addingId === skill.id;
+            const added = !isAdding && addState?.status === 'success';
             return (
               <li className="library-skill" key={skill.id}>
                 <span className="skill-rank">{index + 1}</span>
@@ -167,25 +179,26 @@ export default function SkillSearch() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  {isInstalling && (
+                <div className="skill-actions">
+                  {isAdding && (
                     <span role="status" className="muted-copy">
-                      Installing&hellip;
+                      Adding&hellip;
                     </span>
                   )}
-                  {!isInstalling && installState?.status === 'error' && (
+                  {!isAdding && addState?.status === 'error' && (
                     <span role="alert" className="muted-copy text-destructive">
-                      {installState.message}
+                      {addState.message}
                     </span>
                   )}
                   <button
                     type="button"
-                    onClick={() => handleInstall(skill.id)}
-                    disabled={isInstalling}
-                    aria-label={`Install ${skill.id}`}
-                    className={`${installed ? 'installed-button' : 'install-button'} ${FOCUS_RING}`}
+                    onClick={() => handleAdd(skill.id)}
+                    disabled={isAdding}
+                    aria-label={added ? `Added ${skill.id}` : `Add ${skill.id}`}
+                    aria-pressed={added}
+                    className={`${added ? 'installed-button' : 'install-button'} ${FOCUS_RING}`}
                   >
-                    {installed ? 'Installed' : 'Install'}
+                    {added ? 'Added' : 'Add'}
                   </button>
                 </div>
               </li>

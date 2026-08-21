@@ -28,7 +28,7 @@ describe('SkillSearch', () => {
     expect(screen.getByText('addyosmani/performance-review')).toBeInTheDocument();
   });
 
-  it('installs a skill and shows a success message', async () => {
+  it('adds a skill to Inbox and shows Added, without installing', async () => {
     const engine = createInMemoryEngine();
     const bridge = createTestBridge(engine);
 
@@ -38,16 +38,17 @@ describe('SkillSearch', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: 'Install obra/react-patterns' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add obra/react-patterns' }));
 
-    await waitFor(() => expect(screen.getByText('Installed')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Added obra/react-patterns' })).toBeInTheDocument());
+    expect(engine.inbox()).toEqual(['obra/react-patterns']);
   });
 
-  it('shows an inline error when install fails', async () => {
+  it('shows a visible error when adding to Inbox fails', async () => {
     const engine = createInMemoryEngine();
     const bridge = {
       ...createTestBridge(engine),
-      installSkill: async (): Promise<Result<Skill>> => err(new Error("Failed to install skill 'obra/react-patterns'")),
+      addToInbox: async (): Promise<Result<string[]>> => err(new Error("Failed to save inbox: Disk full")),
     };
 
     renderWithProviders(<SkillSearch />, { bridge });
@@ -56,9 +57,10 @@ describe('SkillSearch', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: 'Install obra/react-patterns' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add obra/react-patterns' }));
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Failed to install/));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Failed to save inbox/));
+    expect(screen.getByRole('alert')).not.toHaveClass('sr-only');
   });
 
   it('shows a loading state while the search is pending', async () => {
@@ -77,10 +79,10 @@ describe('SkillSearch', () => {
     await waitFor(() => expect(screen.queryByText('Searching\u2026')).not.toBeInTheDocument());
   });
 
-  it('shows a loading state while an install is pending', async () => {
+  it('shows a loading state while adding to Inbox is pending', async () => {
     const engine = createInMemoryEngine();
-    const deferred = createDeferred<Result<Skill>>();
-    const bridge = { ...createTestBridge(engine), installSkill: () => deferred.promise };
+    const deferred = createDeferred<Result<string[]>>();
+    const bridge = { ...createTestBridge(engine), addToInbox: () => deferred.promise };
 
     renderWithProviders(<SkillSearch />, { bridge });
 
@@ -88,12 +90,12 @@ describe('SkillSearch', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: 'Install obra/react-patterns' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add obra/react-patterns' }));
 
-    expect(screen.getByText('Installing\u2026')).toBeInTheDocument();
+    expect(screen.getByText('Adding\u2026')).toBeInTheDocument();
 
-    deferred.resolve(ok({ id: 'obra/react-patterns', source: 'skills.sh', installedAt: '' }));
-    await waitFor(() => expect(screen.queryByText('Installing\u2026')).not.toBeInTheDocument());
+    deferred.resolve(ok(['obra/react-patterns']));
+    await waitFor(() => expect(screen.queryByText('Adding\u2026')).not.toBeInTheDocument());
   });
 
   it('renders all-time results with install counts on an empty query, without clicking Search', async () => {

@@ -5,48 +5,40 @@ import App from '../App';
 import { createInMemoryEngine, installTestBridge, renderWithProviders } from '../test-utils';
 
 describe('GUI workflow (real engine)', () => {
-  it('drives create -> add skill -> remove skill -> export through rendered components, matching engine state at each step', async () => {
-    // A real CollectionEngine backed by in-memory adapters, not a mocked
-    // bridge — the same engine the CLI runs against, just faked at the
-    // file system/config/skills.sh boundaries.
+  it('drives Discover Add → create → file → export through rendered components', async () => {
     const engine = installTestBridge(createInMemoryEngine());
 
     renderWithProviders(<App />);
 
-    // Starts empty: UI and engine agree. Collections is usable before a
-    // project folder is connected on Sync.
     await waitFor(() => expect(screen.getByText('No collections yet')).toBeInTheDocument());
     expect(engine.list()).toHaveLength(0);
 
-    // Create a collection through the rendered form.
+    await userEvent.click(screen.getByRole('button', { name: 'Create New Collection' }));
     await userEvent.type(screen.getByLabelText('Name'), 'frontend');
-    await userEvent.type(screen.getByLabelText('Skills'), 'obra/react-patterns{enter}');
     await userEvent.click(screen.getByRole('button', { name: 'Create collection' }));
 
     expect(await screen.findByRole('listitem', { name: 'Collection frontend' })).toBeInTheDocument();
     expect(engine.list()).toHaveLength(1);
-    expect(engine.list()[0]).toMatchObject({ name: 'frontend', skills: ['obra/react-patterns'] });
+    expect(engine.list()[0]).toMatchObject({ name: 'frontend', skills: [] });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Discover' }));
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Add obra/react-patterns' }));
+    await waitFor(() => expect(engine.inbox()).toEqual(['obra/react-patterns']));
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Collections' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'File obra/react-patterns into frontend' }));
+
+    await waitFor(() => expect(engine.list()[0]?.skills).toEqual(['obra/react-patterns']));
+    expect(engine.inbox()).toEqual([]);
 
     const detail = screen.getByRole('region', { name: 'Collection frontend details' });
+    expect(within(detail).getByText('obra/react-patterns')).toBeInTheDocument();
 
-    // Add a second skill through the rendered detail panel.
-    await userEvent.type(within(detail).getByLabelText('Add skill to frontend'), 'addyosmani/performance-review{enter}');
-
-    await waitFor(() => expect(within(detail).getByText('addyosmani/performance-review')).toBeInTheDocument());
-    expect(engine.list()[0].skills).toEqual(['obra/react-patterns', 'addyosmani/performance-review']);
-
-    // Remove the first skill via its rendered remove button.
-    await userEvent.click(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' }));
-
-    await waitFor(() => expect(within(detail).queryByText('obra/react-patterns')).not.toBeInTheDocument());
-    expect(engine.list()[0].skills).toEqual(['addyosmani/performance-review']);
-
-    // Export the collection to the selected IDE via the rendered controls.
     await userEvent.selectOptions(within(detail).getByLabelText('Export frontend to'), 'windsurf');
     await userEvent.click(within(detail).getByRole('button', { name: 'Export frontend' }));
 
     await waitFor(() => expect(within(detail).getByText('Exported to windsurf')).toBeInTheDocument());
-    // The collection itself still exists — exporting doesn't delete it.
     expect(engine.list()).toHaveLength(1);
   });
 });

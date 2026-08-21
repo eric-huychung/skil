@@ -11,12 +11,14 @@ export type { BrowseView, Collection, ExportResult, IDE, Result, Skill };
 export const IPC_CHANNELS = {
   listCollections: 'contextkit:list-collections',
   createCollection: 'contextkit:create-collection',
-  addSkillToCollection: 'contextkit:add-skill-to-collection',
   removeSkillFromCollection: 'contextkit:remove-skill-from-collection',
   exportCollections: 'contextkit:export-collections',
   searchSkills: 'contextkit:search-skills',
   browseSkills: 'contextkit:browse-skills',
-  installSkill: 'contextkit:install-skill',
+  listInbox: 'contextkit:list-inbox',
+  addToInbox: 'contextkit:add-to-inbox',
+  fileToCollection: 'contextkit:file-to-collection',
+  deleteCollection: 'contextkit:delete-collection',
   pickProjectFolder: 'contextkit:pick-project-folder',
   getProjectRoot: 'contextkit:get-project-root',
 } as const;
@@ -30,12 +32,14 @@ export const IPC_CHANNELS = {
 export interface ContextKitBridge {
   listCollections(): Promise<Collection[]>;
   createCollection(name: string, skillIds: string[]): Promise<Result<Collection>>;
-  addSkillToCollection(name: string, skillId: string): Promise<Result<Collection>>;
   removeSkillFromCollection(name: string, skillId: string): Promise<Result<Collection>>;
   exportCollections(names: string[], targetIDE: IDE): Promise<Result<ExportResult>>;
   searchSkills(query: string): Promise<Result<Skill[]>>;
   browseSkills(view: BrowseView): Promise<Result<Skill[]>>;
-  installSkill(skillId: string): Promise<Result<Skill>>;
+  listInbox(): Promise<string[]>;
+  addToInbox(skillId: string): Promise<Result<string[]>>;
+  fileToCollection(skillId: string, collectionName: string): Promise<Result<Collection>>;
+  deleteCollection(name: string): Promise<Result<void>>;
   /** Opens a directory dialog. Returns the picked path, or `null` if canceled. */
   pickProjectFolder(): Promise<string | null>;
   /** Currently bound project folder, or `null` if none has been picked this session. */

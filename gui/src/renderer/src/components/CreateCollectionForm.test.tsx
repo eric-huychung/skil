@@ -5,23 +5,39 @@ import CreateCollectionForm from './CreateCollectionForm';
 import { createInMemoryEngine, createTestBridge, renderWithProviders } from '../test-utils';
 
 describe('CreateCollectionForm', () => {
-  it('submits the parsed name and skill ids to engine.create()', async () => {
+  it('hides the name field until Create is clicked', () => {
+    const bridge = createTestBridge(createInMemoryEngine());
+
+    renderWithProviders(<CreateCollectionForm />, { bridge });
+
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create New Collection' })).toBeInTheDocument();
+  });
+
+  it('creates an empty collection from a name-only modal', async () => {
     const engine = createInMemoryEngine();
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CreateCollectionForm />, { bridge });
-
+    await userEvent.click(screen.getByRole('button', { name: 'Create New Collection' }));
     await userEvent.type(screen.getByLabelText('Name'), 'frontend');
-    const skillInput = screen.getByLabelText('Skills');
-    await userEvent.type(skillInput, 'obra/react-patterns{enter}');
-    await userEvent.type(skillInput, 'addyosmani/performance-review{enter}');
     await userEvent.click(screen.getByRole('button', { name: 'Create collection' }));
 
     await waitFor(() => expect(engine.list()).toHaveLength(1));
-    expect(engine.list()[0]).toMatchObject({
-      name: 'frontend',
-      skills: ['obra/react-patterns', 'addyosmani/performance-review'],
-    });
+    expect(engine.list()[0]).toMatchObject({ name: 'frontend', skills: [] });
+  });
+
+  it('does not create when the modal is canceled', async () => {
+    const engine = createInMemoryEngine();
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CreateCollectionForm />, { bridge });
+    await userEvent.click(screen.getByRole('button', { name: 'Create New Collection' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'frontend');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(engine.list()).toHaveLength(0);
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
   });
 
   it('shows a validation error when the collection name already exists', async () => {
@@ -30,35 +46,12 @@ describe('CreateCollectionForm', () => {
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CreateCollectionForm />, { bridge });
-
+    await userEvent.click(screen.getByRole('button', { name: 'Create New Collection' }));
     await userEvent.type(screen.getByLabelText('Name'), 'frontend');
     await userEvent.click(screen.getByRole('button', { name: 'Create collection' }));
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/already exists/));
     expect(engine.list()).toHaveLength(1);
-  });
-
-  it('allows adding and removing multiple skill ids before submitting', async () => {
-    const engine = createInMemoryEngine();
-    const bridge = createTestBridge(engine);
-
-    renderWithProviders(<CreateCollectionForm />, { bridge });
-
-    const skillInput = screen.getByLabelText('Skills');
-    await userEvent.type(skillInput, 'obra/react-patterns{enter}');
-    await userEvent.type(skillInput, 'addyosmani/performance-review{enter}');
-    expect(screen.getByText('obra/react-patterns')).toBeInTheDocument();
-    expect(screen.getByText('addyosmani/performance-review')).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Remove obra/react-patterns' }));
-    expect(screen.queryByText('obra/react-patterns')).not.toBeInTheDocument();
-    expect(screen.getByText('addyosmani/performance-review')).toBeInTheDocument();
-
-    await userEvent.type(screen.getByLabelText('Name'), 'frontend');
-    await userEvent.click(screen.getByRole('button', { name: 'Create collection' }));
-
-    await waitFor(() => expect(engine.list()).toHaveLength(1));
-    expect(engine.list()[0].skills).toEqual(['addyosmani/performance-review']);
   });
 
   it('calls onCreated after a successful submission', async () => {
@@ -67,7 +60,7 @@ describe('CreateCollectionForm', () => {
     const onCreated = vi.fn();
 
     renderWithProviders(<CreateCollectionForm onCreated={onCreated} />, { bridge });
-
+    await userEvent.click(screen.getByRole('button', { name: 'Create New Collection' }));
     await userEvent.type(screen.getByLabelText('Name'), 'frontend');
     await userEvent.click(screen.getByRole('button', { name: 'Create collection' }));
 

@@ -44,12 +44,14 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
   return {
     listCollections: async () => engine.list(),
     createCollection: async (name, skillIds) => engine.create(name, skillIds),
-    addSkillToCollection: async (name, skillId) => engine.addSkill(name, skillId),
     removeSkillFromCollection: async (name, skillId) => engine.removeSkill(name, skillId),
     exportCollections: async (names, targetIDE) => engine.export(names, targetIDE),
     searchSkills: async (query) => engine.search(query),
     browseSkills: async (view) => engine.browse(view),
-    installSkill: async (skillId) => engine.install(skillId),
+    listInbox: async () => engine.inbox(),
+    addToInbox: async (skillId) => engine.addToInbox(skillId),
+    fileToCollection: async (skillId, collectionName) => engine.fileToCollection(skillId, collectionName),
+    deleteCollection: async (name) => engine.delete(name),
     getProjectRoot: async () => projectRoot,
     pickProjectFolder: async () => {
       if (options.nextPick === null) return null;

@@ -576,13 +576,15 @@
 
 .install-button,
 .installed-button {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  display: grid;
-  place-items: center;
+  width: auto;
+  height: auto;
+  padding: 7px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 8px;
   flex-shrink: 0;
+  font-size: 12px;
 }
 
 .install-button {
@@ -707,6 +709,42 @@
   color: var(--muted-ink);
   background: transparent;
   border: 0;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.delete-card {
+  color: var(--muted-ink);
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  display: grid;
+  place-items: center;
+}
+
+.delete-card:hover {
+  color: var(--ink);
+}
+
+.inbox-list {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inbox-target {
+  margin-top: 8px;
+}
+
+.inbox-file {
+  margin-top: 0;
+  margin-left: auto;
 }
 
 .toast {

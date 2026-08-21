@@ -37,9 +37,6 @@ ipcMain.handle(IPC_CHANNELS.listCollections, () => currentEngine().list());
 ipcMain.handle(IPC_CHANNELS.createCollection, (_event, name: string, skillIds: string[]) =>
   currentEngine().create(name, skillIds)
 );
-ipcMain.handle(IPC_CHANNELS.addSkillToCollection, (_event, name: string, skillId: string) =>
-  currentEngine().addSkill(name, skillId)
-);
 ipcMain.handle(IPC_CHANNELS.removeSkillFromCollection, (_event, name: string, skillId: string) =>
   currentEngine().removeSkill(name, skillId)
 );
@@ -48,7 +45,12 @@ ipcMain.handle(IPC_CHANNELS.exportCollections, (_event, names: string[], targetI
 );
 ipcMain.handle(IPC_CHANNELS.searchSkills, (_event, query: string) => discovery.search(query));
 ipcMain.handle(IPC_CHANNELS.browseSkills, (_event, view: BrowseView) => discovery.browse(view));
-ipcMain.handle(IPC_CHANNELS.installSkill, (_event, skillId: string) => currentEngine().install(skillId));
+ipcMain.handle(IPC_CHANNELS.listInbox, () => currentEngine().inbox());
+ipcMain.handle(IPC_CHANNELS.addToInbox, (_event, skillId: string) => currentEngine().addToInbox(skillId));
+ipcMain.handle(IPC_CHANNELS.fileToCollection, (_event, skillId: string, collectionName: string) =>
+  currentEngine().fileToCollection(skillId, collectionName)
+);
+ipcMain.handle(IPC_CHANNELS.deleteCollection, (_event, name: string) => currentEngine().delete(name));
 
 function createWindow(): void {
   const window = new BrowserWindow({

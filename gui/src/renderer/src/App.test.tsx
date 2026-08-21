@@ -30,7 +30,8 @@ describe('App', () => {
     expect(screen.getByText('ContextKit')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Collections' })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByText('No collections yet')).toBeInTheDocument();
-    expect(screen.getByLabelText('Name')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create New Collection' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Pick a project folder' })).not.toBeInTheDocument();
   });
 

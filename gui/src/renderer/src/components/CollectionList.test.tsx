@@ -35,19 +35,21 @@ describe('CollectionList', () => {
     expect(within(backendDetail).queryByText('obra/react-patterns')).not.toBeInTheDocument();
   });
 
-  it('adds a skill to a collection via its add-skill input', async () => {
+  it('files an Inbox ID into a named collection', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', []);
+    engine.addToInbox('obra/react-patterns');
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
     await screen.findByRole('listitem', { name: 'Collection frontend' });
-    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
 
-    await userEvent.type(within(detail).getByLabelText('Add skill to frontend'), 'obra/react-patterns{enter}');
+    await userEvent.click(screen.getByRole('button', { name: 'File obra/react-patterns into frontend' }));
 
-    await waitFor(() => expect(within(detail).getByText('obra/react-patterns')).toBeInTheDocument());
-    expect(engine.list()[0].skills).toEqual(['obra/react-patterns']);
+    await waitFor(() => expect(engine.inbox()).toEqual([]));
+    expect(engine.list()[0]?.skills).toEqual(['obra/react-patterns']);
+    const detail = screen.getByRole('region', { name: 'Collection frontend details' });
+    expect(within(detail).getByText('obra/react-patterns')).toBeInTheDocument();
   });
 
   it('removes a skill from a collection when its remove button is clicked', async () => {
@@ -104,5 +106,35 @@ describe('CollectionList', () => {
     await userEvent.click(within(detail).getByRole('button', { name: 'Export frontend' }));
 
     await waitFor(() => expect(within(detail).getByRole('alert')).toHaveTextContent(/network down/));
+  });
+
+  it('deletes the selected collection after confirm', async () => {
+    const engine = createInMemoryEngine();
+    engine.create('frontend', ['obra/react-patterns']);
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CollectionList />, { bridge });
+    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
+
+    await userEvent.click(within(detail).getByRole('button', { name: 'Delete frontend' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete collection' }));
+
+    await waitFor(() => expect(engine.list()).toEqual([]));
+    expect(screen.getByText('No collections yet')).toBeInTheDocument();
+  });
+
+  it('does not delete when the confirm dialog is canceled', async () => {
+    const engine = createInMemoryEngine();
+    engine.create('frontend', []);
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CollectionList />, { bridge });
+    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
+
+    await userEvent.click(within(detail).getByRole('button', { name: 'Delete frontend' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(engine.list()).toHaveLength(1);
+    expect(screen.getByRole('listitem', { name: 'Collection frontend' })).toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { ArrowDown, Check, X } from '@phosphor-icons/react';
+import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { ArrowDown, Check, Trash, X } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import type { Collection, IDE } from '../../../shared/ipc';
@@ -8,28 +8,21 @@ const IDE_OPTIONS: IDE[] = ['cursor', 'claude', 'windsurf'];
 
 type ExportState = { status: 'success'; ide: IDE } | { status: 'error'; message: string };
 
-function CollectionDetail({ collection, onChange }: { collection: Collection; onChange: () => void }) {
+function CollectionDetail({
+  collection,
+  onChange,
+  onDeleted,
+}: {
+  collection: Collection;
+  onChange: () => void;
+  onDeleted: () => void;
+}) {
   const bridge = useBridge();
-  const [skillInput, setSkillInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [exportIde, setExportIde] = useState<IDE>('cursor');
   const [exportState, setExportState] = useState<ExportState | null>(null);
   const [isExporting, setIsExporting] = useState(false);
-
-  async function handleAddSkill(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const skillId = skillInput.trim();
-    if (!skillId) return;
-
-    setError(null);
-    const result = await bridge.addSkillToCollection(collection.name, skillId);
-    if (!result.ok) {
-      setError(result.error.message);
-      return;
-    }
-    setSkillInput('');
-    onChange();
-  }
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function handleRemoveSkill(skillId: string) {
     setError(null);
@@ -59,6 +52,18 @@ function CollectionDetail({ collection, onChange }: { collection: Collection; on
     setExportState({ status: 'success', ide: exportIde });
   }
 
+  async function handleDelete() {
+    setError(null);
+    const result = await bridge.deleteCollection(collection.name);
+    if (!result.ok) {
+      setError(result.error.message);
+      setConfirmDelete(false);
+      return;
+    }
+    setConfirmDelete(false);
+    onDeleted();
+  }
+
   return (
     <section className="detail-panel panel-section" aria-label={`Collection ${collection.name} details`}>
       <div className="detail-header">
@@ -69,6 +74,14 @@ function CollectionDetail({ collection, onChange }: { collection: Collection; on
             {collection.skills.length === 1 ? '1 skill' : `${collection.skills.length} skills`}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setConfirmDelete(true)}
+          aria-label={`Delete ${collection.name}`}
+          className={`delete-card detail-delete ${FOCUS_RING}`}
+        >
+          <Trash size={16} weight="regular" aria-hidden="true" />
+        </button>
       </div>
 
       {error && (
@@ -117,20 +130,6 @@ function CollectionDetail({ collection, onChange }: { collection: Collection; on
             </button>
           </div>
         ))}
-        <form onSubmit={handleAddSkill} className="add-skill-form">
-          <label htmlFor={`add-skill-${collection.name}`} className="sr-only">
-            {`Add skill to ${collection.name}`}
-          </label>
-          <div className="search-box">
-            <input
-              id={`add-skill-${collection.name}`}
-              value={skillInput}
-              onChange={(event) => setSkillInput(event.target.value)}
-              placeholder="Add a skill id"
-              className={FOCUS_RING}
-            />
-          </div>
-        </form>
       </div>
 
       <button
@@ -151,7 +150,115 @@ function CollectionDetail({ collection, onChange }: { collection: Collection; on
           {exportState.message}
         </p>
       )}
+
+      {confirmDelete && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setConfirmDelete(false)}>
+          <div
+            className="help-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-collection-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">Collections</p>
+            <h2 id="delete-collection-title">Delete {collection.name}?</h2>
+            <p className="muted-copy">This cannot be undone.</p>
+            <div className="modal-actions">
+              <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </button>
+              <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={() => void handleDelete()}>
+                Delete collection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
+  );
+}
+
+function InboxList({
+  ids,
+  collections,
+  onFiled,
+}: {
+  ids: string[];
+  collections: Collection[];
+  onFiled: () => void;
+}) {
+  const bridge = useBridge();
+  const [target, setTarget] = useState(collections[0]?.name ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (target && collections.some((collection) => collection.name === target)) return;
+    setTarget(collections[0]?.name ?? '');
+  }, [collections, target]);
+
+  async function handleFile(skillId: string) {
+    setError(null);
+    if (!target) {
+      setError('Create a collection to file Inbox items.');
+      return;
+    }
+    const result = await bridge.fileToCollection(skillId, target);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    onFiled();
+  }
+
+  return (
+    <div className="inbox-list">
+      <div className="subheading">
+        <span>Inbox</span>
+        <span className="count-pill">{ids.length}</span>
+      </div>
+      {ids.length === 0 ? (
+        <p className="muted-copy">Inbox is empty</p>
+      ) : (
+        <>
+          {collections.length > 0 && (
+            <div className="target-row inbox-target">
+              <label htmlFor="inbox-file-target">File into</label>
+              <select
+                id="inbox-file-target"
+                value={target}
+                onChange={(event) => setTarget(event.target.value)}
+                className={FOCUS_RING}
+              >
+                {collections.map((collection) => (
+                  <option key={collection.name} value={collection.name}>
+                    {collection.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {ids.map((skillId) => (
+            <div className="included-skill" key={skillId}>
+              <span>{skillId}</span>
+              <button
+                type="button"
+                onClick={() => void handleFile(skillId)}
+                disabled={!target}
+                aria-label={`File ${skillId} into ${target || 'a collection'}`}
+                className={`text-button inbox-file ${FOCUS_RING}`}
+              >
+                File
+              </button>
+            </div>
+          ))}
+        </>
+      )}
+      {error && (
+        <p role="alert" className="muted-copy text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -179,11 +286,13 @@ function CollectionsPanel({ children }: { children: ReactNode }) {
 export default function CollectionList({ children }: { children?: ReactNode }) {
   const bridge = useBridge();
   const [collections, setCollections] = useState<Collection[] | null>(null);
+  const [inbox, setInbox] = useState<string[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const next = await bridge.listCollections();
+    const [next, nextInbox] = await Promise.all([bridge.listCollections(), bridge.listInbox()]);
     setCollections(next);
+    setInbox(nextInbox);
     setSelectedName((current) => {
       if (current && next.some((collection) => collection.name === current)) return current;
       return next[0]?.name ?? null;
@@ -194,10 +303,8 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
     refresh();
   }, [refresh]);
 
-  const form = children ? <div className="create-collection">{children}</div> : null;
-
   if (collections === null) {
-    return <CollectionsPanel>{form}</CollectionsPanel>;
+    return <CollectionsPanel>{children}</CollectionsPanel>;
   }
 
   const selected = collections.find((collection) => collection.name === selectedName) ?? null;
@@ -232,9 +339,12 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
             ))}
           </ul>
         )}
-        {form}
+        <InboxList ids={inbox} collections={collections} onFiled={refresh} />
+        {children}
       </CollectionsPanel>
-      {selected && <CollectionDetail collection={selected} onChange={refresh} />}
+      {selected && (
+        <CollectionDetail collection={selected} onChange={refresh} onDeleted={refresh} />
+      )}
     </>
   );
 }
