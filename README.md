@@ -17,7 +17,7 @@ contextkit export <collections...> --to <ide>          # convert every skill in 
 contextkit sync [--config <path>]                      # sync collections from .contextkit.yml
 ```
 
-State lives in `.contextkit/state.json`; skill sources live in `.contextkit/skills/`. Both are project-local.
+State lives in `.contextkit/state.json`; skill sources live in `.contextkit/skills/`. Both are project-local. The CLI uses the current working directory. The GUI Pick folder control binds the same engine to a chosen path — it does not `chdir`.
 
 `contextkit search` with no query lists the skills.sh all-time leaderboard (top 10, with install counts). `contextkit search --trending` lists trending. A typed query (`contextkit search react`) still searches and ignores `--trending`.
 
@@ -25,7 +25,7 @@ State lives in `.contextkit/state.json`; skill sources live in `.contextkit/skil
 
 ## Desktop GUI
 
-An Electron app (`gui/`) shares the same `CollectionEngine` as the CLI: create collections, add/remove skills, search and install from skills.sh (empty Search shows All time / Trending leaderboards), and export a collection to an IDE — all as thin UI over the same business logic. Run it with `npm run gui:dev`.
+An Electron app (`gui/`) shares the same `CollectionEngine` as the CLI: pick a project folder, then create collections, add/remove skills, search and install from skills.sh (empty Search shows All time / Trending leaderboards), and export a collection to an IDE — all as thin UI over the same business logic. Discover and Collections stay empty until a folder is picked. Run it with `npm run gui:dev`.
 
 ## Troubleshooting
 

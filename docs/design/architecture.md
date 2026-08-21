@@ -152,6 +152,7 @@ interface FileSystemAdapter {
 **Implementation:**
 - Atomic JSON read/write (write to temp file, then rename)
 - Error handling for permissions and missing/malformed files
+- `RealFileSystemAdapter` takes a project `root` (default `process.cwd()`). Relative paths like `.contextkit/state.json` resolve under that root; absolute paths are used as-is. `InMemoryFileSystemAdapter` stays path-as-given — no root.
 
 _Previously also owned symlink creation/removal and IDE directory detection for
 activate/deactivate; those methods were removed along with that feature — see
@@ -211,7 +212,7 @@ interface SkillsAdapter {
 **Implementation:**
 - `search` calls ContextKit's own Vercel-hosted backend (`GET /api/skills/search?q=`, see `src/backend/skills-proxy.ts`), not skills.sh directly — the backend mints a short-lived Vercel OIDC token server-side and forwards it to skills.sh, so no user ever needs a `SKILLS_API_KEY`. Base URL defaults to `src/config/website.json` (`https://www.skil.website`), overridable via `CONTEXTKIT_API_URL`.
 - `browse` calls `GET /api/skills?view=all-time|trending` on the same backend. That route always requests `per_page=20` from skills.sh so CLI (display 10) and GUI (display 20) share one CDN cache key per view. On 200 it sets `Cache-Control: public, s-maxage=86400, stale-while-revalidate=3600`. The search route does **not** send these headers — typed queries are not a shared leaderboard.
-- Subprocess execution for `npx skills add` (`install`) and `skillsmith convert` (`convert`) — both run entirely locally; skills.sh has no HTTP endpoint for either, so there's nothing for the backend proxy to front for them.
+- Subprocess execution for `npx skills add` (`install`) and `skillsmith convert` (`convert`) — both run entirely locally with `execa` `cwd` set to the project root; skills.sh has no HTTP endpoint for either, so there's nothing for the backend proxy to front for them.
 - Error parsing and user-friendly messages
 
 **Why this is the right seam:**
@@ -270,6 +271,7 @@ interface CLICommand {
 - No GUI-specific business logic
 - State management for UI only (selected items, search filters, in-session cache of the last all-time/trending fetch so tab switches don't refetch)
 - Empty Search panel fetches all-time when `SkillSearch` mounts (a panel-local fetch, not a global App boot call) and exposes All time / Trending tabs; typed search and install stay as they are
+- Header Pick / Change folder control. Until a folder is chosen this session, Discover and Collections show an empty state (mutations disabled). On pick, the main process replaces its `let engine` with `createEngine(selectedPath)` — no `chdir`, no last-folder persistence. The picker is not on the Sync tab.
 - Design decisions (color, typography, layout, accessibility) sourced from the `.cursor/skills/build/ui/ui-ux-pro-max/` and `.cursor/skills/build/ui/ui-styling/` skills
 
 **Why thin:**
@@ -351,7 +353,7 @@ collections:
 - Easier to version control and share
 - Can add global collections post-MVP if needed
 
-**Implementation:** No global state file, all operations scoped to current directory
+**Implementation:** CLI operations are scoped to `process.cwd()`. The GUI binds adapters to a user-picked folder via `createEngine(projectRoot)` and never `chdir`s. No global state file.
 
 ### Sync as Additive
 
@@ -408,12 +410,18 @@ Per TDD skill, we test only at pre-agreed seams:
    - Empty-state all-time results, Trending tab, install counts
    - Loading and error states
 
+5. **GUI project root via `ContextKitBridge.pickProjectFolder` / `getProjectRoot`**
+   - Header folder name, empty state until pick, cancel leaves the previous root
+   - Do not test that `createEngine` forwards a string (tautological)
+
 **Not test seams:**
 - Private CollectionEngine methods
 - `CollectionEngine.browse` forwarding to the adapter (one-line pass-through)
+- `createEngine(projectRoot)` constructor wiring (adapters already tested at their seams)
 - State file JSON structure (internal detail)
 - Third-party library internals
 - Real CDN HIT (`x-vercel-cache`) — needs a deployed Vercel project
+- Electron `dialog.showOpenDialog` itself (tests fake the bridge)
 
 ### TDD Workflow
 
@@ -475,6 +483,8 @@ class CollectionEngine {
 }
 ```
 
+Production wiring is `createEngine(projectRoot = process.cwd())` in `src/create-engine.ts`. That is adapter config, not an engine method — CLI omits the argument; the GUI rebuilds with the picked path.
+
 **Benefits:**
 - Testable (inject mocks)
 - Flexible (swap implementations)
@@ -514,6 +524,7 @@ State file is the single source of truth:
 - **Export replaces symlink activation (resolved):** See "Export Replaces Symlink Activation" above. Collections are no longer mutually-exclusive "active"/"inactive" — they're edited (`add`/`remove`) and exported on demand to one or more IDE formats. `activate()`, `deactivate()`, `status()`, and the `activeCollection`/`lastUsedAt` state fields were removed from `CollectionEngine`, `IFileSystemAdapter` (symlink/IDE-detection methods), and the GUI (which previously exposed Activate/Deactivate controls in `CollectionList`, wired through the Electron IPC bridge in `gui/src/main/index.ts`). The GUI's collection rows now expose add-skill/remove-skill controls and an IDE-select + Export button instead, over the same `addSkill`/`removeSkill`/`export` engine methods the CLI uses — no engine or business-logic duplication.
 - **Skills search goes through an OIDC-authenticated backend (resolved):** `SkillsAdapter.search()` calls ContextKit's own Vercel Function (`api/skills/search.ts` → `src/backend/skills-proxy.ts`) instead of skills.sh directly, so the CLI/GUI never need a `SKILLS_API_KEY`. `install`/`convert` still shell out locally (`npx skills add`, `skillsmith`) since skills.sh has no HTTP endpoint for either — there's nothing for a backend route to proxy there.
 - **Leaderboard browse is a proxy + CDN cache, not a ContextKit registry (resolved):** Empty CLI search and the GUI's All time / Trending tabs call `SkillsAdapter.browse(view)`, which hits `GET /api/skills?view=`. That Vercel Function forwards to skills.sh's leaderboard (`GET /api/v1/skills`) with the same OIDC token as search, always `per_page=20`, and sets CDN `Cache-Control` on 200 only. ContextKit does not store, rank, or host skills — no Redis, no local JSON/localStorage cache, no marketplace. Future Cron/Redis, if any, would sit behind this same route without changing CLI/GUI.
+- **Project root is adapter config, not an engine API (resolved):** `createEngine(projectRoot = process.cwd())` constructs `RealFileSystemAdapter` and `SkillsAdapter` bound to that directory. Relative state paths resolve under the root; `npx skills add` / `skillsmith` inherit it as `cwd`. The GUI picks a folder in the header and rebuilds the engine — constructor already loads state, so mutating root in place would stale `this.state`. Session-only (no last-folder file). CLI still means "this directory". Do not `chdir`.
 - **GUI timing (resolved):** Originally deferred indefinitely ("wait for CLI MVP"). Now explicitly scheduled as Phase 9, after Phases 1-8 are complete. No change to the thin-GUI design above — only the timing was in question.
 - **GUI design system (resolved, Task 44):** Minimalist neutral-grayscale palette in the shadcn/Vercel/v0 style — oklch grayscale tokens (`--background`/`--foreground`/`--border`/`--muted`/`--destructive`, etc.) defined once in `gui/src/renderer/src/styles/globals.css` and consumed everywhere as Tailwind v4 theme tokens (`bg-background`, `text-muted-foreground`, `border-border`, …), never hardcoded hex values. Light/dark are the same token names swapped via a `.dark` class on `<html>`, toggled by `ThemeProvider`/`useTheme` and persisted to `localStorage`. Typography is Geist Sans (UI text) + Geist Mono (code/identifiers), both self-hosted via `@fontsource` — the same family Vercel/v0/Cursor use, which is why it reads as that family of product. Spacing follows Tailwind's default 4px scale, used at a small set of steps for a consistent rhythm: `gap-1`/`gap-2` (4-8px) inside a control, `gap-3` (12px) between a control and its label or between list rows, `gap-8`/`gap-10` (32-40px) between page sections. Radius is a single `rounded-md` (0.5rem) on every card/input/button — no mixed radii. Icons are Phosphor (`@phosphor-icons/react`), one weight (`regular`), used only for the theme toggle so far.
 - **Focus visibility (Task 44):** Every interactive control (buttons, inputs) uses a shared `FOCUS_RING` class (`gui/src/renderer/src/lib/focus-ring.ts`) — a 2px ring in the `--ring` token with a background-colored offset — instead of relying on the browser default outline, so keyboard focus is unambiguous in both themes.

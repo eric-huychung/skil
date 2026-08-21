@@ -305,3 +305,141 @@ Not a seam: `CollectionEngine.browse` forwarding; real CDN HIT (`x-vercel-cache`
 - Deep modules: `.cursor/skills/design/codebase-design/SKILL.md`
 - TDD: `.cursor/skills/philosophy/tdd/SKILL.md`
 - Tasks: `tasks/todo2.md` Phase 5
+
+---
+
+# Implementation Plan: Project → Inbox → Export
+
+Detailed tasks: `tasks/todo2.md` Phase 6+ (Tasks 15–28). Phase 5 browse stays as-is. This slice changes *when* a skill hits disk, not how search/browse work.
+
+## Overview
+
+Today Discover calls `npx skills add` on click, collections group already-installed IDs, and `export` only runs `skillsmith`. The new flow is: pick a local project, optionally import skills already on disk from **one** IDE (Cursor or Claude), browse/search into an **Inbox** (IDs only, no download), file Inbox items into named collections, then **Export** does the fetch + convert. Sync stays `.contextkit.yml` team config — it is not this import.
+
+## Architecture Decisions
+
+- **Inbox is a field on `State`, not a collection.** A reserved collection named `inbox` would show up in `list()`, `sync()`, and `export()`. Inbox is a holding list of skill IDs. Word is **Inbox** only — no "staging", "queue", or "wishlist".
+- **`CollectionEngine` stays the deep module.** New methods: `inbox()`, `addToInbox()`, `removeFromInbox()`, `fileToCollection()`, `importFromIDE()`. Fetch-on-export is hidden inside existing `export()` — callers do not choose install vs convert.
+- **No new adapter for import.** Two IDEs is path-map variation, not a second kind of dependency. Expand `IFileSystemAdapter` with `listDirectories(path)` (real + in-memory adapters). Engine owns `.cursor/skills` vs `.claude/skills`. Do not put directory scans on `SkillsAdapter` (that module is HTTP + subprocess).
+- **Project root is adapter config, not engine API.** `createEngine(projectRoot)` roots `RealFileSystemAdapter` and `SkillsAdapter` execa `cwd`. CLI default remains `process.cwd()`. GUI picks a folder, main process **rebuilds** the engine (constructor already loads state — mutating root in place would stale `this.state`). Do not `chdir`.
+- **Import ≠ sync.** `sync()` still reads `.contextkit.yml` only. `importFromIDE('cursor' | 'claude')` scans one on-disk tree. Folder picker does **not** live on the Sync tab.
+- **Import collection name = the IDE.** Found skills upsert a collection named `cursor` or `claude` (replace that collection's skill list with the scan). Empty / missing skill dir: success, `skillIds: []`, do **not** create a collection. Do not import `.cursor/rules`, `.agents`, Windsurf, or `~/.claude`.
+- **Discover Add writes Inbox only.** GUI drops `installSkill` from the Discover path and from the bridge if nothing else uses it. CLI `contextkit install` stays as a power-user escape hatch.
+- **Export = fetch then convert, per skill.** `export()` calls `install` then `convert` for each skill, continues on a single failure (same as today). `installedSkills` updates on successful fetch. Discover never triggers this.
+- **Out of scope this slice:** GitHub connect, importing Cursor *and* Claude in one pass, a third holding-list word, Windsurf import, persisting last-opened folder across app restarts, rewriting team sync.
+
+## Current seams this fights
+
+| Today (`architecture.md` / PRD) | This slice |
+|---|---|
+| GUI Discover one-click `engine.install` → `npx skills add` | Add → Inbox; no subprocess |
+| `export` = `SkillsAdapter.convert` only | `export` = install + convert |
+| Engine bound to process cwd; GUI has no project | Engine rebuilt against picked folder |
+| `State` = collections + installedSkills | + `inbox: string[]` (schema v3; missing field → `[]`) |
+| `IFileSystemAdapter` = JSON only | + `listDirectories` for one-IDE scan |
+| Story 16 "one-click install from search" | One-click Add to Inbox |
+| Sync tab as generic "workspace" | Sync = team config only |
+
+## Dependency graph
+
+```
+Project root (FS + execa cwd)
+    │
+    ├── GUI folder picker (rebuild engine)
+    │
+    ├── Inbox on State
+    │       │
+    │       ├── Discover Add → Inbox
+    │       │
+    │       └── File Inbox → collection
+    │
+    ├── Import from one IDE (listDirectories + upsert collection)
+    │
+    └── Export fetch + convert (uses rooted cwd)
+```
+
+Inbox, import, and export-fetch are independent once project root exists. GUI folder picker only needs project root.
+
+## Task List
+
+### Phase 6: Project root
+- [x] Task 15: Root FS + skills adapters on `createEngine(projectRoot)`
+- [x] Task 16: GUI folder picker rebuilds the engine
+
+### Checkpoint: Project root
+- [x] CLI still works from cwd
+- [x] GUI can open a folder; collections read `.contextkit/state.json` there
+
+### Phase 7: Inbox
+- [ ] Task 17: `State.inbox` + add/list/remove
+- [ ] Task 18: File Inbox item into a named collection
+- [ ] Task 19: CLI inbox commands
+
+### Checkpoint: Inbox
+- [ ] IDs persist in state without calling `install`
+- [ ] Filing moves an ID from inbox → collection
+
+### Phase 8: Discover → Inbox
+- [ ] Task 20: GUI Discover Add → Inbox (stop `npx skills add` on click)
+
+### Phase 9: One-IDE import
+- [ ] Task 21: `listDirectories` on the FS adapter
+- [ ] Task 22: `importFromIDE('cursor' \| 'claude')`
+- [ ] Task 23: CLI `import --from`
+- [ ] Task 24: GUI pick one IDE and import
+
+### Checkpoint: Import
+- [ ] Empty `.cursor/skills` / `.claude/skills` is success
+- [ ] Found skills land in a `cursor` or `claude` collection
+- [ ] `sync` still does not scan IDE dirs
+
+### Phase 10: Export fetches
+- [ ] Task 25: `export` install-then-convert per skill
+
+### Checkpoint: Export
+- [ ] Discover still does not download
+- [ ] Export of a collection with Inbox-filed IDs fetches then converts
+
+### Phase 11: Inbox in the GUI
+- [ ] Task 26: Inbox list + file into a named collection
+
+### Phase 12: Docs
+- [ ] Task 27: architecture, PRD, README
+
+### Checkpoint: Complete
+- [ ] Flow works: folder → optional import → Discover Add → file → Export
+- [ ] No GitHub connect, no multi-IDE import, no third holding-list word
+- [ ] Human review before changing team sync
+
+## Risks and Mitigations
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Local folder names ≠ `owner/repo` skills.sh IDs | High | Import stores directory names as IDs, `source: 'local'`. Export still tries fetch then convert; a failed fetch is one skill failure, convert may still work if files are on disk. Do not invent GitHub matching this slice. |
+| `npx skills add` writes `.agents` not `.cursor` / `.claude` | High | Task 25 uses project `cwd`; if the Vercel CLI needs `--agent`, add it behind `SkillsAdapter.install` without changing `export()`'s interface. Confirm in Task 25, don't block 15–24. |
+| Electron cwd is the app dir, not the project | High | Task 15/16: root adapters + rebuild engine. Never `chdir`. |
+| Overloading `sync` with import | Med | Separate `importFromIDE`. Sync tests must still pass unchanged. Folder picker not on Sync tab. |
+| Inbox as a fake collection | Med | `create('inbox')` is an error. Inbox is `State.inbox`. |
+| Discover tests still click Install | Med | Task 20 rewrites `SkillSearch.test.tsx`; drop `installSkill` from the bridge. |
+| Scanning all of `.cursor` (rules, commands) | Med | Only `.cursor/skills/*` and `.claude/skills/*` directories. |
+
+## Open Questions
+
+- Import upserts a collection named `cursor` / `claude`. If you'd rather dump into one `imported` collection, say so before Task 22.
+- Last-opened folder is session-only. Persist across relaunch only if you want it.
+- CLI `install` stays. Remove it later if Discover+Export is enough.
+
+## Parallelization
+
+Safe after Task 15: Phase 7 (Inbox) ∥ Phase 9 Tasks 21–22 (import engine). GUI Tasks 16 / 20 / 24 / 26 stay sequential with their engine tasks.
+
+Must be sequential: 15 → 16; 17 → 18 → 19 → 20 / 26; 21 → 22 → 23 / 24; 25 after 15 (needs cwd).
+
+## Not this slice
+
+- GitHub connect / remote skill origin
+- Import Cursor and Claude in one action
+- Any label besides Inbox for the holding list
+- Windsurf import (export `--to windsurf` stays)
+- Team sync behavior changes
+- Marketplace, starter packs, token UI (already PRD out of scope)

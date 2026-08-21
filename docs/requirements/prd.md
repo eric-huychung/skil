@@ -31,6 +31,7 @@ A thin orchestration layer (CLI + GUI) that manages AI skill collections. Develo
 19. As a developer, I want to update installed skills, so that I have the latest versions
 20. As a team using different IDEs, I want the config format to be IDE-agnostic, so that one config works for everyone
 21. As a developer, I want an empty search to show the skills.sh all-time and trending leaderboards, so that I can browse popular skills without inventing a query
+22. As a GUI user, I want to pick the project folder ContextKit should use, so that collections and installs land in my repo instead of the app directory
 
 ## Implementation Decisions
 
@@ -66,8 +67,9 @@ A thin orchestration layer (CLI + GUI) that manages AI skill collections. Develo
 
 5. **GUI Application** (Electron)
    - Uses same core engine as CLI
-   - Visual components: collection list with per-collection add/remove skill controls and IDE export, create-collection form, search/install panel
-   - No GUI-specific business logic—just UI binding to core
+  - Visual components: collection list with per-collection add/remove skill controls and IDE export, create-collection form, search/install panel, header folder picker
+  - Discover and Collections stay disabled with an empty state until a project folder is picked
+  - No GUI-specific business logic—just UI binding to core
 
 ### Data Model
 
@@ -103,7 +105,7 @@ collections:
 
 - **No "active" collection**: Collections aren't mutually exclusive or switched between — they're edited in place and exported to one or more IDEs independently, whenever needed.
 - **Sync conflict resolution**: If `contextkit sync` encounters locally installed skills not in config, warn but don't delete. Let user decide.
-- **Local-only collections**: All collections are local to the project. No global namespace for MVP.
+- **Local-only collections**: All collections are local to the project. No global namespace for MVP. The CLI uses the current working directory. The GUI binds to a user-picked folder (`createEngine(projectRoot)`) and does not `chdir`. Last-folder persistence is out of this slice.
 - **No version pinning in MVP**: `.contextkit.yml` lists skill names but not versions. Use whatever version is installed locally.
 
 ### CLI Commands
@@ -126,6 +128,7 @@ collections:
 - Drag-drop skills into collection builder
 - In-app search (queries skills.sh)
 - Empty-state All time / Trending leaderboard tabs with install counts (fetched on first visit to Search)
+- Header Pick / Change folder control; Discover and Collections gated until a folder is picked this session
 - One-click install from search results
 - Per-collection export to a target IDE
 - Button to run team sync
