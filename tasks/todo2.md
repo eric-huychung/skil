@@ -448,13 +448,15 @@ Not in this phase: last-folder persistence, GitHub remotes, putting the picker o
 ---
 
 ### Task 16: GUI folder picker rebuilds the engine
-**Description:** Electron `dialog.showOpenDialog({ properties: ['openDirectory'] })` in main. On pick, replace the module-level `engine` with `createEngine(selectedPath)` and re-register nothing — handlers close over a `let engine`. Renderer shows the current folder path and a Pick / Change control in the header (not the Sync tab). Until a folder is chosen, Discover/Collections/Inbox mutations are disabled with a clear empty state. Session-only: do not write last path to disk.
+**Description:** Electron `dialog.showOpenDialog({ properties: ['openDirectory'] })` in main. On pick, replace the module-level `engine` with `createEngine(selectedPath)` and re-register nothing — handlers close over a `let engine`. Renderer shows Pick / Change on the **Sync** tab. Discover always shows the leaderboard. Collections shows its normal empty UI before a folder is connected (scratch workspace under `userData`). Session-only: do not write last path to disk.
 
 **Acceptance criteria:**
 - [x] `ContextKitBridge.pickProjectFolder()` opens a directory dialog and, on confirm, rebuilds the engine for that path
 - [x] `getProjectRoot()` returns the bound path or `null` if none yet
 - [x] Canceling the dialog leaves the previous engine (or none) unchanged
-- [x] Header shows the folder name; Sync tab copy is still team-config, not this picker
+- [x] Sync tab shows Pick / Change folder; team-config copy stays as a separate card
+- [x] Discover shows the leaderboard with no folder connected
+- [x] Collections shows its empty UI with no folder connected
 - [x] After pick, `listCollections` reads that project's `.contextkit/state.json`
 
 **Verification:**
@@ -472,7 +474,7 @@ Not in this phase: last-folder persistence, GitHub remotes, putting the picker o
 - `gui/src/renderer/src/test-utils.tsx`
 - `gui/src/renderer/src/App.test.tsx`
 
-**Estimated scope:** Medium (6 files — one GUI vertical slice; do not split IPC from the header)
+**Estimated scope:** Medium (6 files — one GUI vertical slice; do not split IPC from Sync)
 
 ---
 

@@ -13,14 +13,10 @@ describe('GUI workflow (real engine)', () => {
 
     renderWithProviders(<App />);
 
-    // Starts empty: UI and engine agree. Bind a folder first — collections
-    // mutations stay gated until the engine is rooted on a project.
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Pick a project folder' })).toBeInTheDocument());
-    expect(engine.list()).toHaveLength(0);
-    const pickPanel = screen.getByRole('heading', { name: 'Pick a project folder' }).closest('section');
-    await userEvent.click(within(pickPanel!).getByRole('button', { name: 'Pick folder' }));
-
+    // Starts empty: UI and engine agree. Collections is usable before a
+    // project folder is connected on Sync.
     await waitFor(() => expect(screen.getByText('No collections yet')).toBeInTheDocument());
+    expect(engine.list()).toHaveLength(0);
 
     // Create a collection through the rendered form.
     await userEvent.type(screen.getByLabelText('Name'), 'frontend');

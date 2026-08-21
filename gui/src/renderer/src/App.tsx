@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Folder, FolderOpen, GearSix, MagnifyingGlass, Moon, Question, Sparkle, Sun } from '@phosphor-icons/react';
+import { Folder, GearSix, MagnifyingGlass, Moon, Question, Sparkle, Sun } from '@phosphor-icons/react';
 import { useTheme } from './theme';
 import { useBridge } from './bridge-context';
 import { FOCUS_RING } from './lib/focus-ring';
@@ -38,78 +38,43 @@ function RailLabel({ tab }: { tab: (typeof TABS)[number] }) {
   return <span>{tab.label}</span>;
 }
 
-function ConfigPanel() {
+function ConfigPanel({ root, onPick }: { root: string | null; onPick: () => void }) {
   return (
     <section className="config-panel panel-section">
       <p className="eyebrow">Workspace</p>
       <h1>Sync</h1>
+
+      <div className="config-card">
+        <span className="status-dot" aria-hidden="true" />
+        <div>
+          <h2>Project folder</h2>
+          {root ? (
+            <p className="project-folder-name" title={root}>
+              {folderName(root)}
+            </p>
+          ) : (
+            <p className="muted-copy">No project connected</p>
+          )}
+          <p className="muted-copy">
+            Connect a folder to read and write that project&apos;s .contextkit state. Skip this if you just want to
+            sketch collections or browse skills.
+          </p>
+          <button
+            type="button"
+            className={`primary-button empty-pick-button ${FOCUS_RING}`}
+            aria-label={root ? 'Change folder' : 'Pick folder'}
+            onClick={onPick}
+          >
+            {root ? 'Change folder' : 'Pick folder'}
+          </button>
+        </div>
+      </div>
+
       <div className="config-card">
         <span className="status-dot" aria-hidden="true" />
         <div>
           <h2>Config is in dev</h2>
           <p className="muted-copy">Workspace sync and IDE configuration are coming soon.</p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ProjectFolderControl({
-  root,
-  onPick,
-  disabled,
-}: {
-  root: string | null;
-  onPick: () => void;
-  disabled?: boolean;
-}) {
-  if (!root) {
-    return (
-      <button
-        type="button"
-        className={`outline-button folder-button ${FOCUS_RING}`}
-        onClick={onPick}
-        disabled={disabled}
-      >
-        <FolderOpen size={15} weight="regular" aria-hidden="true" />
-        Pick folder
-      </button>
-    );
-  }
-
-  return (
-    <div className="project-folder">
-      <span className="project-folder-name" title={root}>
-        {folderName(root)}
-      </span>
-      <button
-        type="button"
-        className={`outline-button folder-button ${FOCUS_RING}`}
-        aria-label="Change folder"
-        onClick={onPick}
-      >
-        Change
-      </button>
-    </div>
-  );
-}
-
-function PickProjectEmptyState({ onPick }: { onPick: () => void }) {
-  return (
-    <section className="config-panel panel-section">
-      <p className="eyebrow">Project</p>
-      <h1>Pick a project folder</h1>
-      <div className="config-card">
-        <span className="status-dot" aria-hidden="true" />
-        <div>
-          <h2>Collections stay in the repo</h2>
-          <p className="muted-copy">
-            Discover and Collections read and write this folder&apos;s .contextkit state. Sync is still team config —
-            it is not this picker.
-          </p>
-          <button type="button" className={`primary-button empty-pick-button ${FOCUS_RING}`} onClick={onPick}>
-            Pick folder
-          </button>
         </div>
       </div>
     </section>
@@ -143,8 +108,6 @@ export default function App() {
     setCollectionsVersion((version) => version + 1);
   }
 
-  const needsProject = tab === 'search' || tab === 'collections';
-  const showEmptyState = needsProject && projectRoot === null;
   const boundRoot = typeof projectRoot === 'string' ? projectRoot : null;
 
   return (
@@ -158,16 +121,11 @@ export default function App() {
           <span className="beta-pill">BETA</span>
         </div>
         <div className="top-actions">
-          <ProjectFolderControl
-            root={boundRoot}
-            onPick={() => void handlePickFolder()}
-            disabled={projectRoot === undefined}
-          />
           <ThemeToggle />
         </div>
       </header>
 
-      <div className={`workspace workspace-${showEmptyState ? 'config' : tab}`}>
+      <div className={`workspace workspace-${tab}`}>
         <nav className="rail" aria-label="Workspace">
           <div role="tablist" aria-label="Workspace">
             {TABS.map((item) => {
@@ -200,14 +158,12 @@ export default function App() {
           </button>
         </nav>
 
-        {tab === 'config' && <ConfigPanel />}
+        {tab === 'config' && <ConfigPanel root={boundRoot} onPick={() => void handlePickFolder()} />}
 
-        {showEmptyState && <PickProjectEmptyState onPick={() => void handlePickFolder()} />}
+        {tab === 'search' && <SkillSearch />}
 
-        {tab === 'search' && boundRoot !== null && <SkillSearch />}
-
-        {tab === 'collections' && boundRoot !== null && (
-          <CollectionList key={`${boundRoot}:${collectionsVersion}`}>
+        {tab === 'collections' && (
+          <CollectionList key={`${boundRoot ?? 'session'}:${collectionsVersion}`}>
             <CreateCollectionForm onCreated={() => setCollectionsVersion((version) => version + 1)} />
           </CollectionList>
         )}

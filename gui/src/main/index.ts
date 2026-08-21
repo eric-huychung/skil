@@ -1,19 +1,23 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { createEngine } from '../../../src/create-engine.js';
+import { SkillsAdapter } from '../../../src/adapters/skills-adapter.js';
+import { getApiBaseUrl } from '../../../src/config/website.js';
 import type { ICollectionEngine } from '../../../src/interfaces/engine.js';
 import type { BrowseView, IDE } from '../../../src/types/index.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
 
-// Session-only: rebuilt against the picked folder. Do not chdir and do not
-// persist the last path. Handlers close over these lets so pick does not
-// re-register IPC.
+// Session-only project bind. Discover search/browse never need a folder.
+// Until the user connects one in Sync, collections persist under Electron
+// userData so people can sketch without a repo. Pick rebuilds against that
+// path — no chdir, no last-folder file.
 let engine: ICollectionEngine | null = null;
 let projectRoot: string | null = null;
+const discovery = new SkillsAdapter(getApiBaseUrl());
 
-function requireEngine(): ICollectionEngine {
+function currentEngine(): ICollectionEngine {
   if (!engine) {
-    throw new Error('No project folder selected');
+    engine = createEngine(join(app.getPath('userData'), 'workspace'));
   }
   return engine;
 }
@@ -29,22 +33,22 @@ ipcMain.handle(IPC_CHANNELS.pickProjectFolder, async () => {
   return projectRoot;
 });
 
-ipcMain.handle(IPC_CHANNELS.listCollections, () => requireEngine().list());
+ipcMain.handle(IPC_CHANNELS.listCollections, () => currentEngine().list());
 ipcMain.handle(IPC_CHANNELS.createCollection, (_event, name: string, skillIds: string[]) =>
-  requireEngine().create(name, skillIds)
+  currentEngine().create(name, skillIds)
 );
 ipcMain.handle(IPC_CHANNELS.addSkillToCollection, (_event, name: string, skillId: string) =>
-  requireEngine().addSkill(name, skillId)
+  currentEngine().addSkill(name, skillId)
 );
 ipcMain.handle(IPC_CHANNELS.removeSkillFromCollection, (_event, name: string, skillId: string) =>
-  requireEngine().removeSkill(name, skillId)
+  currentEngine().removeSkill(name, skillId)
 );
 ipcMain.handle(IPC_CHANNELS.exportCollections, (_event, names: string[], targetIDE: IDE) =>
-  requireEngine().export(names, targetIDE)
+  currentEngine().export(names, targetIDE)
 );
-ipcMain.handle(IPC_CHANNELS.searchSkills, (_event, query: string) => requireEngine().search(query));
-ipcMain.handle(IPC_CHANNELS.browseSkills, (_event, view: BrowseView) => requireEngine().browse(view));
-ipcMain.handle(IPC_CHANNELS.installSkill, (_event, skillId: string) => requireEngine().install(skillId));
+ipcMain.handle(IPC_CHANNELS.searchSkills, (_event, query: string) => discovery.search(query));
+ipcMain.handle(IPC_CHANNELS.browseSkills, (_event, view: BrowseView) => discovery.browse(view));
+ipcMain.handle(IPC_CHANNELS.installSkill, (_event, skillId: string) => currentEngine().install(skillId));
 
 function createWindow(): void {
   const window = new BrowserWindow({
