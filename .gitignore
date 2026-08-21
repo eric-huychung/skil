@@ -3,3 +3,13 @@ dist/
 .contextkit/
 *.log
 .DS_Store
+.env
+.env.*
+!.env.example
+*.pem
+.vercel
+coverage/
+*.tsbuildinfo
+
+#notes
+note.txt
