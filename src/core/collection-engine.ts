@@ -1,16 +1,16 @@
 import type { ICollectionEngine } from '../interfaces/engine.js';
 import type { IFileSystemAdapter, IConfigAdapter, ISkillsAdapter } from '../interfaces/adapters.js';
-import type { ActivateResult, Collection, IDEInfo, Skill, State, Status, SyncResult } from '../types/index.js';
+import type { BrowseView, Collection, ExportResult, IDE, Skill, State, SyncResult } from '../types/index.js';
 import { err, isOk, ok, type Result } from './result.js';
 
 /** Path to the persisted engine state, relative to the project root. */
 export const STATE_PATH = '.contextkit/state.json';
 
-/** Directory where ContextKit stores each skill's original files, relative to the project root. */
-export const SKILLS_DIR = '.contextkit/skills';
+/** Current state schema version. See `State`'s doc comment for the v1 -> v2 migration note. */
+const STATE_VERSION = '2.0';
 
 function emptyState(): State {
-  return { collections: [], activeCollection: null, installedSkills: [], version: '1.0' };
+  return { collections: [], installedSkills: [], version: STATE_VERSION };
 }
 
 /**
@@ -24,15 +24,14 @@ export class CollectionEngine implements ICollectionEngine {
   constructor(
     private readonly fs: IFileSystemAdapter,
     private readonly config: IConfigAdapter,
-    private readonly skills: ISkillsAdapter,
-    private readonly projectRoot: string = process.cwd()
+    private readonly skills: ISkillsAdapter
   ) {
     const loaded = this.fs.readJSON<State>(STATE_PATH);
     this.state = isOk(loaded) ? loaded.value : emptyState();
     this.mergeExternallyInstalledSkills();
   }
 
-  create(name: string, skillIds: string[]): Result<Collection> {
+  create(name: string, skillIds: string[], command?: string): Result<Collection> {
     if (this.state.collections.some((c) => c.name === name)) {
       return err(new Error(`Collection '${name}' already exists. Choose a different name or run 'contextkit list' to see existing collections.`));
     }
@@ -41,61 +40,71 @@ export class CollectionEngine implements ICollectionEngine {
       name,
       skills: skillIds,
       createdAt: new Date().toISOString(),
-      lastUsedAt: null,
+      ...(command !== undefined ? { command } : {}),
     };
     this.state.collections.push(collection);
-    this.persist();
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      this.state.collections.pop();
+      return err(new Error(`Failed to save collection '${name}': ${persistResult.error.message}`));
+    }
 
     return ok(collection);
   }
 
-  list(): Collection[] {
-    return [...this.state.collections];
+  addSkill(name: string, skillId: string): Result<Collection> {
+    const collection = this.state.collections.find((c) => c.name === name);
+    if (!collection) {
+      return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
+    }
+    if (collection.skills.includes(skillId)) {
+      return ok(collection);
+    }
+
+    collection.skills.push(skillId);
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      collection.skills.pop();
+      return err(new Error(`Failed to save collection '${name}': ${persistResult.error.message}`));
+    }
+
+    return ok(collection);
   }
 
-  activate(name: string): Result<ActivateResult> {
+  removeSkill(name: string, skillId: string): Result<Collection> {
     const collection = this.state.collections.find((c) => c.name === name);
     if (!collection) {
       return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
     }
 
-    const ides = this.fs.detectIDEs(this.projectRoot);
-    const { availableSkills, warnings } = this.partitionBySourceAvailability(collection);
-
-    const previouslyActive = this.state.collections.find((c) => c.name === this.state.activeCollection);
-    if (previouslyActive) {
-      this.removeSymlinksFor(previouslyActive, ides);
+    const index = collection.skills.indexOf(skillId);
+    if (index === -1) {
+      return ok(collection);
     }
 
-    const symlinkResult = this.createSymlinksFor(name, availableSkills, ides);
-    if (!isOk(symlinkResult)) {
-      if (previouslyActive) {
-        this.createSymlinksFor(previouslyActive.name, previouslyActive.skills, ides);
-      }
-      return err(symlinkResult.error);
+    collection.skills.splice(index, 1);
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      collection.skills.splice(index, 0, skillId);
+      return err(new Error(`Failed to save collection '${name}': ${persistResult.error.message}`));
     }
 
-    this.state.activeCollection = name;
-    this.persist();
-
-    return ok({ warnings });
+    return ok(collection);
   }
 
-  deactivate(): Result<void> {
-    const active = this.state.collections.find((c) => c.name === this.state.activeCollection);
-    if (active) {
-      const ides = this.fs.detectIDEs(this.projectRoot);
-      this.removeSymlinksFor(active, ides);
+  getCommand(name: string): Result<string> {
+    const collection = this.state.collections.find((c) => c.name === name);
+    if (!collection) {
+      return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
     }
-
-    this.state.activeCollection = null;
-    this.persist();
-
-    return ok(undefined);
+    if (!collection.command) {
+      return err(new Error(`Collection '${name}' has no command defined. Create it with 'contextkit create ${name} --command "<cmd>"'.`));
+    }
+    return ok(collection.command);
   }
 
-  status(): Status {
-    return { activeCollection: this.state.activeCollection, skills: [] };
+  list(): Collection[] {
+    return [...this.state.collections];
   }
 
   sync(configPath: string): Result<SyncResult> {
@@ -114,6 +123,7 @@ export class CollectionEngine implements ICollectionEngine {
       .filter((c) => !configNames.has(c.name))
       .map((c) => `Local collection '${c.name}' is not in the config file. Add it to '${configPath}' or remove it locally.`);
 
+    const snapshot = this.state.collections.map((c) => ({ ...c }));
     const synced: string[] = [];
     for (const [name, skillIds] of Object.entries(configResult.value.collections)) {
       const existing = this.state.collections.find((c) => c.name === name);
@@ -124,12 +134,16 @@ export class CollectionEngine implements ICollectionEngine {
           name,
           skills: skillIds,
           createdAt: new Date().toISOString(),
-          lastUsedAt: null,
         });
       }
       synced.push(name);
     }
-    this.persist();
+
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      this.state.collections = snapshot;
+      return err(new Error(`Failed to save synced collections: ${persistResult.error.message}`));
+    }
 
     return ok({ synced, warnings });
   }
@@ -142,12 +156,22 @@ export class CollectionEngine implements ICollectionEngine {
 
     const skill: Skill = { id: skillId, source: 'skills.sh', installedAt: new Date().toISOString() };
     const existingIndex = this.state.installedSkills.findIndex((s) => s.id === skillId);
+    const previous = existingIndex >= 0 ? this.state.installedSkills[existingIndex] : undefined;
     if (existingIndex >= 0) {
       this.state.installedSkills[existingIndex] = skill;
     } else {
       this.state.installedSkills.push(skill);
     }
-    this.persist();
+
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      if (previous) {
+        this.state.installedSkills[existingIndex] = previous;
+      } else {
+        this.state.installedSkills.pop();
+      }
+      return err(new Error(`Failed to save installed skill '${skillId}': ${persistResult.error.message}`));
+    }
 
     return ok(skill);
   }
@@ -156,8 +180,41 @@ export class CollectionEngine implements ICollectionEngine {
     return this.skills.search(query);
   }
 
-  private persist(): void {
-    this.fs.writeJSON(STATE_PATH, this.state);
+  browse(view: BrowseView): Promise<Result<Skill[]>> {
+    return this.skills.browse(view);
+  }
+
+  convert(skillId: string, targetIDE: IDE): Promise<Result<void>> {
+    return this.skills.convert(skillId, targetIDE);
+  }
+
+  async export(collectionNames: string[], targetIDE: IDE): Promise<Result<ExportResult>> {
+    const succeeded: string[] = [];
+    const failures: string[] = [];
+
+    for (const name of collectionNames) {
+      const collection = this.state.collections.find((c) => c.name === name);
+      if (!collection) {
+        failures.push(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`);
+        continue;
+      }
+
+      for (const skillId of collection.skills) {
+        const result = await this.skills.convert(skillId, targetIDE);
+        if (isOk(result)) {
+          succeeded.push(`${name}:${skillId}`);
+        } else {
+          failures.push(`'${name}:${skillId}': ${result.error.message}`);
+        }
+      }
+    }
+
+    return ok({ succeeded, failures });
+  }
+
+  /** Writes state to disk. Returns an error Result if the write fails; callers must check it rather than assume the mutation was saved. */
+  private persist(): Result<void> {
+    return this.fs.writeJSON(STATE_PATH, this.state);
   }
 
   /**
@@ -171,55 +228,6 @@ export class CollectionEngine implements ICollectionEngine {
       if (!known.has(skill.id)) {
         this.state.installedSkills.push(skill);
         known.add(skill.id);
-      }
-    }
-  }
-
-  /**
-   * Splits a collection's skills into those whose source directory exists
-   * (safe to symlink) and those that don't (skipped, with a warning).
-   */
-  private partitionBySourceAvailability(collection: Collection): { availableSkills: string[]; warnings: string[] } {
-    const availableSkills: string[] = [];
-    const warnings: string[] = [];
-    for (const skillId of collection.skills) {
-      if (this.fs.exists(`${SKILLS_DIR}/${skillId}`)) {
-        availableSkills.push(skillId);
-      } else {
-        warnings.push(`Skill '${skillId}' not found in '${SKILLS_DIR}/${skillId}'. Run 'contextkit install ${skillId}' or remove it from the collection.`);
-      }
-    }
-    return { availableSkills, warnings };
-  }
-
-  /**
-   * Creates a symlink for every (ide, skill) pair. If any creation fails
-   * partway through, removes every symlink it created in this call before
-   * returning the error, so a failed activation never leaves the new
-   * collection half-linked.
-   */
-  private createSymlinksFor(collectionName: string, skillIds: string[], ides: IDEInfo[]): Result<void> {
-    const created: string[] = [];
-    for (const ide of ides) {
-      for (const skillId of skillIds) {
-        const target = `${ide.path}/${skillId}`;
-        const result = this.fs.createSymlink(`${SKILLS_DIR}/${skillId}`, target);
-        if (!isOk(result)) {
-          for (const rollbackTarget of created) {
-            this.fs.removeSymlink(rollbackTarget);
-          }
-          return err(new Error(`Failed to activate '${collectionName}': ${result.error.message}`));
-        }
-        created.push(target);
-      }
-    }
-    return ok(undefined);
-  }
-
-  private removeSymlinksFor(collection: Collection, ides: IDEInfo[]): void {
-    for (const ide of ides) {
-      for (const skillId of collection.skills) {
-        this.fs.removeSymlink(`${ide.path}/${skillId}`);
       }
     }
   }

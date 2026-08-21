@@ -1,24 +1,29 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { CollectionEngine } from '../../../src/core/collection-engine.js';
-import { RealFileSystemAdapter } from '../../../src/adapters/real-fs-adapter.js';
-import { ConfigAdapter } from '../../../src/adapters/config-adapter.js';
-import { SkillsAdapter } from '../../../src/adapters/skills-adapter.js';
+import { createEngine } from '../../../src/create-engine.js';
+import type { BrowseView, IDE } from '../../../src/types/index.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
 
-// Same engine and adapters the CLI uses — no reimplementation. The GUI is a
+// Same composition root the CLI uses — no reimplementation. The GUI is a
 // presentation layer only; every mutation and read goes through this one
 // instance via the IPC handlers below.
-const engine = new CollectionEngine(new RealFileSystemAdapter(), new ConfigAdapter(), new SkillsAdapter());
+const engine = createEngine();
 
 ipcMain.handle(IPC_CHANNELS.listCollections, () => engine.list());
-ipcMain.handle(IPC_CHANNELS.getStatus, () => engine.status());
-ipcMain.handle(IPC_CHANNELS.activateCollection, (_event, name: string) => engine.activate(name));
-ipcMain.handle(IPC_CHANNELS.deactivateCollection, () => engine.deactivate());
 ipcMain.handle(IPC_CHANNELS.createCollection, (_event, name: string, skillIds: string[]) =>
   engine.create(name, skillIds)
 );
+ipcMain.handle(IPC_CHANNELS.addSkillToCollection, (_event, name: string, skillId: string) =>
+  engine.addSkill(name, skillId)
+);
+ipcMain.handle(IPC_CHANNELS.removeSkillFromCollection, (_event, name: string, skillId: string) =>
+  engine.removeSkill(name, skillId)
+);
+ipcMain.handle(IPC_CHANNELS.exportCollections, (_event, names: string[], targetIDE: IDE) =>
+  engine.export(names, targetIDE)
+);
 ipcMain.handle(IPC_CHANNELS.searchSkills, (_event, query: string) => engine.search(query));
+ipcMain.handle(IPC_CHANNELS.browseSkills, (_event, view: BrowseView) => engine.browse(view));
 ipcMain.handle(IPC_CHANNELS.installSkill, (_event, skillId: string) => engine.install(skillId));
 
 function createWindow(): void {
@@ -31,7 +36,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
     webPreferences: {
-      preload: join(import.meta.dirname, '../preload/index.js'),
+      preload: join(import.meta.dirname, '../preload/index.mjs'),
       sandbox: false,
     },
   });

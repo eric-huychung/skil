@@ -9,9 +9,9 @@ export function runList(engine: ICollectionEngine): CommandOutcome {
     return { message: 'No collections yet', isError: false, isInfo: true };
   }
 
-  const table = new Table({ head: ['Name', 'Skills', 'Last Used'] });
+  const table = new Table({ head: ['Name', 'Skills', 'Command'] });
   for (const collection of collections) {
-    table.push([collection.name, String(collection.skills.length), collection.lastUsedAt ?? 'never']);
+    table.push([collection.name, String(collection.skills.length), collection.command ?? '—']);
   }
 
   return { message: table.toString(), isError: false, isInfo: true };

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, lstatSync, readlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isOk } from '../core/result.js';
@@ -16,14 +16,7 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
   beforeEach(() => {
     originalCwd = process.cwd();
     tmpDir = mkdtempSync(join(tmpdir(), 'contextkit-integration-'));
-    // Simulate IDE-managed skill directories already existing in the project.
-    mkdirSync(join(tmpDir, '.agents', 'skills'), { recursive: true });
-    mkdirSync(join(tmpDir, '.claude', 'skills'), { recursive: true });
-    // Simulate skills already installed under ContextKit's managed directory,
-    // since activate() now skips symlinking any skill whose source is missing.
-    mkdirSync(join(tmpDir, '.contextkit', 'skills', 'react-patterns'), { recursive: true });
-    mkdirSync(join(tmpDir, '.contextkit', 'skills', 'api-design'), { recursive: true });
-    // CollectionEngine resolves its state/skills paths relative to cwd,
+    // CollectionEngine resolves its state path relative to cwd,
     // matching how the real CLI is invoked from within a project root.
     process.chdir(tmpDir);
   });
@@ -34,31 +27,8 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
   });
 
   function buildEngine(): CollectionEngine {
-    return new CollectionEngine(
-      new RealFileSystemAdapter(),
-      new InMemoryConfigAdapter(),
-      new InMemorySkillsAdapter(),
-      tmpDir
-    );
+    return new CollectionEngine(new RealFileSystemAdapter(), new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
   }
-
-  it('creates symlinks in every detected IDE directory on activate, and removes them on deactivate', () => {
-    const engine = buildEngine();
-    const cursorTarget = join(tmpDir, '.agents', 'skills', 'react-patterns');
-    const claudeTarget = join(tmpDir, '.claude', 'skills', 'react-patterns');
-
-    expect(isOk(engine.create('frontend', ['react-patterns']))).toBe(true);
-    expect(isOk(engine.activate('frontend'))).toBe(true);
-
-    expect(lstatSync(cursorTarget).isSymbolicLink()).toBe(true);
-    expect(lstatSync(claudeTarget).isSymbolicLink()).toBe(true);
-    expect(readlinkSync(cursorTarget)).toBe('.contextkit/skills/react-patterns');
-
-    expect(isOk(engine.deactivate())).toBe(true);
-
-    expect(() => lstatSync(cursorTarget)).toThrow();
-    expect(() => lstatSync(claudeTarget)).toThrow();
-  });
 
   it('persists collection state to .contextkit/state.json on disk', () => {
     const engine = buildEngine();
@@ -79,34 +49,13 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
     expect(reloaded.list().map((c) => c.name)).toEqual(['frontend']);
   });
 
-  it('swaps symlinks when activating a different collection', () => {
-    const engine = buildEngine();
-    engine.create('frontend', ['react-patterns']);
-    engine.create('backend', ['api-design']);
-    engine.activate('frontend');
+  it('persists an added skill across engine instances', () => {
+    buildEngine().create('frontend', ['react-patterns']);
 
-    engine.activate('backend');
+    buildEngine().addSkill('frontend', 'performance-review');
+    const reloaded = buildEngine();
 
-    const frontendTarget = join(tmpDir, '.agents', 'skills', 'react-patterns');
-    const backendTarget = join(tmpDir, '.agents', 'skills', 'api-design');
-    expect(() => lstatSync(frontendTarget)).toThrow();
-    expect(lstatSync(backendTarget).isSymbolicLink()).toBe(true);
-  });
-
-  it('warns and skips a skill with no installed source directory, activating the rest', () => {
-    const engine = buildEngine();
-    engine.create('frontend', ['react-patterns', 'never-installed']);
-
-    const result = engine.activate('frontend');
-
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.warnings).toEqual(
-        expect.arrayContaining([expect.stringContaining('never-installed')])
-      );
-    }
-    expect(lstatSync(join(tmpDir, '.agents', 'skills', 'react-patterns')).isSymbolicLink()).toBe(true);
-    expect(() => lstatSync(join(tmpDir, '.agents', 'skills', 'never-installed'))).toThrow();
+    expect(reloaded.list()[0]?.skills).toEqual(['react-patterns', 'performance-review']);
   });
 
   it('syncs collections from a real .contextkit.yml file on disk', () => {
@@ -115,12 +64,7 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
       configPath,
       ['version: "1.0"', 'collections:', '  frontend:', '    - react-patterns'].join('\n')
     );
-    const engine = new CollectionEngine(
-      new RealFileSystemAdapter(),
-      new ConfigAdapter(),
-      new InMemorySkillsAdapter(),
-      tmpDir
-    );
+    const engine = new CollectionEngine(new RealFileSystemAdapter(), new ConfigAdapter(), new InMemorySkillsAdapter());
 
     const result = engine.sync(configPath);
 

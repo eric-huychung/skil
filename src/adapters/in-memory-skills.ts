@@ -1,10 +1,20 @@
 import type { ISkillsAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
-import type { IDE, Skill } from '../types/index.js';
+import type { BrowseView, IDE, Skill } from '../types/index.js';
 
 const HARDCODED_SEARCH_RESULTS: Skill[] = [
   { id: 'obra/react-patterns', source: 'skills.sh', installedAt: '' },
   { id: 'addyosmani/performance-review', source: 'skills.sh', installedAt: '' },
+];
+
+const HARDCODED_ALL_TIME: Skill[] = [
+  { id: 'obra/react-patterns', source: 'skills.sh', installedAt: '', installs: 1200 },
+  { id: 'addyosmani/performance-review', source: 'skills.sh', installedAt: '', installs: 800 },
+];
+
+const HARDCODED_TRENDING: Skill[] = [
+  { id: 'vercel-labs/security-review', source: 'skills.sh', installedAt: '', installs: 90 },
+  { id: 'obra/superpowers', source: 'skills.sh', installedAt: '', installs: 50 },
 ];
 
 /**
@@ -15,12 +25,21 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
   private installed: Skill[] = [];
   private installError: Error | null = null;
   private searchError: Error | null = null;
+  private browseError: Error | null = null;
+  private convertError: Error | null = null;
 
   async search(_query: string): Promise<Result<Skill[]>> {
     if (this.searchError) {
       return err(this.searchError);
     }
     return ok(HARDCODED_SEARCH_RESULTS);
+  }
+
+  async browse(view: BrowseView): Promise<Result<Skill[]>> {
+    if (this.browseError) {
+      return err(this.browseError);
+    }
+    return ok(view === 'trending' ? HARDCODED_TRENDING : HARDCODED_ALL_TIME);
   }
 
   async install(skillId: string): Promise<Result<void>> {
@@ -32,6 +51,9 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
   }
 
   async convert(_skillId: string, _targetIDE: IDE): Promise<Result<void>> {
+    if (this.convertError) {
+      return err(this.convertError);
+    }
     return ok(undefined);
   }
 
@@ -49,6 +71,16 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     this.searchError = error;
   }
 
+  /** Test helper: makes the next browse() call(s) fail with `error`. */
+  setBrowseError(error: Error): void {
+    this.browseError = error;
+  }
+
+  /** Test helper: makes the next convert() call(s) fail with `error`. */
+  setConvertError(error: Error): void {
+    this.convertError = error;
+  }
+
   /** Test helper: seeds skills as if already installed by external tooling. */
   seedInstalled(skills: Skill[]): void {
     this.installed.push(...skills);
@@ -59,5 +91,7 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     this.installed = [];
     this.installError = null;
     this.searchError = null;
+    this.browseError = null;
+    this.convertError = null;
   }
 }

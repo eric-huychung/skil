@@ -1,21 +1,31 @@
 # ContextKit
 
-A CLI for managing collections of AI skills across Cursor, Claude, and Windsurf. Group skills into named collections, then activate one at a time — ContextKit symlinks the collection's skills into every IDE it detects.
+A CLI (and desktop GUI) for managing collections of AI skills, and exporting them to Cursor, Claude, or Windsurf format. Group skills into named collections, edit them freely, tie a command template to each one, then export to whichever IDE format you need.
 
 ## Commands
 
 ```bash
-contextkit create <name> --skills skill-a,skill-b   # define a collection
-contextkit use <name>                                # activate a collection
-contextkit disable                                   # deactivate the active collection
-contextkit list                                       # list all collections
-contextkit status                                     # show the active collection
-contextkit search [query]                             # search skills.sh
-contextkit install <skillId>                          # install a skill via npx skills add
-contextkit sync [--config <path>]                     # sync collections from .contextkit.yml
+contextkit create <name> --skills skill-a,skill-b [--command "<cmd>"]  # define a collection, optionally with a command template
+contextkit add <collection> <skillId>                 # add a skill to an existing collection
+contextkit remove <collection> <skillId>               # remove a skill from an existing collection
+contextkit run <collection>                            # run the collection's command template
+contextkit list                                        # list all collections
+contextkit search [query] [--trending]                 # typed search, or all-time/trending leaderboard when query is omitted
+contextkit install <skillId>                           # install a skill via npx skills add
+contextkit convert <skillId> --to <ide>                # convert a single skill to cursor/claude/windsurf format via skillsmith
+contextkit export <collections...> --to <ide>          # convert every skill in one or more collections to an IDE format
+contextkit sync [--config <path>]                      # sync collections from .contextkit.yml
 ```
 
 State lives in `.contextkit/state.json`; skill sources live in `.contextkit/skills/`. Both are project-local.
+
+`contextkit search` with no query lists the skills.sh all-time leaderboard (top 10, with install counts). `contextkit search --trending` lists trending. A typed query (`contextkit search react`) still searches and ignores `--trending`.
+
+`contextkit search` and `contextkit install` go through ContextKit's own backend, which authenticates to skills.sh with a Vercel OIDC token — no `SKILLS_API_KEY` needed. Typed search hits `GET /api/skills/search`; the leaderboard hits `GET /api/skills?view=` and is cached on Vercel's CDN. Point the CLI at a different backend with `CONTEXTKIT_API_URL` (defaults to `https://contextkit.dev`).
+
+## Desktop GUI
+
+An Electron app (`gui/`) shares the same `CollectionEngine` as the CLI: create collections, add/remove skills, search and install from skills.sh (empty Search shows All time / Trending leaderboards), and export a collection to an IDE — all as thin UI over the same business logic. Run it with `npm run gui:dev`.
 
 ## Troubleshooting
 
@@ -25,14 +35,11 @@ Choose a different name, or run `contextkit list` to see existing collections.
 **`Collection '<name>' not found`**
 Run `contextkit list` to see available collections.
 
-**`File already exists at '<path>'`**
-Activating a collection tries to symlink into an IDE directory, but something is already there. Remove the conflicting file manually and re-run `contextkit use <name>`. Activation fails atomically — no partial symlinks are left behind, and the previously active collection (if any) stays active.
+**`Collection '<name>' has no command defined`**
+Set one with `contextkit create <name> --command "<cmd>"`, or edit `.contextkit/state.json` directly.
 
-**`Permission denied creating symlink at '<path>'`**
-ContextKit doesn't have write access to that IDE directory. Check the directory's permissions (or ownership) and try again.
-
-**Warning: `Skill '<id>' not found in '.contextkit/skills/<id>'`**
-The collection references a skill that hasn't been installed yet. Run `contextkit install <id>`, or remove it from the collection. This is a warning, not an error — the rest of the collection still activates.
+**`skillsmith is not installed`**
+`contextkit convert`/`contextkit export` shell out to `skillsmith`. Run `npm install -g skillsmith` and try again.
 
 **Config errors from `contextkit sync`**
 `.contextkit.yml` must have a top-level `collections` object mapping collection names to arrays of skill IDs:

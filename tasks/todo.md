@@ -1529,15 +1529,126 @@ Deferred from the original architecture until the CLI (Phases 1-8) is stable. Sa
 
 
 
+## Phase 10: Distribution & Packaging
+
+### Task 46: Set up npm publishing for CLI
+
+**Description:** Configure `package.json` for npm publishing. Add appropriate metadata, keywords, repository links, and ensure the CLI binary is properly configured for global installation.
+
+**Acceptance criteria:**
+
+- [ ] `package.json` includes required npm fields (description, keywords, author, repository, license)
+- [ ] `bin` field correctly points to built CLI entry point
+- [ ] `.npmignore` or `files` field configured to include only necessary files
+- [ ] README includes installation instructions: `npm install -g contextkit`
+- [ ] Dry-run publish succeeds: `npm publish --dry-run`
+
+**Verification:**
+
+- [ ] Dry-run completes without errors
+- [ ] Published package size is reasonable (<1MB)
+- [ ] Test install from npm in clean environment
+
+**Dependencies:** All Phase 7 tasks
+
+**Files likely touched:**
+
+- `package.json`
+- `.npmignore` or `package.json` files field
+- `README.md`
+
+**Estimated scope:** Small (3 files)
+
+---
+
+
+
+### Task 47: Configure Electron Builder for GUI packaging
+
+**Description:** Add electron-builder configuration to create standalone installers for Mac, Windows, and Linux. Configure code signing (optional), app icons, and build targets.
+
+**Acceptance criteria:**
+
+- [ ] `electron-builder.yml` or package.json build config added
+- [ ] Build scripts in package.json: `package:mac`, `package:win`, `package:linux`
+- [ ] App icons created for all platforms (icns, ico, png)
+- [ ] Build configuration specifies app metadata (name, version, description)
+- [ ] `.dmg`, `.exe`, and `.AppImage` artifacts are generated
+
+**Verification:**
+
+- [ ] Build succeeds: `npm run package` for target platform
+- [ ] Generated installer can be run and app launches
+- [ ] App metadata shows correctly in system (name, version, icon)
+
+**Dependencies:** All Phase 9 tasks
+
+**Files likely touched:**
+
+- `gui/package.json`
+- `electron-builder.yml` or equivalent config
+- `gui/resources/` (icons)
+- `gui/.gitignore` (ignore build artifacts)
+
+**Estimated scope:** Medium (config + asset creation)
+
+---
+
+
+
+### Task 48: Create GitHub release automation
+
+**Description:** Set up GitHub Actions workflow to automatically build and publish releases when a version tag is pushed. Create releases with CLI npm package and GUI installers for all platforms.
+
+**Acceptance criteria:**
+
+- [ ] `.github/workflows/release.yml` workflow defined
+- [ ] Workflow triggers on version tags (e.g., `v*`)
+- [ ] CLI: publishes to npm with `npm publish`
+- [ ] GUI: builds installers for Mac, Windows, Linux
+- [ ] Artifacts uploaded to GitHub Release
+- [ ] Workflow includes npm token and any signing credentials (as secrets)
+
+**Verification:**
+
+- [ ] Test workflow with a pre-release tag
+- [ ] All artifacts appear in GitHub Release
+- [ ] npm package is published
+- [ ] Installers are downloadable and work
+
+**Dependencies:** Tasks 46, 47
+
+**Files likely touched:**
+
+- `.github/workflows/release.yml`
+- Documentation on release process
+
+**Estimated scope:** Medium (workflow + testing)
+
+---
+
+
+
+## Checkpoint: Distribution Ready
+
+- [ ] CLI can be installed globally via `npm install -g contextkit`
+- [ ] GUI installers available for Mac, Windows, Linux
+- [ ] GitHub Releases automated
+- [ ] Installation docs updated in README
+
+---
+
+
+
 ## Summary
 
-**Total tasks:** 45
-**Estimated duration:** 8-11 focused work days (assuming 4-5 tasks per day)
+**Total tasks:** 48
+**Estimated duration:** 9-12 focused work days (assuming 4-5 tasks per day)
 
 **Task size distribution:**
 
-- Small: 29 tasks (1-2 files, <1 hour each)
-- Medium: 16 tasks (3-5 files, 1-2 hours each)
+- Small: 30 tasks (1-2 files, <1 hour each)
+- Medium: 18 tasks (3-5 files, 1-2 hours each)
 - Large: 0 tasks (broken down further if needed)
 
 **Parallelization opportunities:**
@@ -1546,5 +1657,6 @@ Deferred from the original architecture until the CLI (Phases 1-8) is stable. Sa
 - Phase 6 (Skills) can start after Phase 2
 - Phase 7 (CLI) needs Phases 2-6 complete
 - Phase 9 (GUI) needs Phase 7-8 complete (shares the same engine/adapters, but the CLI must be stable first)
+- Phase 10 (Distribution) needs Phases 7 and 9 complete
 
-**Critical path:** Phase 2 → Phase 3 → Phase 4 → Phase 7 → Phase 9
+**Critical path:** Phase 2 → Phase 3 → Phase 4 → Phase 7 → Phase 9 → Phase 10

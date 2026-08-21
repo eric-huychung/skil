@@ -15,13 +15,8 @@ import { BridgeProvider } from './bridge-context';
  * tests exercise the real business logic; only the file system, config, and
  * skills.sh boundaries are faked.
  */
-export function createInMemoryEngine(projectRoot = '/test-project'): ICollectionEngine {
-  return new CollectionEngine(
-    new InMemoryFileSystemAdapter(),
-    new InMemoryConfigAdapter(),
-    new InMemorySkillsAdapter(),
-    projectRoot
-  );
+export function createInMemoryEngine(): ICollectionEngine {
+  return new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
 }
 
 /**
@@ -33,11 +28,12 @@ export function createInMemoryEngine(projectRoot = '/test-project'): ICollection
 export function createTestBridge(engine: ICollectionEngine): ContextKitBridge {
   return {
     listCollections: async () => engine.list(),
-    getStatus: async () => engine.status(),
-    activateCollection: async (name) => engine.activate(name),
-    deactivateCollection: async () => engine.deactivate(),
     createCollection: async (name, skillIds) => engine.create(name, skillIds),
+    addSkillToCollection: async (name, skillId) => engine.addSkill(name, skillId),
+    removeSkillFromCollection: async (name, skillId) => engine.removeSkill(name, skillId),
+    exportCollections: async (names, targetIDE) => engine.export(names, targetIDE),
     searchSkills: async (query) => engine.search(query),
+    browseSkills: async (view) => engine.browse(view),
     installSkill: async (skillId) => engine.install(skillId),
   };
 }

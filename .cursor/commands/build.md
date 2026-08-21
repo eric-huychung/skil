@@ -62,6 +62,20 @@ When something is broken/failing/slow, use `.cursor/skills/testing/debug/`:
 
 **Reference**: `.cursor/skills/testing/debug/SKILL.md`
 
+### 5. UI/UX Design (Optional - use when designing or implementing interfaces)
+
+When the task involves designing, building, reviewing, or fixing any UI (pages, components, layout, styling, accessibility), start from `.cursor/skills/build/ui/ui-ux-pro-max/`:
+
+- Generate a design system before new pages (`--design-system`)
+- Targeted domain searches for style, color, typography, charts, UX, icons
+- Stack-specific implementation guidance (React, Next.js, shadcn, etc.)
+
+**Reference**: `.cursor/skills/build/ui/ui-ux-pro-max/SKILL.md`
+
+Pair with, as needed:
+- `.cursor/skills/build/ui/ui-styling/SKILL.md` - shadcn/Tailwind component implementation
+- `.cursor/skills/build/ui/design-system/SKILL.md` - design token architecture (primitive → semantic → component)
+
 ## Execution Pattern
 
 For each task:
@@ -92,3 +106,4 @@ Working code with tests, following design specifications. Each increment is:
 - **Increment**: `.cursor/skills/build/increment/SKILL.md`
 - **Codebase Design**: `.cursor/skills/design/codebase-design/SKILL.md`
 - **Debug**: `.cursor/skills/testing/debug/SKILL.md`
+- **UI/UX**: `.cursor/skills/build/ui/ui-ux-pro-max/SKILL.md`

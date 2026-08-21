@@ -11,8 +11,8 @@ export function parseSkillIds(csv: string): string[] {
     .filter((id) => id.length > 0);
 }
 
-export function runCreate(engine: ICollectionEngine, name: string, skillIds: string[]): CommandOutcome {
-  const result = engine.create(name, skillIds);
+export function runCreate(engine: ICollectionEngine, name: string, skillIds: string[], command?: string): CommandOutcome {
+  const result = engine.create(name, skillIds, command);
   if (!isOk(result)) {
     return { message: result.error.message, isError: true };
   }
@@ -29,7 +29,8 @@ export function registerCreateCommand(program: Command, engine: ICollectionEngin
     .command('create <name>')
     .description('Create a new skill collection')
     .option('--skills <ids>', 'comma-separated skill IDs', '')
-    .action((name: string, options: { skills: string }) => {
-      printOutcome(runCreate(engine, name, parseSkillIds(options.skills)));
+    .option('--command <cmd>', 'shell command template, runnable later via "contextkit run"')
+    .action((name: string, options: { skills: string; command?: string }) => {
+      printOutcome(runCreate(engine, name, parseSkillIds(options.skills), options.command));
     });
 }

@@ -16,11 +16,6 @@ export class InMemoryConfigAdapter implements IConfigAdapter {
     return ok(this.configs.get(path) as Config);
   }
 
-  write(path: string, config: Config): Result<void> {
-    this.configs.set(path, config);
-    return ok(undefined);
-  }
-
   validate(config: Config): Result<void> {
     if (typeof config.collections !== 'object' || config.collections === null) {
       return err(new Error(
@@ -33,6 +28,11 @@ export class InMemoryConfigAdapter implements IConfigAdapter {
       }
     }
     return ok(undefined);
+  }
+
+  /** Test helper: seeds the in-memory contents of a config file at `path`. */
+  write(path: string, config: Config): void {
+    this.configs.set(path, config);
   }
 
   /** Test helper: clears all in-memory state between tests. */

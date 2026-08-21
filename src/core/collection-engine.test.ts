@@ -29,14 +29,13 @@ describe('CollectionEngine', () => {
       }
     });
 
-    it('sets a createdAt timestamp and null lastUsedAt', () => {
+    it('sets a createdAt timestamp', () => {
       const result = engine.create('frontend', []);
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.createdAt).toBeTruthy();
         expect(new Date(result.value.createdAt).toString()).not.toBe('Invalid Date');
-        expect(result.value.lastUsedAt).toBeNull();
       }
     });
 
@@ -58,6 +57,159 @@ describe('CollectionEngine', () => {
 
       expect(engine.list()).toHaveLength(1);
       expect(engine.list()[0]?.skills).toEqual([]);
+    });
+
+    it('returns an error and does not keep the collection when persisting fails', () => {
+      fs.setWriteError(new Error('Disk full'));
+
+      const result = engine.create('frontend', []);
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('Disk full');
+      }
+      fs.setWriteError(null);
+      expect(engine.list()).toEqual([]);
+    });
+
+    it('stores an optional command template', () => {
+      const result = engine.create('frontend', [], 'npm run dev');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.command).toBe('npm run dev');
+      }
+    });
+
+    it('leaves command undefined when not given', () => {
+      const result = engine.create('frontend', []);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.command).toBeUndefined();
+      }
+    });
+  });
+
+  describe('getCommand', () => {
+    it('returns the command template for a collection that has one', () => {
+      engine.create('frontend', [], 'npm run dev');
+
+      const result = engine.getCommand('frontend');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toBe('npm run dev');
+      }
+    });
+
+    it('returns an error when the collection has no command defined', () => {
+      engine.create('frontend', []);
+
+      const result = engine.getCommand('frontend');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain("Collection 'frontend' has no command defined");
+      }
+    });
+
+    it('returns an error when the collection does not exist', () => {
+      const result = engine.getCommand('missing');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain("Collection 'missing' not found");
+      }
+    });
+  });
+
+  describe('addSkill', () => {
+    it('adds a skill to an existing collection', () => {
+      engine.create('frontend', ['obra/react-patterns']);
+
+      const result = engine.addSkill('frontend', 'addyosmani/performance-review');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.skills).toEqual(['obra/react-patterns', 'addyosmani/performance-review']);
+      }
+    });
+
+    it('is idempotent: adding the same skill twice keeps only one copy', () => {
+      engine.create('frontend', ['obra/react-patterns']);
+
+      engine.addSkill('frontend', 'obra/react-patterns');
+      const result = engine.addSkill('frontend', 'obra/react-patterns');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.skills).toEqual(['obra/react-patterns']);
+      }
+    });
+
+    it('returns an error when the collection does not exist', () => {
+      const result = engine.addSkill('missing', 'obra/react-patterns');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain("Collection 'missing' not found");
+      }
+    });
+
+    it('leaves the collection unchanged when persisting fails', () => {
+      engine.create('frontend', []);
+      fs.setWriteError(new Error('Disk full'));
+
+      const result = engine.addSkill('frontend', 'obra/react-patterns');
+
+      expect(isErr(result)).toBe(true);
+      fs.setWriteError(null);
+      expect(engine.list()[0]?.skills).toEqual([]);
+    });
+  });
+
+  describe('removeSkill', () => {
+    it('removes a skill from an existing collection', () => {
+      engine.create('frontend', ['obra/react-patterns', 'addyosmani/performance-review']);
+
+      const result = engine.removeSkill('frontend', 'obra/react-patterns');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.skills).toEqual(['addyosmani/performance-review']);
+      }
+    });
+
+    it('is a no-op when removing a skill not in the collection', () => {
+      engine.create('frontend', ['obra/react-patterns']);
+
+      const result = engine.removeSkill('frontend', 'not-in-collection');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.skills).toEqual(['obra/react-patterns']);
+      }
+    });
+
+    it('returns an error when the collection does not exist', () => {
+      const result = engine.removeSkill('missing', 'obra/react-patterns');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain("Collection 'missing' not found");
+      }
+    });
+
+    it('leaves the collection unchanged when persisting fails', () => {
+      engine.create('frontend', ['obra/react-patterns']);
+      fs.setWriteError(new Error('Disk full'));
+
+      const result = engine.removeSkill('frontend', 'obra/react-patterns');
+
+      expect(isErr(result)).toBe(true);
+      fs.setWriteError(null);
+      expect(engine.list()[0]?.skills).toEqual(['obra/react-patterns']);
     });
   });
 
@@ -98,209 +250,6 @@ describe('CollectionEngine', () => {
       if (isOk(persisted)) {
         expect(persisted.value.collections).toHaveLength(1);
       }
-    });
-  });
-
-  describe('activate', () => {
-    it('activates an existing collection', () => {
-      engine.create('frontend', ['obra/react-patterns']);
-
-      const result = engine.activate('frontend');
-
-      expect(isOk(result)).toBe(true);
-    });
-
-    it('shows the activated collection as active in status', () => {
-      engine.create('frontend', ['obra/react-patterns']);
-
-      engine.activate('frontend');
-
-      expect(engine.status().activeCollection).toBe('frontend');
-    });
-
-    it('activating a non-existent collection returns an error', () => {
-      const result = engine.activate('missing');
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain("Collection 'missing' not found");
-      }
-    });
-
-    it('creates a symlink for each skill in each detected IDE directory', () => {
-      fs.setDetectedIDEs([
-        { name: 'cursor', path: '/project/.agents/skills' },
-        { name: 'claude', path: '/project/.claude/skills' },
-      ]);
-      engine.create('frontend', ['obra/react-patterns']);
-
-      engine.activate('frontend');
-
-      const symlinks = fs.getSymlinks();
-      expect(symlinks.get('/project/.agents/skills/obra/react-patterns')).toBe(
-        '.contextkit/skills/obra/react-patterns'
-      );
-      expect(symlinks.get('/project/.claude/skills/obra/react-patterns')).toBe(
-        '.contextkit/skills/obra/react-patterns'
-      );
-    });
-
-    it('creates a symlink for every skill in the collection', () => {
-      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
-      engine.create('frontend', ['skill-a', 'skill-b']);
-
-      engine.activate('frontend');
-
-      const symlinks = fs.getSymlinks();
-      expect(symlinks.has('/project/.agents/skills/skill-a')).toBe(true);
-      expect(symlinks.has('/project/.agents/skills/skill-b')).toBe(true);
-    });
-
-    it('removes the previously active collection symlinks when activating another', () => {
-      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
-      engine.create('frontend', ['skill-a']);
-      engine.create('backend', ['skill-b']);
-      engine.activate('frontend');
-
-      engine.activate('backend');
-
-      const symlinks = fs.getSymlinks();
-      expect(symlinks.has('/project/.agents/skills/skill-a')).toBe(false);
-      expect(symlinks.has('/project/.agents/skills/skill-b')).toBe(true);
-    });
-
-    it('returns an error when a symlink target already exists', () => {
-      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
-      engine.create('frontend', ['skill-a']);
-      fs.setConflict('/project/.agents/skills/skill-a');
-
-      const result = engine.activate('frontend');
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain('/project/.agents/skills/skill-a');
-      }
-    });
-
-    it('warns and skips a skill whose source directory is missing', () => {
-      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
-      engine.create('frontend', ['skill-a', 'skill-b']);
-      fs.setMissing('.contextkit/skills/skill-a');
-
-      const result = engine.activate('frontend');
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value.warnings).toEqual(
-          expect.arrayContaining([expect.stringContaining('skill-a')])
-        );
-      }
-      const symlinks = fs.getSymlinks();
-      expect(symlinks.has('/project/.agents/skills/skill-a')).toBe(false);
-      expect(symlinks.has('/project/.agents/skills/skill-b')).toBe(true);
-    });
-
-    it('does not warn when every skill in the collection is present', () => {
-      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
-      engine.create('frontend', ['skill-a']);
-
-      const result = engine.activate('frontend');
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value.warnings).toEqual([]);
-      }
-    });
-
-    it('rolls back newly created symlinks and restores the previous collection on partial failure', () => {
-      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
-      engine.create('frontend', ['skill-a']);
-      engine.create('backend', ['skill-b', 'skill-c']);
-      engine.activate('frontend');
-      fs.setConflict('/project/.agents/skills/skill-c');
-
-      const result = engine.activate('backend');
-
-      expect(isErr(result)).toBe(true);
-      const symlinks = fs.getSymlinks();
-      expect(symlinks.has('/project/.agents/skills/skill-b')).toBe(false);
-      expect(symlinks.has('/project/.agents/skills/skill-c')).toBe(false);
-      expect(symlinks.get('/project/.agents/skills/skill-a')).toBe('.contextkit/skills/skill-a');
-      expect(engine.status().activeCollection).toBe('frontend');
-    });
-
-    it('leaves no active collection after a failed activation when none was active before', () => {
-      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
-      engine.create('backend', ['skill-b']);
-      fs.setConflict('/project/.agents/skills/skill-b');
-
-      const result = engine.activate('backend');
-
-      expect(isErr(result)).toBe(true);
-      expect(engine.status().activeCollection).toBeNull();
-    });
-
-    it('shows the newly activated collection as active, not the old one', () => {
-      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
-      engine.create('frontend', ['skill-a']);
-      engine.create('backend', ['skill-b']);
-      engine.activate('frontend');
-
-      engine.activate('backend');
-
-      expect(engine.status().activeCollection).toBe('backend');
-    });
-  });
-
-  describe('deactivate', () => {
-    it('deactivates the active collection', () => {
-      engine.create('frontend', []);
-      engine.activate('frontend');
-
-      const result = engine.deactivate();
-
-      expect(isOk(result)).toBe(true);
-    });
-
-    it('shows no active collection in status after deactivating', () => {
-      engine.create('frontend', []);
-      engine.activate('frontend');
-
-      engine.deactivate();
-
-      expect(engine.status().activeCollection).toBeNull();
-    });
-
-    it('is idempotent: deactivating when nothing is active still succeeds', () => {
-      const result = engine.deactivate();
-
-      expect(isOk(result)).toBe(true);
-      expect(engine.status().activeCollection).toBeNull();
-    });
-
-    it('removes symlinks for every skill in every detected IDE directory', () => {
-      fs.setDetectedIDEs([
-        { name: 'cursor', path: '/project/.agents/skills' },
-        { name: 'claude', path: '/project/.claude/skills' },
-      ]);
-      engine.create('frontend', ['skill-a', 'skill-b']);
-      engine.activate('frontend');
-
-      engine.deactivate();
-
-      const symlinks = fs.getSymlinks();
-      expect(symlinks.has('/project/.agents/skills/skill-a')).toBe(false);
-      expect(symlinks.has('/project/.agents/skills/skill-b')).toBe(false);
-      expect(symlinks.has('/project/.claude/skills/skill-a')).toBe(false);
-      expect(symlinks.has('/project/.claude/skills/skill-b')).toBe(false);
-    });
-
-    it('does not attempt symlink removal when nothing is active', () => {
-      fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.agents/skills' }]);
-
-      const result = engine.deactivate();
-
-      expect(isOk(result)).toBe(true);
     });
   });
 
@@ -352,6 +301,22 @@ describe('CollectionEngine', () => {
       expect(isErr(result)).toBe(true);
     });
 
+    it('returns an error and restores prior collections when persisting fails', () => {
+      engine.create('frontend', ['old-skill']);
+      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['new-skill'], backend: ['skill-b'] } });
+      fs.setWriteError(new Error('Disk full'));
+
+      const result = engine.sync('.contextkit.yml');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('Disk full');
+      }
+      fs.setWriteError(null);
+      expect(engine.list().map((c) => c.name)).toEqual(['frontend']);
+      expect(engine.list()[0]?.skills).toEqual(['old-skill']);
+    });
+
     it('warns about local collections not present in the config file', () => {
       engine.create('local-only', ['skill-x']);
       config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['skill-a'] } });
@@ -386,6 +351,33 @@ describe('CollectionEngine', () => {
 
     it('loads collections from an existing state file on construction', () => {
       fs.writeJSON(STATE_PATH, {
+        collections: [{ name: 'frontend', skills: ['react-patterns'], createdAt: '2024-01-01T00:00:00.000Z' }],
+        installedSkills: [],
+        version: '2.0',
+      });
+
+      const loadedEngine = new CollectionEngine(fs, config, skills);
+
+      expect(loadedEngine.list()).toEqual([
+        { name: 'frontend', skills: ['react-patterns'], createdAt: '2024-01-01T00:00:00.000Z' },
+      ]);
+    });
+
+    it('a duplicate name check considers collections loaded from the state file', () => {
+      fs.writeJSON(STATE_PATH, {
+        collections: [{ name: 'frontend', skills: [], createdAt: '2024-01-01T00:00:00.000Z' }],
+        installedSkills: [],
+        version: '2.0',
+      });
+      const loadedEngine = new CollectionEngine(fs, config, skills);
+
+      const result = loadedEngine.create('frontend', []);
+
+      expect(isErr(result)).toBe(true);
+    });
+
+    it('loads a pre-2.0 state file that still has activeCollection/lastUsedAt, ignoring those fields', () => {
+      fs.writeJSON(STATE_PATH, {
         collections: [{ name: 'frontend', skills: ['react-patterns'], createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null }],
         activeCollection: null,
         installedSkills: [],
@@ -394,23 +386,66 @@ describe('CollectionEngine', () => {
 
       const loadedEngine = new CollectionEngine(fs, config, skills);
 
-      expect(loadedEngine.list()).toEqual([
-        { name: 'frontend', skills: ['react-patterns'], createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null },
-      ]);
+      expect(loadedEngine.list().map((c) => c.name)).toEqual(['frontend']);
+    });
+  });
+
+  describe('export', () => {
+    it('converts every skill in a collection for the target IDE', async () => {
+      engine.create('frontend', ['obra/react-patterns', 'addyosmani/performance-review']);
+
+      const result = await engine.export(['frontend'], 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.succeeded).toEqual([
+          'frontend:obra/react-patterns',
+          'frontend:addyosmani/performance-review',
+        ]);
+        expect(result.value.failures).toEqual([]);
+      }
     });
 
-    it('a duplicate name check considers collections loaded from the state file', () => {
-      fs.writeJSON(STATE_PATH, {
-        collections: [{ name: 'frontend', skills: [], createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null }],
-        activeCollection: null,
-        installedSkills: [],
-        version: '1.0',
-      });
-      const loadedEngine = new CollectionEngine(fs, config, skills);
+    it('exports skills from multiple collections', async () => {
+      engine.create('frontend', ['obra/react-patterns']);
+      engine.create('backend', ['vercel-labs/security-review']);
 
-      const result = loadedEngine.create('frontend', []);
+      const result = await engine.export(['frontend', 'backend'], 'claude');
 
-      expect(isErr(result)).toBe(true);
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.succeeded).toEqual([
+          'frontend:obra/react-patterns',
+          'backend:vercel-labs/security-review',
+        ]);
+      }
+    });
+
+    it('records a failure and continues when a single skill fails to convert', async () => {
+      skills.setConvertError(new Error('skillsmith: unsupported format'));
+      engine.create('frontend', ['obra/react-patterns']);
+
+      const result = await engine.export(['frontend'], 'windsurf');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.succeeded).toEqual([]);
+        expect(result.value.failures).toEqual([
+          expect.stringContaining('obra/react-patterns'),
+        ]);
+      }
+    });
+
+    it('records a failure for a non-existent collection and continues with the rest', async () => {
+      engine.create('frontend', ['obra/react-patterns']);
+
+      const result = await engine.export(['missing', 'frontend'], 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.failures).toEqual([expect.stringContaining("Collection 'missing' not found")]);
+        expect(result.value.succeeded).toEqual(['frontend:obra/react-patterns']);
+      }
     });
   });
 
@@ -459,6 +494,25 @@ describe('CollectionEngine', () => {
         expect(persisted.value.installedSkills).toEqual([]);
       }
     });
+
+    it('returns an error and does not keep the skill recorded when persisting fails', async () => {
+      fs.setWriteError(new Error('Disk full'));
+
+      const result = await engine.install('obra/react-patterns');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('Disk full');
+      }
+
+      fs.setWriteError(null);
+      await engine.install('obra/react-patterns');
+      const persisted = fs.readJSON<{ installedSkills: Array<{ id: string }> }>(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.installedSkills).toHaveLength(1);
+      }
+    });
   });
 
   describe('search', () => {
@@ -481,6 +535,25 @@ describe('CollectionEngine', () => {
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.message).toContain('network unreachable');
+      }
+    });
+  });
+
+  describe('convert', () => {
+    it('converts a skill via the skills adapter', async () => {
+      const result = await engine.convert('obra/react-patterns', 'cursor');
+
+      expect(isOk(result)).toBe(true);
+    });
+
+    it('returns an error when the skills adapter conversion fails', async () => {
+      skills.setConvertError(new Error('skillsmith: unsupported format'));
+
+      const result = await engine.convert('obra/react-patterns', 'cursor');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('unsupported format');
       }
     });
   });

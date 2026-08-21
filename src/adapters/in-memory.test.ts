@@ -11,38 +11,6 @@ describe('InMemoryFileSystemAdapter', () => {
     fs = new InMemoryFileSystemAdapter();
   });
 
-  it('creates a symlink that can be queried back', () => {
-    const result = fs.createSymlink('/skills/react', '/cursor/react');
-
-    expect(isOk(result)).toBe(true);
-    expect(fs.getSymlinks()).toEqual(new Map([['/cursor/react', '/skills/react']]));
-  });
-
-  it('removes a symlink', () => {
-    fs.createSymlink('/skills/react', '/cursor/react');
-
-    const result = fs.removeSymlink('/cursor/react');
-
-    expect(isOk(result)).toBe(true);
-    expect(fs.getSymlinks().size).toBe(0);
-  });
-
-  it('errors when removing a symlink that does not exist', () => {
-    const result = fs.removeSymlink('/cursor/missing');
-
-    expect(isErr(result)).toBe(true);
-  });
-
-  it('returns configured IDEs from detectIDEs', () => {
-    fs.setDetectedIDEs([{ name: 'cursor', path: '/project/.cursor' }]);
-
-    expect(fs.detectIDEs('/project')).toEqual([{ name: 'cursor', path: '/project/.cursor' }]);
-  });
-
-  it('detectIDEs returns an empty array by default', () => {
-    expect(fs.detectIDEs('/project')).toEqual([]);
-  });
-
   it('writes and reads back JSON at a path', () => {
     const data = { collections: [] };
 
@@ -59,23 +27,11 @@ describe('InMemoryFileSystemAdapter', () => {
     expect(isErr(result)).toBe(true);
   });
 
-  it('exists() returns true by default for any path', () => {
-    expect(fs.exists('/skills/react')).toBe(true);
-  });
-
-  it('exists() returns false for a path marked missing', () => {
-    fs.setMissing('/skills/react');
-
-    expect(fs.exists('/skills/react')).toBe(false);
-  });
-
-  it('reset() clears symlinks and files', () => {
-    fs.createSymlink('/skills/react', '/cursor/react');
+  it('reset() clears files', () => {
     fs.writeJSON('/state.json', { foo: 'bar' });
 
     fs.reset();
 
-    expect(fs.getSymlinks().size).toBe(0);
     expect(isErr(fs.readJSON('/state.json'))).toBe(true);
   });
 });
@@ -130,6 +86,18 @@ describe('InMemorySkillsAdapter', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('browse() returns distinct all-time and trending lists', async () => {
+    const allTime = await skills.browse('all-time');
+    const trending = await skills.browse('trending');
+
+    expect(isOk(allTime)).toBe(true);
+    expect(isOk(trending)).toBe(true);
+    if (isOk(allTime) && isOk(trending)) {
+      expect(allTime.value).not.toEqual(trending.value);
+      expect(allTime.value[0]?.installs).toEqual(expect.any(Number));
     }
   });
 

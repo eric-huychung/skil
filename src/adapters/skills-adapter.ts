@@ -2,33 +2,33 @@ import axios from 'axios';
 import { execa } from 'execa';
 import type { ISkillsAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
-import type { IDE, Skill } from '../types/index.js';
+import type { BrowseView, IDE, Skill } from '../types/index.js';
 
-const SKILLS_SH_BASE_URL = 'https://skills.sh';
-const SEARCH_RESULT_LIMIT = 20;
+const DEFAULT_API_BASE_URL = 'https://contextkit.dev';
 
 interface SkillsSearchResponse {
   data: Array<{ id: string }>;
 }
 
+interface SkillsBrowseResponse {
+  data: Array<{ id: string; installs?: number }>;
+}
+
 /**
- * Real implementation of ISkillsAdapter, backed by the skills.sh search API
- * and (in later tasks) `npx skills add` / `skillsmith`. Used in production;
- * tests use InMemorySkillsAdapter instead so CollectionEngine tests never hit
- * the network or spawn subprocesses.
+ * Real implementation of ISkillsAdapter. `search` calls ContextKit's own
+ * backend (see `src/backend/skills-proxy.ts`), which authenticates to
+ * skills.sh with a Vercel OIDC token — so no API key is ever needed here.
+ * `install`/`convert` still shell out locally; skills.sh has no HTTP
+ * endpoint for either. Tests use InMemorySkillsAdapter instead so
+ * CollectionEngine tests never hit the network or spawn subprocesses.
  */
 export class SkillsAdapter implements ISkillsAdapter {
-  constructor(private readonly apiKey: string | undefined = process.env.SKILLS_API_KEY) {}
+  constructor(private readonly apiBaseUrl: string = process.env.CONTEXTKIT_API_URL ?? DEFAULT_API_BASE_URL) {}
 
   async search(query: string): Promise<Result<Skill[]>> {
-    if (!this.apiKey) {
-      return err(new Error('Missing skills.sh API key. Set the SKILLS_API_KEY environment variable.'));
-    }
-
     try {
-      const response = await axios.get<SkillsSearchResponse>(`${SKILLS_SH_BASE_URL}/api/v1/skills/search`, {
-        params: { q: query, limit: SEARCH_RESULT_LIMIT },
-        headers: { Authorization: `Bearer ${this.apiKey}` },
+      const response = await axios.get<SkillsSearchResponse>(`${this.apiBaseUrl}/api/skills/search`, {
+        params: { q: query },
       });
 
       const skills: Skill[] = response.data.data.map((result) => ({
@@ -38,7 +38,25 @@ export class SkillsAdapter implements ISkillsAdapter {
       }));
       return ok(skills);
     } catch (error) {
-      return err(new Error(`Failed to search skills.sh for '${query}': ${(error as Error).message}`));
+      return err(new Error(`Failed to search skills for '${query}': ${(error as Error).message}`));
+    }
+  }
+
+  async browse(view: BrowseView): Promise<Result<Skill[]>> {
+    try {
+      const response = await axios.get<SkillsBrowseResponse>(`${this.apiBaseUrl}/api/skills`, {
+        params: { view },
+      });
+
+      const skills: Skill[] = response.data.data.map((result) => ({
+        id: result.id,
+        source: 'skills.sh',
+        installedAt: '',
+        ...(result.installs !== undefined ? { installs: result.installs } : {}),
+      }));
+      return ok(skills);
+    } catch (error) {
+      return err(new Error(`Failed to browse ${view} skills: ${(error as Error).message}`));
     }
   }
 

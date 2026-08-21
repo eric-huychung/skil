@@ -25,10 +25,6 @@ export class ConfigAdapter implements IConfigAdapter {
     }
   }
 
-  write(_path: string, _config: Config): Result<void> {
-    return err(new Error('ConfigAdapter.write is not implemented yet'));
-  }
-
   validate(config: Config): Result<void> {
     if (typeof config.collections !== 'object' || config.collections === null) {
       return err(new Error(

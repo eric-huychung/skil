@@ -37,4 +37,13 @@ describe('runCreate', () => {
     expect(outcome.isError).toBe(true);
     expect(outcome.message).toContain("Collection 'frontend' already exists");
   });
+
+  it('stores a command template when provided', () => {
+    const engine = buildEngine();
+
+    const outcome = runCreate(engine, 'frontend', [], 'npm run dev');
+
+    expect(outcome.isError).toBe(false);
+    expect(engine.list()[0]?.command).toBe('npm run dev');
+  });
 });

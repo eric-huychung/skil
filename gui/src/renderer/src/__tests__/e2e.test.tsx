@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
 import { createInMemoryEngine, installTestBridge, renderWithProviders } from '../test-utils';
 
 describe('GUI workflow (real engine)', () => {
-  it('drives create -> activate -> deactivate through rendered components, matching engine state at each step', async () => {
+  it('drives create -> add skill -> remove skill -> export through rendered components, matching engine state at each step', async () => {
     // A real CollectionEngine backed by in-memory adapters, not a mocked
     // bridge — the same engine the CLI runs against, just faked at the
     // file system/config/skills.sh boundaries.
@@ -22,23 +22,28 @@ describe('GUI workflow (real engine)', () => {
     await userEvent.type(screen.getByLabelText('Skills'), 'obra/react-patterns{enter}');
     await userEvent.click(screen.getByRole('button', { name: 'Create collection' }));
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'frontend' })).toBeInTheDocument());
+    const row = await screen.findByRole('listitem', { name: 'Collection frontend' });
     expect(engine.list()).toHaveLength(1);
     expect(engine.list()[0]).toMatchObject({ name: 'frontend', skills: ['obra/react-patterns'] });
-    expect(engine.status().activeCollection).toBeNull();
 
-    // Activate it by clicking the rendered row.
-    await userEvent.click(screen.getByRole('button', { name: 'frontend' }));
+    // Add a second skill through the rendered row.
+    await userEvent.type(within(row).getByLabelText('Add skill to frontend'), 'addyosmani/performance-review{enter}');
 
-    await waitFor(() => expect(screen.getByText('Active')).toBeInTheDocument());
-    expect(engine.status().activeCollection).toBe('frontend');
+    await waitFor(() => expect(within(row).getByText('addyosmani/performance-review')).toBeInTheDocument());
+    expect(engine.list()[0].skills).toEqual(['obra/react-patterns', 'addyosmani/performance-review']);
 
-    // Deactivate it via the rendered Deactivate control.
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
+    // Remove the first skill via its rendered remove button.
+    await userEvent.click(within(row).getByRole('button', { name: 'Remove obra/react-patterns' }));
 
-    await waitFor(() => expect(screen.queryByText('Active')).not.toBeInTheDocument());
-    expect(engine.status().activeCollection).toBeNull();
-    // The collection itself still exists — deactivating doesn't delete it.
+    await waitFor(() => expect(within(row).queryByText('obra/react-patterns')).not.toBeInTheDocument());
+    expect(engine.list()[0].skills).toEqual(['addyosmani/performance-review']);
+
+    // Export the collection to the selected IDE via the rendered controls.
+    await userEvent.selectOptions(within(row).getByLabelText('Export frontend to'), 'windsurf');
+    await userEvent.click(within(row).getByRole('button', { name: 'Export frontend' }));
+
+    await waitFor(() => expect(within(row).getByText('Exported to windsurf')).toBeInTheDocument());
+    // The collection itself still exists — exporting doesn't delete it.
     expect(engine.list()).toHaveLength(1);
   });
 });

@@ -23,6 +23,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@vercel/oidc": "^3.8.5",
     "axios": "^1.7.9",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.5",
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.17.9",
+    "jsdom": "^26.1.0",
     "memfs": "^4.14.0",
     "nock": "^13.5.6",
     "typescript": "^5.7.2",

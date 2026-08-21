@@ -3,7 +3,8 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CollectionList from './CollectionList';
 import { createInMemoryEngine, createTestBridge, renderWithProviders } from '../test-utils';
-import { err } from '../../../../../src/core/result.js';
+import { err, ok } from '../../../../../src/core/result.js';
+import type { ExportResult } from '../../../../../src/types/index.js';
 
 describe('CollectionList', () => {
   it('shows the empty state when there are no collections', async () => {
@@ -14,7 +15,7 @@ describe('CollectionList', () => {
     await waitFor(() => expect(screen.getByText('No collections yet')).toBeInTheDocument());
   });
 
-  it('renders one row per collection from engine.list()', async () => {
+  it('renders one row per collection, each listing its skills', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', ['obra/react-patterns']);
     engine.create('backend', ['addyosmani/api-design']);
@@ -22,73 +23,80 @@ describe('CollectionList', () => {
 
     renderWithProviders(<CollectionList />, { bridge });
 
-    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2));
-    expect(screen.getByText('frontend')).toBeInTheDocument();
-    expect(screen.getByText('backend')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByRole('listitem', { name: /^Collection/ })).toHaveLength(2));
+    const frontendRow = screen.getByRole('listitem', { name: 'Collection frontend' });
+    expect(within(frontendRow).getByText('obra/react-patterns')).toBeInTheDocument();
+    const backendRow = screen.getByRole('listitem', { name: 'Collection backend' });
+    expect(within(backendRow).getByText('addyosmani/api-design')).toBeInTheDocument();
   });
 
-  it('visually indicates the active collection', async () => {
+  it('adds a skill to a collection via its add-skill input', async () => {
+    const engine = createInMemoryEngine();
+    engine.create('frontend', []);
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CollectionList />, { bridge });
+    const frontendRow = await screen.findByRole('listitem', { name: 'Collection frontend' });
+
+    await userEvent.type(within(frontendRow).getByLabelText('Add skill to frontend'), 'obra/react-patterns{enter}');
+
+    await waitFor(() => expect(within(frontendRow).getByText('obra/react-patterns')).toBeInTheDocument());
+    expect(engine.list()[0].skills).toEqual(['obra/react-patterns']);
+  });
+
+  it('removes a skill from a collection when its remove button is clicked', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', ['obra/react-patterns']);
-    engine.create('backend', ['addyosmani/api-design']);
-    engine.activate('frontend');
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
+    const frontendRow = await screen.findByRole('listitem', { name: 'Collection frontend' });
+    await waitFor(() => expect(within(frontendRow).getByText('obra/react-patterns')).toBeInTheDocument());
 
-    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2));
-    const frontendRow = screen.getByText('frontend').closest('li');
-    const backendRow = screen.getByText('backend').closest('li');
-    expect(frontendRow).not.toBeNull();
-    expect(backendRow).not.toBeNull();
-    expect(within(frontendRow!).getByText('Active')).toBeInTheDocument();
-    expect(within(backendRow!).queryByText('Active')).not.toBeInTheDocument();
+    await userEvent.click(within(frontendRow).getByRole('button', { name: 'Remove obra/react-patterns' }));
+
+    await waitFor(() => expect(within(frontendRow).queryByText('obra/react-patterns')).not.toBeInTheDocument());
+    expect(engine.list()[0].skills).toEqual([]);
   });
 
-  it('activates a collection when its row is clicked', async () => {
+  it('exports a collection to the selected IDE', async () => {
     const engine = createInMemoryEngine();
-    engine.create('frontend', []);
-    engine.create('backend', []);
+    engine.create('frontend', ['obra/react-patterns']);
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2));
+    const frontendRow = await screen.findByRole('listitem', { name: 'Collection frontend' });
 
-    await userEvent.click(screen.getByRole('button', { name: 'frontend' }));
+    await userEvent.selectOptions(within(frontendRow).getByLabelText('Export frontend to'), 'claude');
+    await userEvent.click(within(frontendRow).getByRole('button', { name: 'Export frontend' }));
 
-    await waitFor(() => expect(engine.status().activeCollection).toBe('frontend'));
-    const frontendRow = screen.getByText('frontend').closest('li');
-    expect(within(frontendRow!).getByText('Active')).toBeInTheDocument();
+    await waitFor(() => expect(within(frontendRow).getByText('Exported to claude')).toBeInTheDocument());
   });
 
-  it('deactivates the active collection when Deactivate is clicked', async () => {
+  it('shows an inline error when export fails', async () => {
     const engine = createInMemoryEngine();
-    engine.create('frontend', []);
-    engine.activate('frontend');
-    const bridge = createTestBridge(engine);
+    engine.create('frontend', ['obra/react-patterns']);
+    const failureResult: ExportResult = { succeeded: [], failures: ["'frontend:obra/react-patterns': boom"] };
+    const bridge = { ...createTestBridge(engine), exportCollections: async () => ok(failureResult) };
 
     renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByText('Active')).toBeInTheDocument());
+    const frontendRow = await screen.findByRole('listitem', { name: 'Collection frontend' });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
+    await userEvent.click(within(frontendRow).getByRole('button', { name: 'Export frontend' }));
 
-    await waitFor(() => expect(engine.status().activeCollection).toBeNull());
-    expect(screen.queryByText('Active')).not.toBeInTheDocument();
+    await waitFor(() => expect(within(frontendRow).getByRole('alert')).toHaveTextContent(/boom/));
   });
 
-  it('shows an inline error when activation fails', async () => {
+  it('shows an inline error when the export call itself fails', async () => {
     const engine = createInMemoryEngine();
-    engine.create('frontend', []);
-    const bridge = {
-      ...createTestBridge(engine),
-      activateCollection: async () => err(new Error("Collection 'frontend' not found. Run 'contextkit list'.")),
-    };
+    engine.create('frontend', ['obra/react-patterns']);
+    const bridge = { ...createTestBridge(engine), exportCollections: async () => err(new Error('network down')) };
 
     renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'frontend' })).toBeInTheDocument());
+    const frontendRow = await screen.findByRole('listitem', { name: 'Collection frontend' });
 
-    await userEvent.click(screen.getByRole('button', { name: 'frontend' }));
+    await userEvent.click(within(frontendRow).getByRole('button', { name: 'Export frontend' }));
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/not found/));
+    await waitFor(() => expect(within(frontendRow).getByRole('alert')).toHaveTextContent(/network down/));
   });
 });

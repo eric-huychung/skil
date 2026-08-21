@@ -6,18 +6,18 @@ Developers working with AI coding assistants accumulate many skills (context aug
 
 ## Solution
 
-A thin orchestration layer (CLI + GUI) that manages AI skill collections. Developers can group skills into named collections (e.g., "frontend", "backend", "api-design"), activate/deactivate them with one command, and sync team configurations via a `.contextkit.yml` file. The tool manipulates symlinks in skill directories and wraps existing tools (Vercel skills CLI, skillsmith, skills.sh) rather than rebuilding infrastructure.
+A thin orchestration layer (CLI + GUI) that manages AI skill collections. Developers can group skills into named collections (e.g., "frontend", "backend", "api-design"), edit them freely (add/remove skills), tie an optional command template to each one, and sync team configurations via a `.contextkit.yml` file. When a collection is ready for an IDE, `contextkit export` converts every skill in it to that IDE's format. The tool wraps existing tools (Vercel skills CLI, skillsmith, skills.sh) rather than rebuilding infrastructure — skills.sh search itself is proxied through ContextKit's own Vercel-hosted backend so users never need their own API key.
 
 ## User Stories
 
 1. As a developer, I want to create named skill collections, so that I can organize my skills by project phase or domain
-2. As a developer, I want to activate a specific collection, so that only relevant skills load into my AI assistant
-3. As a developer, I want to disable the current collection, so that I can work without any skills when needed
-4. As a developer, I want to see all my collections, so that I know what contexts I've configured
-5. As a developer, I want to see which collection is currently active, so that I understand what context my AI has
-6. As a developer, I want to search for skills, so that I can discover new skills without leaving my terminal
-7. As a developer, I want to install skills via a consistent command, so that I don't need to remember external tool syntax
-8. As a developer, I want to convert skills between IDE formats, so that I can use the same skill across Cursor, Claude, and Windsurf
+2. As a developer, I want to add or remove skills from an existing collection, so that I can keep it up to date without recreating it
+3. As a developer, I want to see all my collections, so that I know what contexts I've configured
+4. As a developer, I want to search for skills, so that I can discover new skills without leaving my terminal
+5. As a developer, I want to install skills via a consistent command, so that I don't need to remember external tool syntax
+6. As a developer, I want to convert skills between IDE formats, so that I can use the same skill across Cursor, Claude, and Windsurf
+7. As a developer, I want to export a whole collection (or several) to a target IDE in one command, so that I don't have to convert each skill individually
+8. As a developer, I want to attach a command template to a collection, so that I can re-run the workflow that collection is for with one command
 9. As a team lead, I want to define collections in a config file, so that my team can use standardized skill sets
 10. As a team member, I want to sync collections from a config file, so that I match my team's AI context setup
 11. As a developer, I want to export my current setup to a config file, so that I can share my configuration with others
@@ -26,52 +26,47 @@ A thin orchestration layer (CLI + GUI) that manages AI skill collections. Develo
 14. As a visual-preference user, I want a GUI desktop app, so that I can manage collections with drag-and-drop
 15. As a GUI user, I want to see all installed skills with checkboxes, so that I can easily build collections visually
 16. As a GUI user, I want to search and install from skills.sh in-app, so that I don't need to switch to browser or terminal
-17. As a developer, I want collections to work via symlinks, so that activation is instant and IDE-compatible
+17. As a developer, I want to search and install skills without needing my own skills.sh API key, so that I can start using the tool immediately
 18. As a developer, I want to know if my skills conflict with team config during sync, so that I can resolve issues manually
 19. As a developer, I want to update installed skills, so that I have the latest versions
 20. As a team using different IDEs, I want the config format to be IDE-agnostic, so that one config works for everyone
+21. As a developer, I want an empty search to show the skills.sh all-time and trending leaderboards, so that I can browse popular skills without inventing a query
 
 ## Implementation Decisions
 
 ### Core Architecture
 
-- **Thin wrapper philosophy**: ContextKit does not rebuild installation, discovery, or conversion infrastructure. It calls `npx skills add`, skills.sh API, and `skillsmith` under the hood.
-- **Symlink-based activation**: Collections work by creating/removing symlinks in IDE skill directories (`.agents/skills/`, `.claude/skills/`, `.windsurf/skills/`). Original skills remain in a ContextKit-managed directory.
-- **Multi-IDE support**: Single source of truth for collections, but symlinks are created in all detected IDE directories.
+- **Thin wrapper philosophy**: ContextKit does not rebuild installation, discovery, or conversion infrastructure. It calls `npx skills add`, skills.sh API (via ContextKit's own OIDC-authenticated backend proxy, so users never need their own API key), and `skillsmith` under the hood. The skills.sh all-time/trending leaderboard is proxied the same way and cached on Vercel's CDN — ContextKit does not host a marketplace or its own skill registry.
+- **Editable collections, export on demand**: Collections are named groups of skills you add to and remove from freely. There's no "active" collection — when a collection is ready for an IDE, `contextkit export` converts every skill in it (via `skillsmith`) to that IDE's format.
+- **Command templates**: A collection can optionally carry a shell command template (`contextkit create --command "..."`), run later with `contextkit run <name>`.
 - **Config-first team sync**: `.contextkit.yml` defines collections as code, enabling team standardization similar to `package.json`.
 
 ### Module Boundaries
 
 1. **Collection Manager**
-   - Create, use, disable, list, status operations
-   - Maintains collection metadata (name, included skills)
-   - Tracks active collection state
-   - Validates collection operations (e.g., can't use non-existent collection)
+   - Create, add-skill, remove-skill, list, sync operations
+   - Maintains collection metadata (name, included skills, optional command template)
+   - Validates collection operations (e.g., can't add a skill to a non-existent collection)
 
-2. **Symlink Manager**
-   - Creates/removes symlinks in IDE directories
-   - Detects which IDEs are present
-   - Handles edge cases (symlink already exists, target missing, permissions)
-
-3. **Config Parser**
-   - Reads/writes `.contextkit.yml`
+2. **Config Parser**
+   - Reads `.contextkit.yml`
    - Validates YAML structure
-   - Exports current local state to config format
 
-4. **External Tool Adapters**
-   - Search adapter: calls skills.sh API
+3. **External Tool Adapters**
+   - Search adapter: calls ContextKit's Vercel backend, which proxies to skills.sh with a server-side OIDC token
+   - Browse adapter: same backend, `GET /api/skills?view=all-time|trending`, CDN-cached; not a ContextKit-hosted registry
    - Install adapter: wraps `npx skills add`
-   - Convert adapter: wraps `skillsmith`
+   - Convert adapter: wraps `skillsmith` (used by both `contextkit convert` for a single skill and `contextkit export` for a whole collection)
    - Each adapter handles error cases and provides friendly output
 
-5. **CLI Interface**
+4. **CLI Interface**
    - Command parsing and routing
    - Output formatting (tables, colors, status messages)
    - Error handling and user feedback
 
-6. **GUI Application** (Electron)
+5. **GUI Application** (Electron)
    - Uses same core engine as CLI
-   - Visual components: skill list, collection builder, search interface
+   - Visual components: collection list with per-collection add/remove skill controls and IDE export, create-collection form, search/install panel
    - No GUI-specific business logic—just UI binding to core
 
 ### Data Model
@@ -80,7 +75,8 @@ A thin orchestration layer (CLI + GUI) that manages AI skill collections. Develo
 ```
 {
   name: string,
-  skills: string[] // skill identifiers, e.g., ["obra/react-patterns", "vercel-labs/security-review"]
+  skills: string[], // skill identifiers, e.g., ["obra/react-patterns", "vercel-labs/security-review"]
+  command?: string // optional shell template, run via `contextkit run <name>`
 }
 ```
 
@@ -88,8 +84,7 @@ A thin orchestration layer (CLI + GUI) that manages AI skill collections. Develo
 ```
 {
   collections: Collection[],
-  activeCollection: string | null,
-  installedSkills: string[]
+  installedSkills: Skill[]
 }
 ```
 
@@ -106,24 +101,23 @@ collections:
 
 ### Key Technical Decisions
 
-- **Mutual exclusivity**: Only one collection can be active at a time (not composable). Simplifies mental model and avoids skill conflicts.
+- **No "active" collection**: Collections aren't mutually exclusive or switched between — they're edited in place and exported to one or more IDEs independently, whenever needed.
 - **Sync conflict resolution**: If `contextkit sync` encounters locally installed skills not in config, warn but don't delete. Let user decide.
-- **IDE detection**: Scan for `.agents/`, `.claude/`, `.windsurf/` directories in project root to determine which IDEs to support.
 - **Local-only collections**: All collections are local to the project. No global namespace for MVP.
 - **No version pinning in MVP**: `.contextkit.yml` lists skill names but not versions. Use whatever version is installed locally.
 
 ### CLI Commands
 
-- `contextkit create <name> --skills skill1,skill2,skill3`
-- `contextkit use <name>`
-- `contextkit disable`
+- `contextkit create <name> --skills skill1,skill2,skill3 [--command "<cmd>"]`
+- `contextkit add <name> <skillId>`
+- `contextkit remove <name> <skillId>`
+- `contextkit run <name>`
 - `contextkit list`
-- `contextkit status`
-- `contextkit search [query]`
+- `contextkit search [query] [--trending]` — with a query, typed search; with no query, all-time leaderboard (top 10); `--trending` is trending (top 10) and is ignored when a query is given
 - `contextkit install <skill>`
 - `contextkit convert <skill> --to cursor|claude|windsurf`
+- `contextkit export <collections...> --to cursor|claude|windsurf`
 - `contextkit sync`
-- `contextkit export`
 
 ### GUI Features
 
@@ -131,8 +125,9 @@ collections:
 - Main panel showing installed skills (checkboxes)
 - Drag-drop skills into collection builder
 - In-app search (queries skills.sh)
+- Empty-state All time / Trending leaderboard tabs with install counts (fetched on first visit to Search)
 - One-click install from search results
-- Visual indicator of active collection
+- Per-collection export to a target IDE
 - Button to run team sync
 
 ## Testing Decisions
@@ -140,29 +135,22 @@ collections:
 ### What Makes a Good Test
 
 - Test external behavior, not implementation details
-- Mock external calls (skills.sh API, `npx skills add`, `skillsmith`)
+- Mock external calls (skills.sh backend, `npx skills add`, `skillsmith`)
 - Use temporary directories for file system tests
-- Verify symlink creation/removal without requiring real IDE setup
+- Verify export conversion calls without requiring real IDE setup
 
 ### Modules to Test
 
 1. **Collection Manager**: Core business logic
-   - Create/use/disable/list operations
-   - State transitions (active → disabled, etc.)
+   - Create/add-skill/remove-skill/list operations
    - Validation (collection name conflicts, non-existent collections)
 
-2. **Symlink Manager**: File system operations
-   - Symlink creation/removal
-   - Multi-IDE directory handling
-   - Error cases (permissions, missing targets)
-
-3. **Config Parser**: YAML parsing and generation
+2. **Config Parser**: YAML parsing
    - Read valid `.contextkit.yml`
    - Handle malformed YAML gracefully
-   - Export state to correct YAML structure
 
-4. **External Tool Adapters**: Integration points
-   - Mock HTTP calls for skills.sh API
+3. **External Tool Adapters**: Integration points
+   - Mock HTTP calls for the skills.sh backend proxy
    - Mock subprocess calls for `npx skills`, `skillsmith`
    - Error propagation from external tools
 
@@ -178,19 +166,18 @@ This is a greenfield project, but testing approach should follow Node.js CLI con
 
 The primary test seam is the **Collection Manager** — that's where core logic lives. File system and external tool calls should be injected/mocked at module boundaries, not tested end-to-end in unit tests.
 
-Integration tests can verify the full flow (create → use → disable) with a real temporary directory, but without calling external APIs.
+Integration tests can verify the full flow (create → add → remove → export) with a real temporary directory, but without calling external APIs.
 
 ## Out of Scope
 
 ### Not in MVP
 
-- **Phase auto-detection**: No automatic switching based on what the user is doing. User controls when to switch collections.
+- **Phase auto-detection**: No automatic switching based on what the user is doing. Collections are edited and exported explicitly.
 - **Token management UI**: No context window visualization or token estimation. IDEs already show this.
 - **IDE extensions**: No VSCode/Cursor/JetBrains plugins. CLI + desktop app provides universal compatibility.
 - **Skill authoring/editing**: Users edit skills at source (GitHub repos), not in ContextKit.
 - **Custom skill hosting**: No marketplace. Point to skills.sh and GitHub.
 - **Version pinning**: Config lists skill names but not versions.
-- **Composable collections**: Only one collection active at a time.
 - **Global collections**: All collections are project-local.
 - **Approval workflows**: No team approval process for config changes.
 - **Analytics/telemetry**: No tracking of which collections are popular.
@@ -208,7 +195,7 @@ Integration tests can verify the full flow (create → use → disable) with a r
 ### Open Questions (to validate during MVP)
 
 **Technical:**
-- IDE restart requirements: Some IDEs watch directories, others need restart after symlink changes. Test with Cursor, Claude Desktop, Windsurf.
+- Export staleness: Exported files don't auto-update when a collection changes. Should `export` warn if a collection was edited since its last export?
 - Conflict resolution: Should `contextkit sync` be destructive (replace local collections) or additive (merge with local)?
 - Local vs. global collections: Is project-local always correct, or do users want global collections too?
 

@@ -2,13 +2,15 @@ import { Command } from 'commander';
 import type { ICollectionEngine } from '../interfaces/engine.js';
 import { CONTEXTKIT_VERSION } from '../index.js';
 import { registerCreateCommand } from './commands/create.js';
-import { registerUseCommand } from './commands/use.js';
-import { registerDisableCommand } from './commands/disable.js';
 import { registerListCommand } from './commands/list.js';
-import { registerStatusCommand } from './commands/status.js';
 import { registerSearchCommand } from './commands/search.js';
 import { registerInstallCommand } from './commands/install.js';
+import { registerConvertCommand } from './commands/convert.js';
 import { registerSyncCommand } from './commands/sync.js';
+import { registerAddCommand } from './commands/add.js';
+import { registerRemoveCommand } from './commands/remove.js';
+import { registerRunCommand } from './commands/run.js';
+import { registerExportCommand } from './commands/export.js';
 
 /**
  * Builds the contextkit CLI program. Commands are thin: they parse args,
@@ -24,13 +26,15 @@ export function createProgram(engine: ICollectionEngine): Command {
     .version(CONTEXTKIT_VERSION);
 
   registerCreateCommand(program, engine);
-  registerUseCommand(program, engine);
-  registerDisableCommand(program, engine);
   registerListCommand(program, engine);
-  registerStatusCommand(program, engine);
   registerSearchCommand(program, engine);
   registerInstallCommand(program, engine);
+  registerConvertCommand(program, engine);
   registerSyncCommand(program, engine);
+  registerAddCommand(program, engine);
+  registerRemoveCommand(program, engine);
+  registerRunCommand(program, engine);
+  registerExportCommand(program, engine);
 
   return program;
 }

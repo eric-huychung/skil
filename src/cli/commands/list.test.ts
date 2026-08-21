@@ -33,12 +33,21 @@ describe('runList', () => {
     expect(outcome.message).toContain('1');
   });
 
-  it('shows "never" for a collection that has not been used', () => {
+  it('shows a placeholder for a collection with no command template', () => {
     const engine = buildEngine();
     engine.create('frontend', []);
 
     const outcome = runList(engine);
 
-    expect(outcome.message).toContain('never');
+    expect(outcome.message).toContain('—');
+  });
+
+  it("shows a collection's command template", () => {
+    const engine = buildEngine();
+    engine.create('frontend', [], 'npm run dev');
+
+    const outcome = runList(engine);
+
+    expect(outcome.message).toContain('npm run dev');
   });
 });

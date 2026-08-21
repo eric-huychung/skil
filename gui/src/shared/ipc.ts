@@ -1,7 +1,7 @@
 import type { Result } from '../../../src/core/result.js';
-import type { ActivateResult, Collection, Skill, Status } from '../../../src/types/index.js';
+import type { BrowseView, Collection, ExportResult, IDE, Skill } from '../../../src/types/index.js';
 
-export type { ActivateResult, Collection, Result, Skill, Status };
+export type { BrowseView, Collection, ExportResult, IDE, Result, Skill };
 
 /**
  * IPC channel names shared between the main process (handler registration)
@@ -10,11 +10,12 @@ export type { ActivateResult, Collection, Result, Skill, Status };
  */
 export const IPC_CHANNELS = {
   listCollections: 'contextkit:list-collections',
-  getStatus: 'contextkit:get-status',
-  activateCollection: 'contextkit:activate-collection',
-  deactivateCollection: 'contextkit:deactivate-collection',
   createCollection: 'contextkit:create-collection',
+  addSkillToCollection: 'contextkit:add-skill-to-collection',
+  removeSkillFromCollection: 'contextkit:remove-skill-from-collection',
+  exportCollections: 'contextkit:export-collections',
   searchSkills: 'contextkit:search-skills',
+  browseSkills: 'contextkit:browse-skills',
   installSkill: 'contextkit:install-skill',
 } as const;
 
@@ -27,10 +28,11 @@ export const IPC_CHANNELS = {
  */
 export interface ContextKitBridge {
   listCollections(): Promise<Collection[]>;
-  getStatus(): Promise<Status>;
-  activateCollection(name: string): Promise<Result<ActivateResult>>;
-  deactivateCollection(): Promise<Result<void>>;
   createCollection(name: string, skillIds: string[]): Promise<Result<Collection>>;
+  addSkillToCollection(name: string, skillId: string): Promise<Result<Collection>>;
+  removeSkillFromCollection(name: string, skillId: string): Promise<Result<Collection>>;
+  exportCollections(names: string[], targetIDE: IDE): Promise<Result<ExportResult>>;
   searchSkills(query: string): Promise<Result<Skill[]>>;
+  browseSkills(view: BrowseView): Promise<Result<Skill[]>>;
   installSkill(skillId: string): Promise<Result<Skill>>;
 }

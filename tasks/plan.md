@@ -51,7 +51,7 @@ See `docs/design/architecture.md` for detailed rationale and dependency versions
 
 ## Task List
 
-**37 tasks across 8 phases.** Detailed acceptance criteria, verification steps, and file estimates in `tasks/todo.md`.
+**45 tasks across 9 phases.** Detailed acceptance criteria, verification steps, and file estimates in `tasks/todo.md`.
 
 ### Phase 1: Foundation (Tasks 1-4)
 Bootstrap project with TypeScript, testing, and core types.
@@ -154,6 +154,22 @@ Handle error scenarios, edge cases, and user experience improvements.
 
 ---
 
+### Phase 9: GUI (Tasks 38-45)
+Desktop GUI, built only after the CLI (Phases 1-8) is stable. Same `CollectionEngine` and adapters as the CLI — this phase is presentation-only.
+
+38. Decide and scaffold desktop GUI shell (Electron vs Tauri) with React
+39. Set up component test harness with in-memory CollectionEngine
+40. TDD - Collection list view
+41. TDD - Activate/deactivate controls
+42. TDD - Create collection flow
+43. TDD - Skill search and install panel
+44. Apply design system with the ui-ux-pro-max skill
+45. E2E test: full GUI workflow with real engine
+
+**Checkpoint:** GUI MVP complete - shares 100% of business logic with the CLI
+
+---
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
@@ -173,7 +189,7 @@ Handle error scenarios, edge cases, and user experience improvements.
 
 **Product:**
 1. Terminology: Is "collection" clear, or should it be "profile", "context", "bundle"? → **User feedback after MVP**
-2. GUI priority: Build in parallel or wait for CLI validation? → **Wait for CLI MVP first**
+2. GUI priority: Build in parallel or wait for CLI validation? → **Resolved: wait for CLI MVP first, then Phase 9 (Tasks 38-45)**
 
 **Validation criteria (from PRD assumptions):**
 - Do 50%+ of users create multiple collections? → Measure in month 1
@@ -191,6 +207,7 @@ Handle error scenarios, edge cases, and user experience improvements.
 - Phase 2 (Engine) before Phase 3 (Activation)—activation depends on engine
 - Phase 3 (Activation) before Phase 4 (real FileSystemAdapter)—need tests first
 - Phase 7 (CLI) needs Phases 2-6 complete—CLI just routes to engine
+- Phase 9 (GUI) needs Phases 7-8 complete—deferred by design; GUI is presentation-only over the same engine
 
 **Coordination needed:**
 - If multiple agents work on adapters, agree on Result type and error handling patterns first
@@ -219,6 +236,67 @@ Every task must satisfy:
 - [ ] Changes don't break existing tests
 - [ ] Manual verification performed if integration test
 
+---
+
+# Implementation Plan: Leaderboard Browse
+
+Detailed tasks: `tasks/todo2.md` Phase 5 (Tasks 10–14). Original 9-phase plan remains above; this is the next slice after that refactor.
+
+## Overview
+
+Empty search is a dead end (GUI blank form; CLI no-query 400s). Browse skills.sh **all-time** and **trending** through the existing Vercel OIDC proxy. Cache on Vercel CDN (`s-maxage` + `stale-while-revalidate`). Typed search and local install stay unchanged. Not a marketplace and not a new store (no Redis, no local JSON, no localStorage).
+
+## Architecture Decisions
+
+- **`browse` is a new method, not magic `search("")`.** Different skills.sh endpoint (`GET /api/v1/skills` vs `/search`), different params (`view`, not `q`), different cache policy. Putting that behind empty-string search would leak an invariant into every caller. `ISkillsAdapter.browse(view)` / `ICollectionEngine.browse(view)` stay small: one view param, no `per_page`.
+- **CDN cache is an implementation detail of the Vercel function**, not the adapter. Adapter still does one GET. Future Cron/Redis go *behind* `GET /api/skills` without changing CLI/GUI.
+- **Fixed origin page size (20).** One CDN cache key per view. CLI slices to 10 (presentation). GUI shows 20. Do not let clients pass `per_page` in v1.
+- **`installs?: number` on `Skill`.** Leaderboard ranking is install count. Optional so existing `state.json` installed-skill records stay valid. Search may keep omitting it.
+- **Engine stays a pass-through.** Ranking, HTTP, and cache do not belong in `CollectionEngine`. Do not write tests whose only assertion is that `browse` forwards to the adapter.
+- **Thin wrapper (PRD).** This is pointing at skills.sh's leaderboard, not a ContextKit registry. Out of scope remains: curated/hot, paging, skill file trees, collection starter packs, custom skill hosting.
+
+## Seams under test (confirm before implementing)
+
+| Seam | What a test observes |
+|------|----------------------|
+| `browseSkills` + browse route in `src/backend/skills-proxy.ts` | skills.sh URL, OIDC header, 400/502, `Cache-Control` on 200 |
+| `ISkillsAdapter.browse` | Mapped `Skill[]` from mocked `GET /api/skills`, errors as `Result` |
+| CLI `runSearch` | Empty query → all-time cap 10; `--trending`; typed query still `search` |
+| GUI `SkillSearch` via `ContextKitBridge.browseSkills` | Empty-state all-time, trending tab, install count, typed search/install unchanged |
+
+Not a seam: `CollectionEngine.browse` forwarding; real CDN HIT (`x-vercel-cache`) — needs a deployed project (same as Task 1 OIDC).
+
+## Task List
+
+### Phase 5: Leaderboard Browse
+- [ ] Task 10: Proxy the skills.sh leaderboard with CDN cache headers
+- [ ] Task 11: TDD — `SkillsAdapter.browse`
+- [ ] Task 12: TDD — `contextkit search` with no query browses the leaderboard
+- [ ] Task 13: TDD — GUI empty search shows All time / Trending
+- [ ] Task 14: Sync architecture, PRD, and README with browse
+
+### Checkpoint: After Phase 5
+- [ ] Tests pass (root + gui)
+- [ ] CLI empty search + `--trending` work; typed search unchanged
+- [ ] GUI empty state shows both views with install counts
+- [ ] Browse route sends CDN Cache-Control; search route does not
+- [ ] Docs match; no Cron/Redis/marketplace scope creep
+
+## Risks and Mitigations
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| `api/skills/index.ts` vs `api/skills/search.ts` routing clash on Vercel | High | Use directory index (`api/skills/index.ts` → `GET /api/skills`); verify locally with `vercel dev` if needed |
+| OIDC / CDN HIT not testable locally | Med | Unit-test headers and upstream URL; note deploy check like Task 1 |
+| Inline `ISkillsAdapter` fakes miss `browse` | Med | Task 11 includes typecheck of those fakes |
+| Empty GUI fetch on app boot | Low | Task 13: fetch on first visit to Search, not window open |
+| Treating this as a marketplace | Med | Task 14 + PRD "no marketplace"; browse is a proxy of skills.sh |
+
+## Open Questions
+
+- Confirm the four seams above before the first red test. If you want engine passthrough tests to match existing `search` tests in `collection-engine.test.ts`, say so — default is skip (tautological).
+- `contextkit search react --trending`: plan is ignore `--trending` and typed-search. Error instead if you want it strict.
+
 ## References
 
 - Architecture: `docs/design/architecture.md`
@@ -226,3 +304,4 @@ Every task must satisfy:
 - Diagram: `docs/design/architecture-diagram.html`
 - Deep modules: `.cursor/skills/design/codebase-design/SKILL.md`
 - TDD: `.cursor/skills/philosophy/tdd/SKILL.md`
+- Tasks: `tasks/todo2.md` Phase 5

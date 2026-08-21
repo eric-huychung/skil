@@ -77,14 +77,14 @@ ContextKit is a thin orchestration layer for managing AI skill collections. The 
 We organize around depth: rich implementations behind small interfaces. This gives callers leverage (simple API for complex behavior) and maintainers locality (changes concentrate in one place).
 
 **Core deep module**: `CollectionEngine`
-- Small interface: create, activate, deactivate, list, status
-- Rich implementation: state management, validation, conflict detection, multi-IDE coordination
+- Small interface: create, addSkill, removeSkill, getCommand, list, sync, install, search, browse, convert, export
+- Rich implementation: state management, validation, config sync, skill install/convert coordination, bulk IDE export
 - Seam: business logic boundary
-- Leverage: CLI, GUI, and tests all use the same 5 methods
+- Leverage: CLI, GUI, and tests all use the same methods
 
 **Supporting modules**: adapters that wrap complexity
 - `SkillsAdapter`: wraps skills.sh API and npx commands
-- `FileSystemAdapter`: wraps symlink and directory operations
+- `FileSystemAdapter`: wraps atomic state-file JSON I/O
 - `ConfigAdapter`: wraps YAML parsing and generation
 
 ### Testability
@@ -108,27 +108,31 @@ Every module accepts dependencies rather than creating them. Tests verify behavi
 **Interface:**
 ```typescript
 interface CollectionEngine {
-  create(name: string, skillIds: string[]): Result<Collection>
-  activate(name: string): Result<void>
-  deactivate(): Result<void>
+  create(name: string, skillIds: string[], command?: string): Result<Collection>
+  addSkill(name: string, skillId: string): Result<Collection>
+  removeSkill(name: string, skillId: string): Result<Collection>
+  getCommand(name: string): Result<string>
   list(): Collection[]
-  status(): Status
+  sync(configPath: string): Result<SyncResult>
+  install(skillId: string): Promise<Result<Skill>>
+  search(query: string): Promise<Result<Skill[]>>
+  browse(view: BrowseView): Promise<Result<Skill[]>>
+  convert(skillId: string, targetIDE: IDE): Promise<Result<void>>
+  export(collectionNames: string[], targetIDE: IDE): Promise<Result<ExportResult>>
 }
 ```
 
 **Implementation responsibilities:**
 - Maintain collection metadata in `.contextkit/state.json`
-- Validate operations (no duplicate names, collection exists before activation)
-- Track active collection state
-- Coordinate with FileSystemAdapter to create/remove symlinks
-- Handle multi-IDE support transparently
+- Validate operations (no duplicate names, collection exists before add/remove/export)
+- Coordinate with SkillsAdapter for install/search/browse/convert and bulk export
 - Detect and report conflicts during sync operations
 
 **Why deep:**
-- Callers only see 5 methods with simple signatures
-- Hides state management, validation logic, IDE detection, error handling
+- Callers only see a handful of methods with simple signatures
+- Hides state management, validation logic, error handling, and per-skill export looping
 - One implementation serves CLI, GUI, and all tests
-- Changes to state format, validation rules, or IDE support don't affect callers
+- Changes to state format or validation rules don't affect callers
 
 **Seam:** Business logic boundary
 - Tests mock FileSystemAdapter and ConfigAdapter
@@ -140,30 +144,29 @@ interface CollectionEngine {
 **Interface:**
 ```typescript
 interface FileSystemAdapter {
-  createSymlink(source: string, target: string): Result<void>
-  removeSymlink(path: string): Result<void>
-  detectIDEs(projectRoot: string): IDEInfo[]
   readJSON<T>(path: string): Result<T>
   writeJSON<T>(path: string, data: T): Result<void>
 }
 ```
 
 **Implementation:**
-- Node.js fs operations
-- IDE directory detection (`.agents/`, `.claude/`, `.windsurf/`)
-- Error handling for permissions, missing paths, existing symlinks
-- Path resolution and validation
+- Atomic JSON read/write (write to temp file, then rename)
+- Error handling for permissions and missing/malformed files
+
+_Previously also owned symlink creation/removal and IDE directory detection for
+activate/deactivate; those methods were removed along with that feature — see
+"Export Replaces Symlink Activation" in the Decision Log below._
 
 **Why this is the right seam:**
-- All file operations go through one interface
+- All state-file I/O goes through one interface
 - Easy to mock with in-memory filesystem for tests
-- Real filesystem concerns (permissions, symlink support) isolated here
+- Real filesystem concerns (permissions, atomic writes) isolated here
 - Can swap implementations (real fs, memory fs, test doubles)
 
 **Test strategy:**
 - Unit tests use `memfs` to simulate file operations
 - Mock this adapter when testing CollectionEngine
-- Integration tests verify symlink creation with temp directories
+- Integration tests verify read/write with temp directories
 
 ### 3. ConfigAdapter (Adapter Module)
 
@@ -171,7 +174,6 @@ interface FileSystemAdapter {
 ```typescript
 interface ConfigAdapter {
   read(path: string): Result<Config>
-  write(path: string, config: Config): Result<void>
   validate(config: Config): Result<void>
 }
 ```
@@ -180,7 +182,8 @@ interface ConfigAdapter {
 - YAML parsing with `js-yaml`
 - Schema validation
 - Error reporting for malformed configs
-- Export current state to config format
+
+_Not implemented: writing/exporting a config file (PRD story 11). No caller needs it yet — add `write()` back to the interface when `contextkit export` is built._
 
 **Why this is the right seam:**
 - Config format changes don't affect CollectionEngine
@@ -198,6 +201,7 @@ interface ConfigAdapter {
 ```typescript
 interface SkillsAdapter {
   search(query: string): Promise<Result<Skill[]>>
+  browse(view: BrowseView): Promise<Result<Skill[]>>
   install(skillId: string): Promise<Result<void>>
   convert(skillId: string, targetIDE: IDE): Promise<Result<void>>
   getInstalled(): Skill[]
@@ -205,17 +209,17 @@ interface SkillsAdapter {
 ```
 
 **Implementation:**
-- HTTP client for skills.sh API
-- Subprocess execution for `npx skills add`
-- Subprocess execution for `skillsmith`
+- `search` calls ContextKit's own Vercel-hosted backend (`GET /api/skills/search?q=`, see `src/backend/skills-proxy.ts`), not skills.sh directly — the backend mints a short-lived Vercel OIDC token server-side and forwards it to skills.sh, so no user ever needs a `SKILLS_API_KEY`. Base URL defaults to `https://contextkit.dev`, overridable via `CONTEXTKIT_API_URL`.
+- `browse` calls `GET /api/skills?view=all-time|trending` on the same backend. That route always requests `per_page=20` from skills.sh so CLI (display 10) and GUI (display 20) share one CDN cache key per view. On 200 it sets `Cache-Control: public, s-maxage=86400, stale-while-revalidate=3600`. The search route does **not** send these headers — typed queries are not a shared leaderboard.
+- Subprocess execution for `npx skills add` (`install`) and `skillsmith convert` (`convert`) — both run entirely locally; skills.sh has no HTTP endpoint for either, so there's nothing for the backend proxy to front for them.
 - Error parsing and user-friendly messages
-- Retry logic for network failures
 
 **Why this is the right seam:**
-- Isolates external tool dependencies
+- Isolates external tool dependencies (HTTP backend, subprocess) from CollectionEngine
 - Tests don't hit real APIs or run real commands
 - Can add new external tools without changing interface
 - Error handling for network/subprocess issues in one place
+- The OIDC-authenticated backend proxy is an implementation detail behind `search` and `browse` — CollectionEngine and its tests never know it exists
 
 **Test strategy:**
 - Mock HTTP calls with `nock`
@@ -239,6 +243,7 @@ interface CLICommand {
 - Route commands to CollectionEngine
 - Format output (tables, colors, success/error messages)
 - Minimal logic—just I/O and routing
+- `contextkit search` with no query calls `engine.browse('all-time')` and prints the top 10 with install counts; `--trending` uses `browse('trending')`. A non-empty query is still typed `search` and ignores `--trending`.
 
 **Why thin:**
 - No business logic here
@@ -260,10 +265,11 @@ interface CLICommand {
 - Same CollectionEngine as CLI
 
 **Implementation:**
-- Visual components: collection list, skill checkboxes, search bar
+- Visual components: collection list, skill checkboxes, search bar with All time / Trending leaderboard tabs
 - Event handlers call CollectionEngine methods
 - No GUI-specific business logic
-- State management for UI only (selected items, search filters)
+- State management for UI only (selected items, search filters, in-session cache of the last all-time/trending fetch so tab switches don't refetch)
+- Empty Search panel fetches all-time when `SkillSearch` mounts (a panel-local fetch, not a global App boot call) and exposes All time / Trending tabs; typed search and install stay as they are
 - Design decisions (color, typography, layout, accessibility) sourced from the `.cursor/skills/build/ui/ui-ux-pro-max/` and `.cursor/skills/build/ui/ui-styling/` skills
 
 **Why thin:**
@@ -284,7 +290,6 @@ interface CLICommand {
 ```typescript
 interface State {
   collections: Collection[]
-  activeCollection: string | null
   installedSkills: Skill[]
   version: string
 }
@@ -293,15 +298,18 @@ interface Collection {
   name: string
   skills: string[] // skill IDs
   createdAt: string
-  lastUsedAt: string | null
+  command?: string // optional shell template, run via `contextkit run <name>`
 }
 
 interface Skill {
   id: string // e.g., "obra/react-patterns"
   source: string // "skills.sh" | "github" | "local"
   installedAt: string
+  installs?: number // leaderboard count from skills.sh; omitted on search hits and installed-skill records
 }
 ```
+
+Schema v2 (current): dropped `activeCollection` and `Collection.lastUsedAt` when symlink-based activation was replaced by IDE export — see "Export Replaces Symlink Activation" below. Older v1 state files still have both fields on disk; they're simply ignored on load.
 
 ### Config (`.contextkit.yml`)
 
@@ -318,36 +326,20 @@ collections:
 
 ## Key Technical Decisions
 
-### Symlink Strategy
+### Export Replaces Symlink Activation
 
-**Decision:** Collections activate by creating symlinks in IDE directories, deactivate by removing them.
+**Decision:** ContextKit originally activated a collection by symlinking its skills into IDE directories (`.agents/`, `.claude/`, `.windsurf/`), one collection active at a time. This was replaced by explicit export: `contextkit export <collections...> --to <ide>` converts every skill in the named collections to a target IDE's format via `skillsmith`, on demand, with no persistent "active" state.
 
 **Rationale:**
-- Instant activation (no file copying)
-- IDE-compatible (most IDEs watch directories)
-- Source of truth remains in ContextKit-managed directory
-- Easy to verify (check symlink existence)
+- Collections are meant to be edited (`add`/`remove`), not just switched between — a single mutually-exclusive "active" slot fought that goal
+- Symlinks require platform support (Windows dev mode) and sometimes an IDE restart; export sidesteps both by producing IDE-native files instead of links
+- Multiple collections/IDEs can be exported independently — no artificial one-at-a-time constraint
 
 **Trade-offs:**
-- Requires symlink support (Windows may need dev mode)
-- IDE restart may be needed (varies by IDE)
-- Symlink conflicts need detection and user resolution
+- Export is a copy, not a live link: re-run `export` after editing a collection to pick up changes (symlinks updated automatically; exported files don't)
+- No single command shows "what's currently loaded" the way `status` used to — the source of truth is now just `contextkit list` plus whatever you last exported
 
-**Test seam:** FileSystemAdapter abstracts symlink operations
-
-### One Active Collection
-
-**Decision:** Only one collection can be active at a time.
-
-**Rationale:**
-- Simple mental model (no composition complexity)
-- Avoids skill conflicts
-- Easy to implement and test
-- Can add composition later if validated by users
-
-**Test coverage:**
-- Activating collection B deactivates collection A
-- Status always shows 0 or 1 active collection
+**Test seam:** `CollectionEngine.export()`, which loops `SkillsAdapter.convert()` per skill and never fails the whole call for one bad collection/skill (see `ICollectionEngine.export` doc comment)
 
 ### Local-Only Collections (MVP)
 
@@ -387,13 +379,12 @@ collections:
 
 **Integration Tests (20%)**
 - CLI commands with mocked adapters
-- Full create → activate → deactivate flows
+- Full create → add → remove → export flows
 - Sync operation with real temp directories
 
 **E2E Tests (10%)**
 - Full CLI workflow in temp project
-- GUI workflow with mocked external tools
-- Multi-IDE symlink creation
+- GUI workflow with mocked external tools, real `CollectionEngine`
 
 ### Test Seams (Agreed)
 
@@ -411,11 +402,18 @@ Per TDD skill, we test only at pre-agreed seams:
    - End-to-end command flow
    - Output formatting
    - Error messages
+   - Empty `search` / `--trending` browse display (cap 10)
+
+4. **GUI `SkillSearch` via `ContextKitBridge.browseSkills`**
+   - Empty-state all-time results, Trending tab, install counts
+   - Loading and error states
 
 **Not test seams:**
 - Private CollectionEngine methods
+- `CollectionEngine.browse` forwarding to the adapter (one-line pass-through)
 - State file JSON structure (internal detail)
 - Third-party library internals
+- Real CDN HIT (`x-vercel-cache`) — needs a deployed Vercel project
 
 ### TDD Workflow
 
@@ -433,10 +431,10 @@ Task 1: User can create a collection
 - Test: State file contains new collection
 - Test: Duplicate name returns error
 
-Task 2: User can activate a collection
-- Test: `engine.activate('frontend')` returns success
-- Test: Symlinks created in all IDE directories
-- Test: Activating non-existent collection returns error
+Task 2: User can add a skill to a collection
+- Test: `engine.addSkill('frontend', 'obra/react-patterns')` returns success
+- Test: State file reflects the added skill
+- Test: Adding to a non-existent collection returns error
 
 ### Mocking Strategy
 
@@ -445,9 +443,6 @@ Task 2: User can activate a collection
 ```typescript
 // Good: Mock the adapter interface
 const mockFS = {
-  createSymlink: vi.fn(),
-  removeSymlink: vi.fn(),
-  detectIDEs: vi.fn(() => [{ name: 'cursor', path: '.agents' }]),
   readJSON: vi.fn(),
   writeJSON: vi.fn(),
 }
@@ -508,30 +503,30 @@ State file is the single source of truth:
 
 ## Open Questions
 
-**To validate during implementation:**
+**To validate:**
 
-1. **IDE restart requirements:** Do Cursor/Claude Desktop/Windsurf need restart after symlink changes? Or do they watch directories?
-2. **Symlink conflicts:** What if user manually created symlinks? Overwrite, skip, or error?
-3. **Config merge strategy:** Should sync be fully additive, or offer a "destructive sync" mode that matches config exactly?
-4. **Error recovery:** If symlink creation fails halfway through (e.g., permissions), should we rollback or leave partial state?
-5. **GUI shell:** Electron vs Tauri — resolve in Task 38, once Phase 9 starts.
+1. **Re-export staleness:** Exported files don't update automatically when a collection changes (unlike the old symlinks). Should `export` warn if a collection was edited since its last export, or is "re-run it" an acceptable mental model?
+2. **Config merge strategy:** Should sync be fully additive, or offer a "destructive sync" mode that matches config exactly?
+3. **Command template safety:** `contextkit run` executes an arbitrary stored string in the user's shell — fine for local, single-user config; revisit if collections are ever shared/synced from an untrusted `.contextkit.yml`.
 
 ## Decision Log
 
+- **Export replaces symlink activation (resolved):** See "Export Replaces Symlink Activation" above. Collections are no longer mutually-exclusive "active"/"inactive" — they're edited (`add`/`remove`) and exported on demand to one or more IDE formats. `activate()`, `deactivate()`, `status()`, and the `activeCollection`/`lastUsedAt` state fields were removed from `CollectionEngine`, `IFileSystemAdapter` (symlink/IDE-detection methods), and the GUI (which previously exposed Activate/Deactivate controls in `CollectionList`, wired through the Electron IPC bridge in `gui/src/main/index.ts`). The GUI's collection rows now expose add-skill/remove-skill controls and an IDE-select + Export button instead, over the same `addSkill`/`removeSkill`/`export` engine methods the CLI uses — no engine or business-logic duplication.
+- **Skills search goes through an OIDC-authenticated backend (resolved):** `SkillsAdapter.search()` calls ContextKit's own Vercel Function (`api/skills/search.ts` → `src/backend/skills-proxy.ts`) instead of skills.sh directly, so the CLI/GUI never need a `SKILLS_API_KEY`. `install`/`convert` still shell out locally (`npx skills add`, `skillsmith`) since skills.sh has no HTTP endpoint for either — there's nothing for a backend route to proxy there.
+- **Leaderboard browse is a proxy + CDN cache, not a ContextKit registry (resolved):** Empty CLI search and the GUI's All time / Trending tabs call `SkillsAdapter.browse(view)`, which hits `GET /api/skills?view=`. That Vercel Function forwards to skills.sh's leaderboard (`GET /api/v1/skills`) with the same OIDC token as search, always `per_page=20`, and sets CDN `Cache-Control` on 200 only. ContextKit does not store, rank, or host skills — no Redis, no local JSON/localStorage cache, no marketplace. Future Cron/Redis, if any, would sit behind this same route without changing CLI/GUI.
 - **GUI timing (resolved):** Originally deferred indefinitely ("wait for CLI MVP"). Now explicitly scheduled as Phase 9, after Phases 1-8 are complete. No change to the thin-GUI design above — only the timing was in question.
 - **GUI design system (resolved, Task 44):** Minimalist neutral-grayscale palette in the shadcn/Vercel/v0 style — oklch grayscale tokens (`--background`/`--foreground`/`--border`/`--muted`/`--destructive`, etc.) defined once in `gui/src/renderer/src/styles/globals.css` and consumed everywhere as Tailwind v4 theme tokens (`bg-background`, `text-muted-foreground`, `border-border`, …), never hardcoded hex values. Light/dark are the same token names swapped via a `.dark` class on `<html>`, toggled by `ThemeProvider`/`useTheme` and persisted to `localStorage`. Typography is Geist Sans (UI text) + Geist Mono (code/identifiers), both self-hosted via `@fontsource` — the same family Vercel/v0/Cursor use, which is why it reads as that family of product. Spacing follows Tailwind's default 4px scale, used at a small set of steps for a consistent rhythm: `gap-1`/`gap-2` (4-8px) inside a control, `gap-3` (12px) between a control and its label or between list rows, `gap-8`/`gap-10` (32-40px) between page sections. Radius is a single `rounded-md` (0.5rem) on every card/input/button — no mixed radii. Icons are Phosphor (`@phosphor-icons/react`), one weight (`regular`), used only for the theme toggle so far.
 - **Focus visibility (Task 44):** Every interactive control (buttons, inputs) uses a shared `FOCUS_RING` class (`gui/src/renderer/src/lib/focus-ring.ts`) — a 2px ring in the `--ring` token with a background-colored offset — instead of relying on the browser default outline, so keyboard focus is unambiguous in both themes.
 
 **Answer these through:**
-- Prototype with real IDEs (Task 3)
 - User feedback during MVP testing
-- Error scenario testing (Task 8)
+- Error scenario testing
 
 ## Success Criteria
 
 This architecture succeeds if:
 
-1. **Adding a new IDE takes < 2 hours** (just add to IDE detection, symlink paths)
+1. **Adding a new IDE takes < 2 hours** (just add to the `IDE` union type and `skillsmith` target)
 2. **Adding a new external tool takes < 4 hours** (just add adapter, no engine changes)
 3. **CollectionEngine tests have zero file system dependencies** (fully mocked)
 4. **CLI and GUI share 100% of business logic** (no duplicate code)

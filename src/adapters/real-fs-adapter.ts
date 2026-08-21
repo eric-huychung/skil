@@ -1,15 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import type { IFileSystemAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
-import type { IDE, IDEInfo } from '../types/index.js';
-
-/** Maps each supported IDE to its integration directory name, relative to the project root. */
-const IDE_DIRS: Record<IDE, string> = {
-  cursor: '.agents',
-  claude: '.claude',
-  windsurf: '.windsurf',
-};
 
 /**
  * Real file system implementation of IFileSystemAdapter, backed by Node's
@@ -17,46 +9,6 @@ const IDE_DIRS: Record<IDE, string> = {
  * instead so CollectionEngine tests never touch disk.
  */
 export class RealFileSystemAdapter implements IFileSystemAdapter {
-  createSymlink(source: string, target: string): Result<void> {
-    try {
-      symlinkSync(source, target);
-      return ok(undefined);
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'EEXIST') {
-        return err(new Error(`File already exists at '${target}'. Remove it manually and try again.`));
-      }
-      if (code === 'EACCES' || code === 'EPERM') {
-        return err(new Error(`Permission denied creating symlink at '${target}'. Check directory permissions and try again.`));
-      }
-      return err(new Error(`Failed to create symlink at '${target}': ${(error as Error).message}`));
-    }
-  }
-
-  removeSymlink(path: string): Result<void> {
-    try {
-      unlinkSync(path);
-      return ok(undefined);
-    } catch (error) {
-      return err(new Error(`Failed to remove symlink at '${path}': ${(error as Error).message}`));
-    }
-  }
-
-  exists(path: string): boolean {
-    return existsSync(path);
-  }
-
-  detectIDEs(projectRoot: string): IDEInfo[] {
-    const ides: IDEInfo[] = [];
-    for (const [name, dirName] of Object.entries(IDE_DIRS) as [IDE, string][]) {
-      const dirPath = join(projectRoot, dirName);
-      if (existsSync(dirPath)) {
-        ides.push({ name, path: join(dirPath, 'skills') });
-      }
-    }
-    return ides;
-  }
-
   readJSON<T>(path: string): Result<T> {
     let contents: string;
     try {

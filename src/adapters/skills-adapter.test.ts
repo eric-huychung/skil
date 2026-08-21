@@ -13,16 +13,15 @@ describe('SkillsAdapter', () => {
   });
 
   describe('search', () => {
-    it('returns skills parsed from a successful skills.sh response', async () => {
-      nock('https://skills.sh')
-        .get('/api/v1/skills/search')
-        .query({ q: 'react', limit: '20' })
-        .matchHeader('authorization', 'Bearer test-key')
+    it('returns skills parsed from a successful backend response, with no auth required', async () => {
+      nock('https://contextkit.dev')
+        .get('/api/skills/search')
+        .query({ q: 'react' })
         .reply(200, {
           data: [{ id: 'obra/react-patterns', name: 'react-patterns', source: 'obra/react-patterns', sourceType: 'github' }],
         });
 
-      const adapter = new SkillsAdapter('test-key');
+      const adapter = new SkillsAdapter();
       const result = await adapter.search('react');
 
       expect(isOk(result)).toBe(true);
@@ -31,10 +30,19 @@ describe('SkillsAdapter', () => {
       }
     });
 
-    it('returns an empty array when no skills match', async () => {
-      nock('https://skills.sh').get('/api/v1/skills/search').query(true).reply(200, { data: [] });
+    it('calls a custom backend URL when CONTEXTKIT_API_URL is set', async () => {
+      nock('https://backend.example').get('/api/skills/search').query({ q: 'react' }).reply(200, { data: [] });
 
-      const adapter = new SkillsAdapter('test-key');
+      const adapter = new SkillsAdapter('https://backend.example');
+      const result = await adapter.search('react');
+
+      expect(isOk(result)).toBe(true);
+    });
+
+    it('returns an empty array when no skills match', async () => {
+      nock('https://contextkit.dev').get('/api/skills/search').query(true).reply(200, { data: [] });
+
+      const adapter = new SkillsAdapter();
       const result = await adapter.search('nonexistent-skill-xyz');
 
       expect(isOk(result)).toBe(true);
@@ -43,32 +51,15 @@ describe('SkillsAdapter', () => {
       }
     });
 
-    it('returns an error when the request fails', async () => {
-      nock('https://skills.sh').get('/api/v1/skills/search').query(true).reply(500);
+    it('returns an error when the backend request fails', async () => {
+      nock('https://contextkit.dev').get('/api/skills/search').query(true).reply(502, { message: 'skills.sh unavailable' });
 
-      const adapter = new SkillsAdapter('test-key');
+      const adapter = new SkillsAdapter();
       const result = await adapter.search('react');
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.message).toContain('react');
-      }
-    });
-
-    it('returns an error when no API key is configured', async () => {
-      const original = process.env.SKILLS_API_KEY;
-      delete process.env.SKILLS_API_KEY;
-
-      try {
-        const adapter = new SkillsAdapter();
-        const result = await adapter.search('react');
-
-        expect(isErr(result)).toBe(true);
-        if (isErr(result)) {
-          expect(result.error.message).toContain('SKILLS_API_KEY');
-        }
-      } finally {
-        if (original !== undefined) process.env.SKILLS_API_KEY = original;
       }
     });
   });
@@ -77,7 +68,7 @@ describe('SkillsAdapter', () => {
     it('installs a skill by running npx skills add', async () => {
       vi.mocked(execa).mockResolvedValue({} as never);
 
-      const adapter = new SkillsAdapter('test-key');
+      const adapter = new SkillsAdapter();
       const result = await adapter.install('obra/react-patterns');
 
       expect(isOk(result)).toBe(true);
@@ -87,7 +78,7 @@ describe('SkillsAdapter', () => {
     it('returns an error when the subprocess fails', async () => {
       vi.mocked(execa).mockRejectedValue(new Error('npx: command failed with exit code 1'));
 
-      const adapter = new SkillsAdapter('test-key');
+      const adapter = new SkillsAdapter();
       const result = await adapter.install('obra/react-patterns');
 
       expect(isErr(result)).toBe(true);
@@ -102,7 +93,7 @@ describe('SkillsAdapter', () => {
     it('converts a skill by running skillsmith convert', async () => {
       vi.mocked(execa).mockResolvedValue({} as never);
 
-      const adapter = new SkillsAdapter('test-key');
+      const adapter = new SkillsAdapter();
       const result = await adapter.convert('obra/react-patterns', 'cursor');
 
       expect(isOk(result)).toBe(true);
@@ -113,7 +104,7 @@ describe('SkillsAdapter', () => {
       const enoent = Object.assign(new Error('spawn skillsmith ENOENT'), { code: 'ENOENT' });
       vi.mocked(execa).mockRejectedValue(enoent);
 
-      const adapter = new SkillsAdapter('test-key');
+      const adapter = new SkillsAdapter();
       const result = await adapter.convert('obra/react-patterns', 'claude');
 
       expect(isErr(result)).toBe(true);
@@ -126,13 +117,68 @@ describe('SkillsAdapter', () => {
     it('returns an error when the subprocess fails for another reason', async () => {
       vi.mocked(execa).mockRejectedValue(new Error('conversion failed: unsupported format'));
 
-      const adapter = new SkillsAdapter('test-key');
+      const adapter = new SkillsAdapter();
       const result = await adapter.convert('obra/react-patterns', 'windsurf');
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.message).toContain('obra/react-patterns');
         expect(result.error.message).toContain('unsupported format');
+      }
+    });
+  });
+
+  describe('browse', () => {
+    it('maps leaderboard hits including install counts from a successful backend response', async () => {
+      nock('https://contextkit.dev')
+        .get('/api/skills')
+        .query({ view: 'all-time' })
+        .reply(200, {
+          data: [{ id: 'obra/react-patterns', installs: 1200 }],
+        });
+
+      const adapter = new SkillsAdapter();
+      const result = await adapter.browse('all-time');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual([
+          { id: 'obra/react-patterns', source: 'skills.sh', installedAt: '', installs: 1200 },
+        ]);
+      }
+    });
+
+    it('requests the trending view from the same backend path', async () => {
+      nock('https://contextkit.dev')
+        .get('/api/skills')
+        .query({ view: 'trending' })
+        .reply(200, {
+          data: [{ id: 'vercel-labs/security-review', installs: 90 }],
+        });
+
+      const adapter = new SkillsAdapter();
+      const result = await adapter.browse('trending');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual([
+          { id: 'vercel-labs/security-review', source: 'skills.sh', installedAt: '', installs: 90 },
+        ]);
+      }
+    });
+
+    it('returns an error when the backend request fails', async () => {
+      nock('https://contextkit.dev')
+        .get('/api/skills')
+        .query({ view: 'all-time' })
+        .reply(502, { message: 'skills.sh unavailable' });
+
+      const adapter = new SkillsAdapter();
+      const result = await adapter.browse('all-time');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('all-time');
       }
     });
   });

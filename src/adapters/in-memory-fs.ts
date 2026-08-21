@@ -1,42 +1,13 @@
 import type { IFileSystemAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
-import type { IDEInfo } from '../types/index.js';
 
 /**
  * In-memory stand-in for the real file system, used as a test double for
  * CollectionEngine and CLI tests. Not for production use.
  */
 export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
-  private symlinks = new Map<string, string>();
   private files = new Map<string, unknown>();
-  private detectedIDEs: IDEInfo[] = [];
-  private conflictedTargets = new Set<string>();
-  private missingPaths = new Set<string>();
-
-  createSymlink(source: string, target: string): Result<void> {
-    if (this.conflictedTargets.has(target)) {
-      return err(new Error(`File already exists at '${target}'. Remove it manually and try again.`));
-    }
-    this.symlinks.set(target, source);
-    return ok(undefined);
-  }
-
-  removeSymlink(path: string): Result<void> {
-    if (!this.symlinks.has(path)) {
-      return err(new Error(`No symlink exists at '${path}'`));
-    }
-    this.symlinks.delete(path);
-    return ok(undefined);
-  }
-
-  detectIDEs(_projectRoot: string): IDEInfo[] {
-    return this.detectedIDEs;
-  }
-
-  /** Defaults to true (as if every path exists), so tests only need setMissing() for the paths they care about. */
-  exists(path: string): boolean {
-    return !this.missingPaths.has(path);
-  }
+  private writeError: Error | null = null;
 
   readJSON<T>(path: string): Result<T> {
     if (!this.files.has(path)) {
@@ -46,36 +17,21 @@ export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
   }
 
   writeJSON<T>(path: string, data: T): Result<void> {
+    if (this.writeError) {
+      return err(this.writeError);
+    }
     this.files.set(path, data);
     return ok(undefined);
   }
 
-  /** Test helper: configures what detectIDEs() returns. */
-  setDetectedIDEs(ides: IDEInfo[]): void {
-    this.detectedIDEs = ides;
-  }
-
-  /** Test helper: makes createSymlink() fail for `target` as if a file already exists there. */
-  setConflict(target: string): void {
-    this.conflictedTargets.add(target);
-  }
-
-  /** Test helper: makes exists() return false for `path`. */
-  setMissing(path: string): void {
-    this.missingPaths.add(path);
-  }
-
-  /** Test helper: inspects current symlinks (target -> source). */
-  getSymlinks(): Map<string, string> {
-    return new Map(this.symlinks);
+  /** Test helper: makes every writeJSON() call fail with `error` until cleared with `setWriteError(null)`. */
+  setWriteError(error: Error | null): void {
+    this.writeError = error;
   }
 
   /** Test helper: clears all in-memory state between tests. */
   reset(): void {
-    this.symlinks.clear();
     this.files.clear();
-    this.detectedIDEs = [];
-    this.conflictedTargets.clear();
-    this.missingPaths.clear();
+    this.writeError = null;
   }
 }
