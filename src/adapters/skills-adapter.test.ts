@@ -66,14 +66,28 @@ describe('SkillsAdapter', () => {
   });
 
   describe('install', () => {
-    it('installs a skill by running npx skills add', async () => {
+    it('installs a skill by running npx skills add in the project root', async () => {
       vi.mocked(execa).mockResolvedValue({} as never);
 
       const adapter = new SkillsAdapter();
       const result = await adapter.install('obra/react-patterns');
 
       expect(isOk(result)).toBe(true);
-      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/react-patterns']);
+      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/react-patterns'], {
+        cwd: process.cwd(),
+      });
+    });
+
+    it('runs npx skills add with cwd set to a given project root', async () => {
+      vi.mocked(execa).mockResolvedValue({} as never);
+
+      const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
+      const result = await adapter.install('obra/react-patterns');
+
+      expect(isOk(result)).toBe(true);
+      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/react-patterns'], {
+        cwd: '/tmp/proj',
+      });
     });
 
     it('returns an error when the subprocess fails', async () => {
@@ -91,14 +105,28 @@ describe('SkillsAdapter', () => {
   });
 
   describe('convert', () => {
-    it('converts a skill by running skillsmith convert', async () => {
+    it('converts a skill by running skillsmith convert in the project root', async () => {
       vi.mocked(execa).mockResolvedValue({} as never);
 
       const adapter = new SkillsAdapter();
       const result = await adapter.convert('obra/react-patterns', 'cursor');
 
       expect(isOk(result)).toBe(true);
-      expect(execa).toHaveBeenCalledWith('skillsmith', ['convert', 'obra/react-patterns', '--to', 'cursor']);
+      expect(execa).toHaveBeenCalledWith('skillsmith', ['convert', 'obra/react-patterns', '--to', 'cursor'], {
+        cwd: process.cwd(),
+      });
+    });
+
+    it('runs skillsmith convert with cwd set to a given project root', async () => {
+      vi.mocked(execa).mockResolvedValue({} as never);
+
+      const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
+      const result = await adapter.convert('obra/react-patterns', 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      expect(execa).toHaveBeenCalledWith('skillsmith', ['convert', 'obra/react-patterns', '--to', 'cursor'], {
+        cwd: '/tmp/proj',
+      });
     });
 
     it('returns an actionable error when skillsmith is not installed', async () => {

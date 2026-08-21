@@ -17,12 +17,16 @@ interface SkillsBrowseResponse {
  * Real implementation of ISkillsAdapter. `search` calls ContextKit's own
  * backend (see `src/backend/skills-proxy.ts`), which authenticates to
  * skills.sh with a Vercel OIDC token — so no API key is ever needed here.
- * `install`/`convert` still shell out locally; skills.sh has no HTTP
- * endpoint for either. Tests use InMemorySkillsAdapter instead so
- * CollectionEngine tests never hit the network or spawn subprocesses.
+ * `install`/`convert` still shell out locally with `cwd` set to the
+ * project root; skills.sh has no HTTP endpoint for either. Tests use
+ * InMemorySkillsAdapter instead so CollectionEngine tests never hit the
+ * network or spawn subprocesses.
  */
 export class SkillsAdapter implements ISkillsAdapter {
-  constructor(private readonly apiBaseUrl: string = getApiBaseUrl()) {}
+  constructor(
+    private readonly apiBaseUrl: string = getApiBaseUrl(),
+    private readonly projectRoot: string = process.cwd()
+  ) {}
 
   async search(query: string): Promise<Result<Skill[]>> {
     try {
@@ -61,7 +65,7 @@ export class SkillsAdapter implements ISkillsAdapter {
 
   async install(skillId: string): Promise<Result<void>> {
     try {
-      await execa('npx', ['skills', 'add', skillId]);
+      await execa('npx', ['skills', 'add', skillId], { cwd: this.projectRoot });
       return ok(undefined);
     } catch (error) {
       return err(new Error(`Failed to install skill '${skillId}': ${(error as Error).message}`));
@@ -70,7 +74,7 @@ export class SkillsAdapter implements ISkillsAdapter {
 
   async convert(skillId: string, targetIDE: IDE): Promise<Result<void>> {
     try {
-      await execa('skillsmith', ['convert', skillId, '--to', targetIDE]);
+      await execa('skillsmith', ['convert', skillId, '--to', targetIDE], { cwd: this.projectRoot });
       return ok(undefined);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
