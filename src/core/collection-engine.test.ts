@@ -574,4 +574,187 @@ describe('CollectionEngine', () => {
       }
     });
   });
+
+  describe('inbox', () => {
+    it('starts empty and treats missing inbox on old state as []', () => {
+      expect(engine.inbox()).toEqual([]);
+
+      fs.writeJSON(STATE_PATH, {
+        collections: [],
+        installedSkills: [],
+        version: '2.0',
+      });
+      const loadedEngine = new CollectionEngine(fs, config, skills);
+
+      expect(loadedEngine.inbox()).toEqual([]);
+    });
+
+    it('persists a skill ID under state.inbox without calling install', () => {
+      const result = engine.addToInbox('obra/react-patterns');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual(['obra/react-patterns']);
+      }
+      expect(engine.inbox()).toEqual(['obra/react-patterns']);
+
+      const persisted = fs.readJSON<{ inbox: string[] }>(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.inbox).toEqual(['obra/react-patterns']);
+      }
+      expect(skills.getInstalled()).toEqual([]);
+    });
+
+    it('is idempotent: adding the same ID twice keeps one entry', () => {
+      engine.addToInbox('obra/react-patterns');
+      const result = engine.addToInbox('obra/react-patterns');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual(['obra/react-patterns']);
+      }
+      expect(engine.inbox()).toEqual(['obra/react-patterns']);
+    });
+
+    it('leaves inbox unchanged when persisting an add fails', () => {
+      fs.setWriteError(new Error('Disk full'));
+
+      const result = engine.addToInbox('obra/react-patterns');
+
+      expect(isErr(result)).toBe(true);
+      fs.setWriteError(null);
+      expect(engine.inbox()).toEqual([]);
+    });
+
+    it('removes an ID from inbox and is a no-op when it is not present', () => {
+      engine.addToInbox('obra/react-patterns');
+      engine.addToInbox('addyosmani/performance-review');
+
+      const removed = engine.removeFromInbox('obra/react-patterns');
+      expect(isOk(removed)).toBe(true);
+      if (isOk(removed)) {
+        expect(removed.value).toEqual(['addyosmani/performance-review']);
+      }
+
+      const missing = engine.removeFromInbox('not-in-inbox');
+      expect(isOk(missing)).toBe(true);
+      if (isOk(missing)) {
+        expect(missing.value).toEqual(['addyosmani/performance-review']);
+      }
+      expect(engine.inbox()).toEqual(['addyosmani/performance-review']);
+    });
+
+    it('rejects creating a collection named inbox', () => {
+      const result = engine.create('inbox', []);
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toMatch(/inbox/i);
+      }
+      expect(engine.list()).toEqual([]);
+      expect(engine.inbox()).toEqual([]);
+    });
+  });
+
+  describe('fileToCollection', () => {
+    it('moves an inbox ID into an existing collection without calling install', () => {
+      engine.create('frontend', []);
+      engine.addToInbox('obra/react-patterns');
+
+      const result = engine.fileToCollection('obra/react-patterns', 'frontend');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.skills).toEqual(['obra/react-patterns']);
+      }
+      expect(engine.inbox()).toEqual([]);
+      expect(engine.list()[0]?.skills).toEqual(['obra/react-patterns']);
+      expect(skills.getInstalled()).toEqual([]);
+    });
+
+    it('drops the ID from inbox even if the collection already has it', () => {
+      engine.create('frontend', ['obra/react-patterns']);
+      engine.addToInbox('obra/react-patterns');
+
+      const result = engine.fileToCollection('obra/react-patterns', 'frontend');
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.inbox()).toEqual([]);
+      expect(engine.list()[0]?.skills).toEqual(['obra/react-patterns']);
+    });
+
+    it('returns an error and leaves state unchanged when the collection is missing', () => {
+      engine.addToInbox('obra/react-patterns');
+
+      const result = engine.fileToCollection('obra/react-patterns', 'frontend');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain("Collection 'frontend' not found");
+      }
+      expect(engine.inbox()).toEqual(['obra/react-patterns']);
+    });
+
+    it('returns an error and leaves state unchanged when the ID is not in inbox', () => {
+      engine.create('frontend', []);
+
+      const result = engine.fileToCollection('obra/react-patterns', 'frontend');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toMatch(/inbox/i);
+      }
+      expect(engine.list()[0]?.skills).toEqual([]);
+      expect(engine.inbox()).toEqual([]);
+    });
+
+    it('rolls inbox and collection back when persisting fails', () => {
+      engine.create('frontend', []);
+      engine.addToInbox('obra/react-patterns');
+      fs.setWriteError(new Error('Disk full'));
+
+      const result = engine.fileToCollection('obra/react-patterns', 'frontend');
+
+      expect(isErr(result)).toBe(true);
+      fs.setWriteError(null);
+      expect(engine.inbox()).toEqual(['obra/react-patterns']);
+      expect(engine.list()[0]?.skills).toEqual([]);
+    });
+  });
+
+  describe('delete', () => {
+    it('removes a collection, including the last one', () => {
+      engine.create('frontend', ['obra/react-patterns']);
+      engine.create('backend', []);
+
+      const first = engine.delete('frontend');
+      expect(isOk(first)).toBe(true);
+      expect(engine.list().map((c) => c.name)).toEqual(['backend']);
+
+      const last = engine.delete('backend');
+      expect(isOk(last)).toBe(true);
+      expect(engine.list()).toEqual([]);
+    });
+
+    it('returns an error when the collection does not exist', () => {
+      const result = engine.delete('missing');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain("Collection 'missing' not found");
+      }
+    });
+
+    it('leaves collections unchanged when persisting fails', () => {
+      engine.create('frontend', []);
+      fs.setWriteError(new Error('Disk full'));
+
+      const result = engine.delete('frontend');
+
+      expect(isErr(result)).toBe(true);
+      fs.setWriteError(null);
+      expect(engine.list().map((c) => c.name)).toEqual(['frontend']);
+    });
+  });
 });

@@ -89,4 +89,39 @@ export interface ICollectionEngine {
    * something outside any single collection/skill's control.
    */
   export(collectionNames: string[], targetIDE: IDE): Promise<Result<ExportResult>>;
+
+  /**
+   * Returns the Inbox holding list of skill IDs. Never downloads. Missing
+   * `inbox` on disk is treated as `[]`.
+   */
+  inbox(): string[];
+
+  /**
+   * Adds a skill ID to Inbox. Idempotent: a duplicate stays one entry.
+   * Does not call `install`. Returns an error Result if the change can't
+   * be saved (in which case Inbox is left unchanged).
+   */
+  addToInbox(skillId: string): Result<string[]>;
+
+  /**
+   * Removes a skill ID from Inbox. A no-op (not an error) if it isn't
+   * there. Returns an error Result if the change can't be saved (in which
+   * case Inbox is left unchanged).
+   */
+  removeFromInbox(skillId: string): Result<string[]>;
+
+  /**
+   * Moves one Inbox ID into an existing collection. One persist; rollback
+   * on write failure. Error if the collection is missing or the ID is not
+   * in Inbox — state is left unchanged. If the collection already has the
+   * ID, it is still dropped from Inbox. Does not call `install`.
+   */
+  fileToCollection(skillId: string, collectionName: string): Result<Collection>;
+
+  /**
+   * Deletes a collection by name. Missing name is an error. Deleting the
+   * last collection is allowed. Returns an error Result if the change
+   * can't be saved (in which case collections are left unchanged).
+   */
+  delete(name: string): Result<void>;
 }

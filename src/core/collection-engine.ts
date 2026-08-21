@@ -6,11 +6,18 @@ import { err, isOk, ok, type Result } from './result.js';
 /** Path to the persisted engine state, relative to the project root. */
 export const STATE_PATH = '.contextkit/state.json';
 
-/** Current state schema version. See `State`'s doc comment for the v1 -> v2 migration note. */
-const STATE_VERSION = '2.0';
+/** Current state schema version. See `State`'s doc comment for the v1 -> v3 notes. */
+const STATE_VERSION = '3.0';
+
+/** Collection name reserved for the Inbox holding list on `State`. */
+const INBOX_NAME = 'inbox';
 
 function emptyState(): State {
-  return { collections: [], installedSkills: [], version: STATE_VERSION };
+  return { collections: [], installedSkills: [], inbox: [], version: STATE_VERSION };
+}
+
+function normalizeState(state: State): State {
+  return { ...state, inbox: state.inbox ?? [] };
 }
 
 /**
@@ -27,11 +34,14 @@ export class CollectionEngine implements ICollectionEngine {
     private readonly skills: ISkillsAdapter
   ) {
     const loaded = this.fs.readJSON<State>(STATE_PATH);
-    this.state = isOk(loaded) ? loaded.value : emptyState();
+    this.state = isOk(loaded) ? normalizeState(loaded.value) : emptyState();
     this.mergeExternallyInstalledSkills();
   }
 
   create(name: string, skillIds: string[], command?: string): Result<Collection> {
+    if (name === INBOX_NAME) {
+      return err(new Error(`'inbox' is not a collection. Inbox is a holding list of skill IDs — add with 'contextkit inbox add' and file them into a named collection.`));
+    }
     if (this.state.collections.some((c) => c.name === name)) {
       return err(new Error(`Collection '${name}' already exists. Choose a different name or run 'contextkit list' to see existing collections.`));
     }
@@ -212,8 +222,93 @@ export class CollectionEngine implements ICollectionEngine {
     return ok({ succeeded, failures });
   }
 
+  inbox(): string[] {
+    return [...this.state.inbox];
+  }
+
+  addToInbox(skillId: string): Result<string[]> {
+    if (this.state.inbox.includes(skillId)) {
+      return ok(this.inbox());
+    }
+
+    this.state.inbox.push(skillId);
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      this.state.inbox.pop();
+      return err(new Error(`Failed to save inbox: ${persistResult.error.message}`));
+    }
+
+    return ok(this.inbox());
+  }
+
+  removeFromInbox(skillId: string): Result<string[]> {
+    const index = this.state.inbox.indexOf(skillId);
+    if (index === -1) {
+      return ok(this.inbox());
+    }
+
+    this.state.inbox.splice(index, 1);
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      this.state.inbox.splice(index, 0, skillId);
+      return err(new Error(`Failed to save inbox: ${persistResult.error.message}`));
+    }
+
+    return ok(this.inbox());
+  }
+
+  fileToCollection(skillId: string, collectionName: string): Result<Collection> {
+    const collection = this.state.collections.find((c) => c.name === collectionName);
+    if (!collection) {
+      return err(new Error(`Collection '${collectionName}' not found. Run 'contextkit list' to see available collections.`));
+    }
+
+    const inboxIndex = this.state.inbox.indexOf(skillId);
+    if (inboxIndex === -1) {
+      return err(new Error(`'${skillId}' is not in Inbox. Add it first, then file it into a collection.`));
+    }
+
+    const inboxSnapshot = [...this.state.inbox];
+    const skillsSnapshot = [...collection.skills];
+
+    this.state.inbox.splice(inboxIndex, 1);
+    if (!collection.skills.includes(skillId)) {
+      collection.skills.push(skillId);
+    }
+
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      this.state.inbox = inboxSnapshot;
+      collection.skills = skillsSnapshot;
+      return err(new Error(`Failed to save collection '${collectionName}': ${persistResult.error.message}`));
+    }
+
+    return ok(collection);
+  }
+
+  delete(name: string): Result<void> {
+    const index = this.state.collections.findIndex((c) => c.name === name);
+    if (index === -1) {
+      return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
+    }
+
+    const removed = this.state.collections[index];
+    if (removed === undefined) {
+      return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
+    }
+    this.state.collections.splice(index, 1);
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      this.state.collections.splice(index, 0, removed);
+      return err(new Error(`Failed to save after deleting '${name}': ${persistResult.error.message}`));
+    }
+
+    return ok(undefined);
+  }
+
   /** Writes state to disk. Returns an error Result if the write fails; callers must check it rather than assume the mutation was saved. */
   private persist(): Result<void> {
+    this.state.version = STATE_VERSION;
     return this.fs.writeJSON(STATE_PATH, this.state);
   }
 

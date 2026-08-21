@@ -36,16 +36,21 @@ export interface Collection {
 /**
  * Persisted engine state, stored at `.contextkit/state.json`.
  *
- * Schema v2 (current): dropped `activeCollection` and `Collection.lastUsedAt`
- * when symlink-based activation was replaced by IDE export (see
- * `docs/design/architecture.md`, "Decision Log"). Older v1 state files
- * still have both fields on disk; they're simply ignored on load — no
- * explicit migration step is needed since `readJSON<State>` only reads the
- * fields this type declares.
+ * Schema v3 (current): added `inbox`, a holding list of skill IDs that is
+ * not a collection. Schema v2 dropped `activeCollection` and
+ * `Collection.lastUsedAt` when symlink-based activation was replaced by
+ * IDE export. Older files without `inbox` load as `[]` — no rewrite on
+ * read. v1 `activeCollection`/`lastUsedAt` fields are still ignored.
  */
 export interface State {
   collections: Collection[];
   installedSkills: Skill[];
+  /**
+   * Skill IDs waiting to be filed into a named collection. Not a
+   * collection — reserved name `inbox` cannot be created. Missing on
+   * pre-v3 files; treat as `[]`.
+   */
+  inbox: string[];
   /** Schema version, for future migrations. */
   version: string;
 }
