@@ -41,5 +41,8 @@ describe('createProgram', () => {
     });
 
     expect(output).toContain('contextkit');
+    expect(output).toContain('inbox');
+    expect(output).toContain('delete');
+    expect(output.toLowerCase()).not.toContain('staging');
   });
 });

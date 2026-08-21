@@ -11,6 +11,8 @@ import { registerAddCommand } from './commands/add.js';
 import { registerRemoveCommand } from './commands/remove.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerExportCommand } from './commands/export.js';
+import { registerInboxCommand } from './commands/inbox.js';
+import { registerDeleteCommand } from './commands/delete.js';
 
 /**
  * Builds the contextkit CLI program. Commands are thin: they parse args,
@@ -35,6 +37,8 @@ export function createProgram(engine: ICollectionEngine): Command {
   registerRemoveCommand(program, engine);
   registerRunCommand(program, engine);
   registerExportCommand(program, engine);
+  registerInboxCommand(program, engine);
+  registerDeleteCommand(program, engine);
 
   return program;
 }
