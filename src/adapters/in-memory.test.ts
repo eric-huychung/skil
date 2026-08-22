@@ -34,6 +34,46 @@ describe('InMemoryFileSystemAdapter', () => {
 
     expect(isErr(fs.readJSON('/state.json'))).toBe(true);
   });
+
+  it('seeds a skill file that findSkillFolders can discover', () => {
+    const writeResult = fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    const found = fs.findSkillFolders('.cursor/skills');
+    const readResult = fs.readFile('.cursor/skills/tdd/SKILL.md');
+
+    expect(isOk(writeResult)).toBe(true);
+    expect(found).toEqual({ ok: true, value: ['.cursor/skills/tdd'] });
+    expect(readResult).toEqual({ ok: true, value: '# tdd\n' });
+  });
+
+  it('finds a nested skill folder and does not treat the parent as a skill', () => {
+    fs.writeFile('a/b/SKILL.md', '# nested');
+
+    expect(fs.findSkillFolders('.')).toEqual({ ok: true, value: ['a/b'] });
+  });
+
+  it('returns an empty list when the root is missing', () => {
+    expect(fs.findSkillFolders('.cursor/skills')).toEqual({ ok: true, value: [] });
+  });
+
+  it('returns an error when the root is a file', () => {
+    fs.writeFile('not-a-dir', 'nope');
+
+    const result = fs.findSkillFolders('not-a-dir');
+
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.message).toContain('not-a-dir');
+    }
+  });
+
+  it('reset() clears seeded skill files', () => {
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd');
+
+    fs.reset();
+
+    expect(isErr(fs.readFile('.cursor/skills/tdd/SKILL.md'))).toBe(true);
+    expect(fs.findSkillFolders('.cursor/skills')).toEqual({ ok: true, value: [] });
+  });
 });
 
 describe('InMemoryConfigAdapter', () => {
