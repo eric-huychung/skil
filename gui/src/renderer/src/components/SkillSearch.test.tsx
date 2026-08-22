@@ -171,13 +171,13 @@ describe('SkillSearch', () => {
     expect(screen.getByText('obra/react-patterns')).toBeInTheDocument();
   });
 
-  it('shows at most 100 leaderboard rows', async () => {
+  it('shows 25 leaderboard rows per page and keeps a 500 cap', async () => {
     const engine = createInMemoryEngine();
     const bridge = {
       ...createTestBridge(engine),
       browseSkills: async () =>
         ok(
-          Array.from({ length: 101 }, (_, index) => ({
+          Array.from({ length: 501 }, (_, index) => ({
             id: `skill/${index}`,
             source: 'skills.sh' as const,
             installedAt: '',
@@ -189,8 +189,18 @@ describe('SkillSearch', () => {
     renderWithProviders(<SkillSearch />, { bridge });
 
     await waitFor(() => expect(screen.getByText('skill/0')).toBeInTheDocument());
-    expect(screen.getByText('skill/99')).toBeInTheDocument();
-    expect(screen.queryByText('skill/100')).not.toBeInTheDocument();
+    expect(screen.getByText('skill/24')).toBeInTheDocument();
+    expect(screen.queryByText('skill/25')).not.toBeInTheDocument();
+    expect(screen.getByText('500 available')).toBeInTheDocument();
+    expect(screen.getByText('Page 1 of 20')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Page 4' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+
+    expect(screen.getByText('skill/25')).toBeInTheDocument();
+    expect(screen.queryByText('skill/0')).not.toBeInTheDocument();
+    expect(screen.getByText('Page 2 of 20')).toBeInTheDocument();
+    expect(screen.queryByText('skill/500')).not.toBeInTheDocument();
   });
 
   it('filters the cached leaderboard as you type without calling search', async () => {

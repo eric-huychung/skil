@@ -161,7 +161,7 @@ describe('SkillsAdapter', () => {
     it('maps leaderboard hits including install counts from a successful backend response', async () => {
       nock(website.apiBaseUrl)
         .get('/api/skills')
-        .query({ view: 'all-time', limit: '100' })
+        .query({ view: 'all-time', limit: '500' })
         .reply(200, {
           data: [{ id: 'obra/react-patterns', installs: 1200 }],
         });
@@ -180,7 +180,7 @@ describe('SkillsAdapter', () => {
     it('maps listing metadata without treating skills.sh source as Skill.source', async () => {
       nock(website.apiBaseUrl)
         .get('/api/skills')
-        .query({ view: 'all-time', limit: '100' })
+        .query({ view: 'all-time', limit: '500' })
         .reply(200, {
           data: [
             {
@@ -219,7 +219,7 @@ describe('SkillsAdapter', () => {
     it('requests the trending view from the same backend path', async () => {
       nock(website.apiBaseUrl)
         .get('/api/skills')
-        .query({ view: 'trending', limit: '100' })
+        .query({ view: 'trending', limit: '500' })
         .reply(200, {
           data: [{ id: 'vercel-labs/security-review', installs: 90 }],
         });
@@ -238,7 +238,7 @@ describe('SkillsAdapter', () => {
     it('returns an error when the backend request fails', async () => {
       nock(website.apiBaseUrl)
         .get('/api/skills')
-        .query({ view: 'all-time', limit: '100' })
+        .query({ view: 'all-time', limit: '500' })
         .reply(502, { message: 'skills.sh unavailable' });
 
       const adapter = new SkillsAdapter();

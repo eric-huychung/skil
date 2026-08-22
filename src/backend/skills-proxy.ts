@@ -50,11 +50,12 @@ export async function searchSkills(query: string, deps: SkillsProxyDeps): Promis
 
 /**
  * Calls skills.sh's leaderboard endpoint (all-time or trending) with this
- * deployment's Vercel OIDC token. Always requests `per_page=100` so CLI
- * (display 10) and GUI (display 100) share one CDN cache key per view.
+ * deployment's Vercel OIDC token. Always requests `per_page=500` (skills.sh
+ * max) so CLI (display 10) and GUI (display 500) share one CDN cache key
+ * per view. 500 is also the local type-to-filter corpus.
  */
 export async function browseSkills(view: BrowseView, deps: SkillsProxyDeps): Promise<Result<unknown>> {
-  const url = `${SKILLS_SH_BROWSE_URL}?view=${encodeURIComponent(view)}&per_page=100`;
+  const url = `${SKILLS_SH_BROWSE_URL}?view=${encodeURIComponent(view)}&per_page=500`;
 
   let response: Response;
   try {

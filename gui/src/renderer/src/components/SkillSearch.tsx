@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, ArrowSquareOut, ArrowsClockwise, Check, Plus } from '@phosphor-icons/react';
+import { ArrowRight, ArrowSquareOut, ArrowsClockwise, CaretLeft, CaretRight, Check, Plus } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import type { BrowseView, Skill } from '../../../shared/ipc';
 
 type AddState = { status: 'success' } | { status: 'error'; message: string };
 
-const BROWSE_DISPLAY_LIMIT = 100;
+const BROWSE_DISPLAY_LIMIT = 500;
+const PAGE_SIZE = 25;
 
 function formatInstalls(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
@@ -35,6 +36,7 @@ export default function SkillSearch() {
   const [addingId, setAddingId] = useState<string | null>(null);
   const [addStates, setAddStates] = useState<Record<string, AddState>>({});
   const [selected, setSelected] = useState<Skill | null>(null);
+  const [page, setPage] = useState(0);
   const browseCache = useRef<Partial<Record<BrowseView, Skill[]>>>({});
   const lastBrowseView = useRef<BrowseView>('all-time');
   const queryRef = useRef(query);
@@ -45,6 +47,7 @@ export default function SkillSearch() {
     if (!cached) return false;
     const trimmed = q.trim();
     setResultSource(view);
+    setPage(0);
     setResults(trimmed.length === 0 ? cached : cached.filter((skill) => skillMatchesQuery(skill, trimmed)));
     return true;
   }
@@ -134,6 +137,7 @@ export default function SkillSearch() {
     if (local.length > 0) {
       setSearchError(null);
       setResultSource(view);
+      setPage(0);
       setResults(local);
       return;
     }
@@ -148,6 +152,7 @@ export default function SkillSearch() {
         return;
       }
       setResultSource('search');
+      setPage(0);
       setResults(result.value);
     } catch (error) {
       setSearchError((error as Error).message);
@@ -167,6 +172,10 @@ export default function SkillSearch() {
       [skillId]: result.ok ? { status: 'success' } : { status: 'error', message: result.error.message },
     }));
   }
+
+  const pageCount = results && results.length > 0 ? Math.ceil(results.length / PAGE_SIZE) : 0;
+  const safePage = pageCount === 0 ? 0 : Math.min(page, pageCount - 1);
+  const visible = results?.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE) ?? [];
 
   return (
     <section className="library-panel panel-section">
@@ -230,7 +239,7 @@ export default function SkillSearch() {
 
       {results !== null && !isSearching && (
         <ul className="skill-list">
-          {results.map((skill, index) => {
+          {visible.map((skill, index) => {
             const addState = addStates[skill.id];
             const isAdding = addingId === skill.id;
             const added = !isAdding && addState?.status === 'success';
@@ -248,7 +257,7 @@ export default function SkillSearch() {
                   aria-haspopup="dialog"
                   aria-label={`Details for ${label}`}
                 />
-                <span className="skill-rank">{index + 1}</span>
+                <span className="skill-rank">{safePage * PAGE_SIZE + index + 1}</span>
                 <div className="skill-info">
                   <div className="skill-name">{label}</div>
                 </div>
@@ -286,6 +295,32 @@ export default function SkillSearch() {
             );
           })}
         </ul>
+      )}
+
+      {results !== null && !isSearching && pageCount > 1 && (
+        <nav aria-label="Pages" className="page-row">
+          <button
+            type="button"
+            aria-label="Previous page"
+            disabled={safePage === 0}
+            onClick={() => setPage(safePage - 1)}
+            className={`filter ${FOCUS_RING}`}
+          >
+            <CaretLeft size={14} weight="regular" aria-hidden="true" />
+          </button>
+          <span className="page-status">
+            Page {safePage + 1} of {pageCount}
+          </span>
+          <button
+            type="button"
+            aria-label="Next page"
+            disabled={safePage === pageCount - 1}
+            onClick={() => setPage(safePage + 1)}
+            className={`filter ${FOCUS_RING}`}
+          >
+            <CaretRight size={14} weight="regular" aria-hidden="true" />
+          </button>
+        </nav>
       )}
 
       {selected && <SkillDetailsDialog skill={selected} onClose={() => setSelected(null)} />}

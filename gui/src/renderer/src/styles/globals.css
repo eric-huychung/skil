@@ -569,6 +569,26 @@
   margin-top: 12px;
 }
 
+.page-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  justify-content: center;
+}
+
+.page-row .filter:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.page-status {
+  min-width: 7.5rem;
+  text-align: center;
+  color: var(--muted-ink);
+  font-size: 11px;
+}
+
 .filter {
   border: 0;
   border-radius: 999px;

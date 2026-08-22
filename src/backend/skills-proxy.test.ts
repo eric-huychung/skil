@@ -65,7 +65,7 @@ describe('searchSkills', () => {
 });
 
 describe('browseSkills', () => {
-  it('calls skills.sh leaderboard with the view, per_page=100, and an OIDC bearer token', async () => {
+  it('calls skills.sh leaderboard with the view, per_page=500, and an OIDC bearer token', async () => {
     const fetchImpl = fakeFetch({ status: 200, body: { data: [{ id: 'obra/react-patterns', installs: 1200 }] } });
     const getOidcToken = vi.fn(async () => 'test-oidc-token');
 
@@ -73,7 +73,7 @@ describe('browseSkills', () => {
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [url, init] = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://skills.sh/api/v1/skills?view=all-time&per_page=100');
+    expect(url).toBe('https://skills.sh/api/v1/skills?view=all-time&per_page=500');
     expect(init.headers).toMatchObject({ Authorization: 'Bearer test-oidc-token' });
   });
 
@@ -84,7 +84,7 @@ describe('browseSkills', () => {
     await browseSkills('trending', { fetchImpl, getOidcToken });
 
     const [url] = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://skills.sh/api/v1/skills?view=trending&per_page=100');
+    expect(url).toBe('https://skills.sh/api/v1/skills?view=trending&per_page=500');
   });
 
   it('returns the upstream response body on success', async () => {

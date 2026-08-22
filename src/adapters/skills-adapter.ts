@@ -62,7 +62,7 @@ export class SkillsAdapter implements ISkillsAdapter {
   async browse(view: BrowseView): Promise<Result<Skill[]>> {
     try {
       const response = await axios.get<SkillsListResponse>(`${this.apiBaseUrl}/api/skills`, {
-        params: { view, limit: 100 },
+        params: { view, limit: 500 },
       });
 
       return ok(response.data.data.map(mapSkillsShHit));
