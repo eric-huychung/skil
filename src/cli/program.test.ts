@@ -43,6 +43,7 @@ describe('createProgram', () => {
     expect(output).toContain('contextkit');
     expect(output).toContain('inbox');
     expect(output).toContain('delete');
+    expect(output).toContain('scan');
     expect(output.toLowerCase()).not.toContain('staging');
   });
 });
