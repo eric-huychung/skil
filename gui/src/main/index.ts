@@ -22,16 +22,25 @@ function currentEngine(): ICollectionEngine {
   return engine;
 }
 
-ipcMain.handle(IPC_CHANNELS.getProjectRoot, () => projectRoot);
-ipcMain.handle(IPC_CHANNELS.pickProjectFolder, async () => {
+async function pickDirectory(): Promise<string | null> {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   if (result.canceled || result.filePaths.length === 0) {
     return null;
   }
-  projectRoot = result.filePaths[0];
+  return result.filePaths[0];
+}
+
+ipcMain.handle(IPC_CHANNELS.getProjectRoot, () => projectRoot);
+ipcMain.handle(IPC_CHANNELS.pickProjectFolder, async () => {
+  const picked = await pickDirectory();
+  if (picked === null) {
+    return null;
+  }
+  projectRoot = picked;
   engine = createEngine(projectRoot);
   return projectRoot;
 });
+ipcMain.handle(IPC_CHANNELS.pickDestinationFolder, () => pickDirectory());
 
 ipcMain.handle(IPC_CHANNELS.listCollections, () => currentEngine().list());
 ipcMain.handle(IPC_CHANNELS.createCollection, (_event, name: string, skillIds: string[]) =>
@@ -40,8 +49,10 @@ ipcMain.handle(IPC_CHANNELS.createCollection, (_event, name: string, skillIds: s
 ipcMain.handle(IPC_CHANNELS.removeSkillFromCollection, (_event, name: string, skillId: string) =>
   currentEngine().removeSkill(name, skillId)
 );
-ipcMain.handle(IPC_CHANNELS.exportCommand, (_event, name: string, targetIDE: IDE, opts?: { replace?: boolean }) =>
-  currentEngine().exportCommand(name, targetIDE, opts)
+ipcMain.handle(
+  IPC_CHANNELS.exportCommand,
+  (_event, name: string, targetIDE: IDE, opts?: { replace?: boolean; dest?: string }) =>
+    currentEngine().exportCommand(name, targetIDE, opts)
 );
 ipcMain.handle(IPC_CHANNELS.searchSkills, (_event, query: string) => discovery.search(query));
 ipcMain.handle(IPC_CHANNELS.browseSkills, (_event, view: BrowseView) => discovery.browse(view));
@@ -52,8 +63,8 @@ ipcMain.handle(IPC_CHANNELS.addSkill, (_event, name: string, skillId: string) =>
 );
 ipcMain.handle(IPC_CHANNELS.deleteCollection, (_event, name: string) => currentEngine().delete(name));
 ipcMain.handle(IPC_CHANNELS.scan, () => currentEngine().scan());
-ipcMain.handle(IPC_CHANNELS.install, (_event, skillId: string, targetIDE: IDE) =>
-  currentEngine().install(skillId, targetIDE)
+ipcMain.handle(IPC_CHANNELS.install, (_event, skillId: string, targetIDE: IDE, opts?: { dest?: string }) =>
+  currentEngine().install(skillId, targetIDE, opts)
 );
 
 function createWindow(): void {

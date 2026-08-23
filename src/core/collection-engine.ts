@@ -56,6 +56,12 @@ const COMMAND_DIR_BY_IDE: Record<IDE, string> = {
 
 const SKIL_STAMP = 'generated_by: skil';
 
+/** Prefix a workspace-relative path with an optional dest root. */
+function underRoot(root: string | undefined, relative: string): string {
+  if (!root) return relative;
+  return `${root.replace(/\\/g, '/').replace(/\/+$/, '')}/${relative}`;
+}
+
 /** On-disk shape that may still use v3 `collections`. */
 interface PersistedState {
   version?: string;
@@ -230,13 +236,17 @@ export class CollectionEngine implements ICollectionEngine {
     return ok({ synced, warnings });
   }
 
-  async install(skillId: string, targetIDE: IDE): Promise<Result<SkillRecord>> {
-    const result = await this.skillsAdapter.install(skillId, targetIDE);
+  async install(skillId: string, targetIDE: IDE, opts?: { dest?: string }): Promise<Result<SkillRecord>> {
+    const result = await this.skillsAdapter.install(
+      skillId,
+      targetIDE,
+      opts?.dest ? { cwd: opts.dest } : undefined
+    );
     if (!isOk(result)) {
       return err(result.error);
     }
 
-    const deployPath = `${SKILL_ROOT_BY_IDE[targetIDE]}/${skillId}`;
+    const deployPath = underRoot(opts?.dest, `${SKILL_ROOT_BY_IDE[targetIDE]}/${skillId}`);
     const installedAt = new Date().toISOString();
     const existingIndex = this.state.skills.findIndex((s) => s.id === skillId);
     const previous = existingIndex >= 0 ? cloneSkillRecord(this.state.skills[existingIndex]) : undefined;
@@ -312,14 +322,18 @@ export class CollectionEngine implements ICollectionEngine {
     return ok({ succeeded, failures });
   }
 
-  exportCommand(name: string, targetIDE: IDE, opts?: { replace?: boolean }): Result<ExportResult> {
+  async exportCommand(
+    name: string,
+    targetIDE: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>> {
     name = normalizeCommandName(name);
     const command = this.state.commands.find((c) => c.name === name);
     if (!command) {
       return err(commandNotFound(name));
     }
 
-    const path = `${COMMAND_DIR_BY_IDE[targetIDE]}/${name}.md`;
+    const path = underRoot(opts?.dest, `${COMMAND_DIR_BY_IDE[targetIDE]}/${name}.md`);
     const existing = this.fs.readFile(path);
     if (isOk(existing) && !isSkilStamped(existing.value) && opts?.replace !== true) {
       return err(
@@ -334,7 +348,48 @@ export class CollectionEngine implements ICollectionEngine {
       return err(new Error(`Failed to write command file '${path}': ${written.error.message}`));
     }
 
-    return ok({ succeeded: [path], failures: [] });
+    const succeeded = [path];
+    const failures: string[] = [];
+    let copied = false;
+
+    for (const skillId of command.skills) {
+      const skillFolder = underRoot(opts?.dest, `${SKILL_ROOT_BY_IDE[targetIDE]}/${skillId}`);
+      if (isOk(this.fs.readFile(`${skillFolder}/SKILL.md`))) {
+        continue;
+      }
+
+      const record = this.state.skills.find((skill) => skill.id === skillId);
+      const source = record?.paths.find(
+        (folder) => folder !== skillFolder && isOk(this.fs.readFile(`${folder}/SKILL.md`))
+      );
+      if (source) {
+        const copyResult = this.fs.copyDir(source, skillFolder);
+        if (!isOk(copyResult)) {
+          failures.push(`'${skillId}': ${copyResult.error.message}`);
+          continue;
+        }
+        this.recordLocalDeploy(skillId, targetIDE, skillFolder);
+        succeeded.push(skillFolder);
+        copied = true;
+        continue;
+      }
+
+      const installed = await this.install(skillId, targetIDE, opts?.dest ? { dest: opts.dest } : undefined);
+      if (!isOk(installed)) {
+        failures.push(`'${skillId}': ${installed.error.message}`);
+        continue;
+      }
+      succeeded.push(skillFolder);
+    }
+
+    if (copied) {
+      const persistResult = this.persist();
+      if (!isOk(persistResult)) {
+        failures.push(`Failed to save skill deploys: ${persistResult.error.message}`);
+      }
+    }
+
+    return ok({ succeeded, failures });
   }
 
   inbox(): string[] {
@@ -518,6 +573,25 @@ export class CollectionEngine implements ICollectionEngine {
 
   skills(): SkillRecord[] {
     return [...this.state.skills];
+  }
+
+  private recordLocalDeploy(skillId: string, targetIDE: IDE, dest: string): void {
+    const existingIndex = this.state.skills.findIndex((skill) => skill.id === skillId);
+    const previous = existingIndex >= 0 ? this.state.skills[existingIndex] : undefined;
+    if (!previous || existingIndex < 0) {
+      return;
+    }
+
+    this.state.skills[existingIndex] = {
+      ...previous,
+      hash: hashSkillAt(this.fs, dest) ?? previous.hash,
+      paths: previous.paths.includes(dest) ? previous.paths : [...previous.paths, dest],
+      deployedTo: upsertDeploy(previous.deployedTo, {
+        ide: targetIDE,
+        path: dest,
+        installedAt: new Date().toISOString(),
+      }),
+    };
   }
 
   /** Writes state to disk. Returns an error Result if the write fails; callers must check it rather than assume the mutation was saved. */

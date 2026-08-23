@@ -23,7 +23,7 @@ const HARDCODED_TRENDING: Skill[] = [
  */
 export class InMemorySkillsAdapter implements ISkillsAdapter {
   private installed: Skill[] = [];
-  private installs: Array<{ skillId: string; ide: IDE }> = [];
+  private installs: Array<{ skillId: string; ide: IDE; cwd?: string }> = [];
   private installError: Error | null = null;
   private searchError: Error | null = null;
   private browseError: Error | null = null;
@@ -44,11 +44,11 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     return ok(view === 'trending' ? HARDCODED_TRENDING : HARDCODED_ALL_TIME);
   }
 
-  async install(skillId: string, targetIDE: IDE): Promise<Result<void>> {
+  async install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }): Promise<Result<void>> {
     if (this.installError) {
       return err(this.installError);
     }
-    this.installs.push({ skillId, ide: targetIDE });
+    this.installs.push({ skillId, ide: targetIDE, ...(opts?.cwd ? { cwd: opts.cwd } : {}) });
     this.installed.push({ id: skillId, source: 'skills.sh', installedAt: new Date().toISOString() });
     return ok(undefined);
   }
@@ -66,7 +66,7 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
   }
 
   /** Test helper: (skillId, ide) pairs passed to install(). */
-  getInstalls(): Array<{ skillId: string; ide: IDE }> {
+  getInstalls(): Array<{ skillId: string; ide: IDE; cwd?: string }> {
     return [...this.installs];
   }
 

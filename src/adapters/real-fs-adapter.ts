@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { IFileSystemAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
@@ -89,6 +89,22 @@ export class RealFileSystemAdapter implements IFileSystemAdapter {
       return ok(undefined);
     } catch (error) {
       return err(new Error(`Failed to write '${path}': ${(error as Error).message}`));
+    }
+  }
+
+  copyDir(from: string, to: string): Result<void> {
+    const src = this.resolvePath(from);
+    const dest = this.resolvePath(to);
+    try {
+      const stats = statSync(src);
+      if (!stats.isDirectory()) {
+        return err(new Error(`Failed to copy '${from}': not a directory`));
+      }
+      mkdirSync(dirname(dest), { recursive: true });
+      cpSync(src, dest, { recursive: true });
+      return ok(undefined);
+    } catch (error) {
+      return err(new Error(`Failed to copy '${from}' to '${to}': ${(error as Error).message}`));
     }
   }
 

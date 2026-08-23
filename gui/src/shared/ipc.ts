@@ -20,6 +20,7 @@ export const IPC_CHANNELS = {
   addSkill: 'contextkit:add-skill',
   deleteCollection: 'contextkit:delete-collection',
   pickProjectFolder: 'contextkit:pick-project-folder',
+  pickDestinationFolder: 'contextkit:pick-destination-folder',
   getProjectRoot: 'contextkit:get-project-root',
   scan: 'contextkit:scan',
   install: 'contextkit:install',
@@ -35,20 +36,26 @@ export interface ContextKitBridge {
   listCollections(): Promise<Collection[]>;
   createCollection(name: string, skillIds: string[]): Promise<Result<Collection>>;
   removeSkillFromCollection(name: string, skillId: string): Promise<Result<Collection>>;
-  /** Push our stamped command file. Does not install skills. */
-  exportCommand(name: string, targetIDE: IDE, opts?: { replace?: boolean }): Promise<Result<ExportResult>>;
+  /** Push our stamped command file and deploy filed skills the target IDE is missing. `dest` writes there without binding the session. */
+  exportCommand(
+    name: string,
+    targetIDE: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>>;
   searchSkills(query: string): Promise<Result<Skill[]>>;
   browseSkills(view: BrowseView): Promise<Result<Skill[]>>;
   listInbox(): Promise<string[]>;
   addToInbox(skillId: string): Promise<Result<string[]>>;
   addSkill(name: string, skillId: string): Promise<Result<Collection>>;
   deleteCollection(name: string): Promise<Result<void>>;
-  /** Opens a directory dialog. Returns the picked path, or `null` if canceled. */
+  /** Opens a directory dialog and binds the session. Returns the picked path, or `null` if canceled. */
   pickProjectFolder(): Promise<string | null>;
+  /** Opens a directory dialog for install/export dest. Does not bind the session. */
+  pickDestinationFolder(): Promise<string | null>;
   /** Currently bound project folder, or `null` if none has been picked this session. */
   getProjectRoot(): Promise<string | null>;
   /** Pull: scan SKILL.md folders. New unfiled ids go to Inbox. Does not install. */
   scan(): Promise<Result<ScanResult>>;
-  /** Push a known skill into an IDE skills dir. Does not write command files. */
-  install(skillId: string, targetIDE: IDE): Promise<Result<SkillRecord>>;
+  /** Push a known skill into an IDE skills dir. `dest` writes there without binding the session. */
+  install(skillId: string, targetIDE: IDE, opts?: { dest?: string }): Promise<Result<SkillRecord>>;
 }

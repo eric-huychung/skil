@@ -98,8 +98,8 @@ interface SkilEngine {
   list(): Command[]
   file(skillId: string, commandName: string): Result<Command>
   removeSkill(name: string, skillId: string): Result<Command>
-  install(skillId: string, targetIDE: IDE): Promise<Result<SkillRecord>>
-  exportCommand(name: string, targetIDE: IDE, opts?: { replace?: boolean }): Result<ExportResult>
+  install(skillId: string, targetIDE: IDE, opts?: { dest?: string }): Promise<Result<SkillRecord>>
+  exportCommand(name: string, targetIDE: IDE, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>
   search(query: string): Promise<Result<Skill[]>>
   browse(view: BrowseView): Promise<Result<Skill[]>>
 }
@@ -115,14 +115,14 @@ interface SkilEngine {
 - Command names store without a leading slash. `create('/build')` and `file(..., '/build')` normalize to `build`. UI may show `/build`.
 - Re-scan refreshes the catalog. The map stays. If a folder is gone, drop that id from catalog, commands, and inbox, and report it.
 - We never read the user's existing `commands/` trees to build the map.
-- Export writes **our** command file. If a file exists and is not stamped by us, refuse unless `replace: true`.
+- Export writes **our** command file, then ensures filed skills exist in that IDE's skills dir. Dest folders that already have `SKILL.md` are left alone. Local folders are copied; Discover-only ids go through `install`. If a command file exists and is not stamped by us, refuse unless `replace: true` — no skill deploy in that case.
 - Install writes a skill folder into that IDE's skills dir and records the deploy. It does not write command files.
 
 **Implementation responsibilities**
 - Persist the map and catalog in `.skil/state.json`. Load falls back to `.contextkit/state.json` if the new file is missing. The next persist writes `.skil/` (no copy on load).
 - Walk the four skill roots, hash `SKILL.md`, reconcile gone/changed/new.
 - Coordinate `npx skills add` (or a copy into another IDE tree) and record `deployedTo`.
-- Write stamped command markdown. Leave their old `/build.md` alone unless they opt in.
+- Write stamped command markdown and deploy filed skills the target IDE is missing. Leave their old `/build.md` alone unless they opt in. Leave dest skill folders that already exist.
 
 **Why deep:** CLI, GUI, and tests all call the same methods. Hash policy, gone-id cleanup, and stamp rules must not leak to the UI.
 
@@ -139,6 +139,7 @@ interface FileSystemAdapter {
   findSkillFolders(root: string): Result<string[]>  // dirs that contain SKILL.md; missing root → ok([])
   readFile(path: string): Result<string>
   writeFile(path: string, data: string): Result<void>
+  copyDir(from: string, to: string): Result<void>
 }
 ```
 
@@ -148,7 +149,7 @@ interface FileSystemAdapter {
 
 `findSkillFolders('.cursor/skills')` returns paths relative to the adapter root, nested, files ignored. A parent is a skill only if it has its own `SKILL.md`.
 
-`writeFile` is for our command templates (and tests). Install of a remote id still goes through SkillsAdapter (`npx skills add`).
+`writeFile` is for our command templates (and tests). `copyDir` copies a local skill folder to another IDE tree. Install of a remote id still goes through SkillsAdapter (`npx skills add`).
 
 ### 3. ConfigAdapter
 
@@ -162,14 +163,14 @@ Unchanged. Team `.contextkit.yml` sync is leftover, not part of pull/push. Do no
 interface SkillsAdapter {
   search(query: string): Promise<Result<Skill[]>>
   browse(view: BrowseView): Promise<Result<Skill[]>>
-  install(skillId: string, targetIDE: IDE): Promise<Result<void>>
+  install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }): Promise<Result<void>>
   convert(skillId: string, targetIDE: IDE): Promise<Result<void>>  // leftover
   getInstalled(): Skill[]                                         // leftover
 }
 ```
 
 - `search` / `browse`: our Vercel backend + OIDC. No user API key. Browse is CDN-cached (`Cache-Control` on 200 only). Not a skil registry. Origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
-- `install`: `npx skills add <id> --agent <name>` with `cwd` = project root. Agent/IDE flag stays **inside** the adapter. Engine `install(skillId, targetIDE)` does not grow extra flags.
+- `install`: `npx skills add <source> --agent <name> -y` with `cwd` = project root, or `opts.cwd` for a one-shot dest. 3-part skills.sh ids become `owner/repo@skill`. Agent/IDE flag stays **inside** the adapter.
 
   | skil IDE | `--agent` (vercel-labs/skills) |
   |----------|--------------------------------|
@@ -193,7 +194,7 @@ Target verbs:
 - `skil list`
 - `skil add <command> <skillId>` / `skil remove <command> <skillId>` — map edits; remove does not auto-inbox
 - `skil install <skillId> --to <ide>` — push a skill
-- `skil export <command> --to <ide> [--replace]` — push our command file
+- `skil export <command> --to <ide> [--replace]` — push our command file and filed skills the target IDE is missing
 - `skil search [query] [--trending]` — unchanged discover
 
 Bin is `skil`. `contextkit` is an alias of the same entry. Help and product-loop errors say **command**, not collection. Engine method is `file` (was `fileToCollection`). `Collection` remains a type alias. GUI chrome says Commands. Window/title says skil.
@@ -202,18 +203,19 @@ Bin is `skil`. `contextkit` is an alias of the same entry. Help and product-loop
 
 Same engine. No business logic in React.
 
-**Connect:** folder picker (already on Sync). No login. Discover works with no folder. Scan and install/export need a connected repo (or CLI cwd). Window title and brand say **skil**.
+**Connect:** folder picker (already on Sync). No login. Discover works with no folder. Scan needs a connected repo (or CLI cwd). Install/export can write to a picked dest without binding. Window title and brand say **skil**.
 
 **Tabs (target):**
-- **Commands** — command list, Inbox (unfiled), file, create `/build`, delete, install, export
+- **Inbox** — unfiled inventory (scan + Discover adds), re-scan, install from Inbox
+- **Commands** — command list, file from Inbox picker, create `/build`, delete, install filed, export
 - **Discover** — skills.sh browse/search, Add → Inbox (does not install)
 - **Sync** — pick / change folder only. Not a live merge.
 
-After pick, the GUI calls `scan()` once. The Commands surface shows Inbox as unfiled inventory (scanned locals + Discover adds) — not a rail tab. Scan is disabled with a clear message when no folder is connected. Re-scan is the Scan button. Show gone ids from the last scan result (`role="status"`). Do not auto-create commands. Discover Add is unchanged (still no install).
+After pick, the GUI calls `scan()` once. Inbox is a rail tab above Commands. Scan without a folder opens a modal explaining it needs a connected project. Re-scan is the Scan button on Inbox. Show gone ids from the last scan result (`role="status"`). Do not auto-create commands. Discover Add is unchanged (still no install).
 
-**Install (Commands only):** a known skill (Inbox or filed on a command) has an IDE picker and Install. That calls `bridge.install(skillId, ide)` → `engine.install`. Failure is a visible `role="alert"` (not `sr-only`). Install is disabled until a folder is connected. Discover does not grow an Install control.
+**Install:** Inbox matches Discover (search + 25-per-page list). A download icon opens an IDE menu; picking an IDE calls `bridge.install(skillId, ide)` → `engine.install`. Same icon-then-pick on filed skills. Progress, success, and failure open a modal. Failure keeps a short `role="alert"`; the full message is in collapsed Details. No connected folder → dest picker, then `install(..., { dest })`. Discover does not grow an Install control.
 
-**Export (Commands only):** a command has an IDE picker and Export. That calls `bridge.exportCommand(name, ide)` → `engine.exportCommand`. Does not install skills. Unstamped existing file shows the engine error and a Replace confirm. Export is disabled until a folder is connected.
+**Export (Commands only):** a command has an IDE picker, then Included skills, then From Inbox. Export is a labeled white button (download icon) under delete. That calls `bridge.exportCommand(name, ide)` → `engine.exportCommand`. Writes the command file, then copies local filed skills the target IDE is missing (or `install` for Discover-only ids). Dest skill folders already present are left alone. Loading / success / failure is a modal; failure details stay collapsed. Unstamped existing command file shows a Replace confirm. IDE picker stays enabled with no folder; Export then picks a dest and calls `exportCommand(..., { dest })` without binding the session.
 
 ## User Flow
 
@@ -222,7 +224,7 @@ After pick, the GUI calls `scan()` once. The Commands surface shows Inbox as unf
 3. **Inventory.** Ungrouped skills sit in Inbox until filed.
 4. **Organize.** Create `/build`, file `tdd` onto it. Map saves. Folders do not move.
 5. **Discover → Inbox → file onto a command → install** writes the skill into that IDE's skills dir.
-6. **Export** (explicit): write **our** command file (`skills:` + short steps + stamps). Do not touch their old `/build.md` unless they opt in to replace.
+6. **Export** (explicit): write **our** command file (`skills:` + short steps + stamps) and deploy filed skills that IDE is missing. Do not touch their old `/build.md` unless they opt in to replace. Do not overwrite dest skill folders.
 7. **Re-scan** = refresh the skill list. Map stays. If a folder is gone, drop that id and tell them.
 
 ## Data Model
@@ -324,11 +326,11 @@ Unchanged: skills.sh listing DTO. In-memory only. Not a catalog row until they A
 
 **Rationale:** Those files are their workflow text. Owning them makes skil a competing command manager. We generate **our** template when they ask.
 
-### Export is a command file, not skillsmith convert
+### Export is our command file plus missing skills, not skillsmith convert
 
-**Decision:** `exportCommand` writes one markdown command file. Skill install is a separate push.
+**Decision:** `exportCommand` writes one markdown command file, then deploys each filed skill the target IDE is missing. Dest folders that already have `SKILL.md` are left alone. Local folders are copied; ids with no local folder go through `install`.
 
-**Rationale:** The old `export` converted every skill via skillsmith. That is not "command templates we generate." Convert/skillsmith stays leftover, not the loop.
+**Rationale:** A command file that lists `tdd` is useless in Claude if `.claude/skills/tdd` is missing. Copy keeps scanned bodies identical (no npx rewrite). Install stays the path for Discover-only ids. Convert/skillsmith stays leftover, not the loop.
 
 ### Install is push-to-an-IDE
 
@@ -412,11 +414,14 @@ Atomic JSON write. Schema version on every persist. v3 → v4 on load, no rewrit
 - **CLI/engine words are command (2026-08-22, Task 32):** `fileToCollection` is `file`. `create('/build')` stores `build`. Product-loop help/errors say command. Leftover sync/export/run may still mention collection internally.
 - **Install records catalog `deployedTo` (2026-08-22, Task 35):** `engine.install(skillId, targetIDE)` calls the adapter, then upserts `SkillRecord` (`source` stays `local` if already scanned, else `skills.sh`; `paths` + `deployedTo` for that IDE). Persist rolls back on write failure. Does not write command files and does not require the id to be filed. Leftover `installedSkills` / `getInstalled()` is not the catalog. CLI `install <skillId> --to <ide>` requires `--to` and rejects an unknown IDE before the engine.
 - **Install agent flag lives in the adapter (2026-08-22, Task 34):** `ISkillsAdapter.install(skillId, targetIDE)`. Real adapter runs `npx skills add <id> --agent <name>` with cwd = project root. Claude is `claude-code`; our `agents` IDE uses vercel's `universal`. In-memory adapter records `(skillId, ide)`. Convert unchanged.
-- **CLI/GUI export is our stamped file (2026-08-22, Task 38):** `skil export <command> --to <ide> [--replace]` and GUI Export call `exportCommand`. Help says this is our template, not skillsmith convert. GUI does not install skills. Unstamped existing file shows the engine error plus a Replace confirm. Export is disabled until a folder is connected. Leftover `engine.export` (convert-all) stays in the tree unused by CLI/GUI.
+- **Export deploys missing skills (2026-08-23):** `exportCommand` is async. After the stamped command file, each filed skill is skipped if dest has `SKILL.md`, copied from a local catalog path, or `install`ed if there is no local folder. GUI Export uses the same Inbox install modal (loading / success / failure; details collapsed). Export icon sits under delete; Target IDE is above From Inbox. From Inbox filters as you type and pages at 10.
+- **CLI/GUI export is our stamped file (2026-08-22, Task 38):** `skil export <command> --to <ide> [--replace]` and GUI Export call `exportCommand`. Help says this is our template, not skillsmith convert. Unstamped existing file shows a Replace confirm. Export is disabled until a folder is connected. Leftover `engine.export` (convert-all) stays in the tree unused by CLI/GUI.
 - **exportCommand writes our stamped file (2026-08-22, Task 37):** `exportCommand(name, targetIDE, { replace? })` writes markdown with `name`, `skills`, `generated_by: skil`, `generated_at`, and a short stub body. Unstamped existing file → error unless `replace: true`. Stamped files may be rewritten. Does not call `convert`. Windsurf path is `.windsurf/workflows/<name>.md` (Cascade workflows). Cursor / Claude use `commands/`. Agents has no documented command dir; we write `.agents/commands/<name>.md` next to `.agents/skills/`.
 - **GUI install on Commands (2026-08-22, Task 36):** Inbox and filed skills pick an IDE and call `bridge.install(skillId, ide)` → engine. Error is a visible alert, not `sr-only`. Disabled until a folder is connected. Discover Add stays Inbox-only and does not grow Install. IDE picker includes `agents`.
 - **GUI chrome says Commands (2026-08-22, Task 33):** Tab, headings, create/delete/export copy, and empty states say command. Filenames (`CollectionList.tsx`) and the `Collection` type alias stay. Discover Add is still Inbox-only.
-- **GUI scans once after pick (2026-08-22, Task 31):** Pick folder calls `scan()`. Scan on Commands is the re-scan. Disabled until a folder is connected. Inbox is inventory on that surface, not a rail tab. Gone ids come from the last scan result.
+- **Inbox install is icon-then-pick (2026-08-23):** No standing IDE dropdown. Download icon opens a menu (cursor / claude / windsurf / agents). Inbox layout matches Discover: search filters unfiled ids, Scan is an icon.
+- **Inbox is a rail tab above Commands (2026-08-23):** Unfiled inventory, Scan, and Inbox install live on Inbox. Commands stays the command list plus the From Inbox file picker, filed install, and export.
+- **GUI scans once after pick (2026-08-22, Task 31):** Pick folder calls `scan()`. Scan on Inbox is the re-scan. Disabled until a folder is connected. Gone ids come from the last scan result.
 - **GUI design system (resolved, Task 44):** oklch tokens, Geist, Phosphor, shared `FOCUS_RING`.
 
 ## Success Criteria
@@ -425,7 +430,7 @@ Atomic JSON write. Schema version on every persist. v3 → v4 on load, no rewrit
 2. File onto `/build`; folders do not move; re-scan keeps the map.
 3. Delete a skill folder, re-scan, that id is gone from map and the user is told.
 4. Install writes into the target IDE skills dir and records `deployedTo`.
-5. Export writes a stamped command file and will not clobber an unstamped `/build.md` without `--replace`.
+5. Export writes a stamped command file, deploys filed skills the target IDE is missing, and will not clobber an unstamped `/build.md` without `--replace` or overwrite an existing dest skill folder.
 6. CLI and GUI share the engine. Zero catalog logic in React.
 
 ## References

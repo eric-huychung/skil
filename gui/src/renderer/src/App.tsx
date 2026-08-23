@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { Folder, GearSix, MagnifyingGlass, Moon, Question, Sparkle, Sun } from '@phosphor-icons/react';
+import { Folder, GearSix, MagnifyingGlass, Moon, Question, Sparkle, Sun, Tray } from '@phosphor-icons/react';
 import { useTheme } from './theme';
 import { useBridge } from './bridge-context';
 import { FOCUS_RING } from './lib/focus-ring';
 import CollectionList from './components/CollectionList';
 import CreateCollectionForm from './components/CreateCollectionForm';
+import InboxPanel from './components/InboxPanel';
 import SkillSearch from './components/SkillSearch';
 
-type WorkspaceTab = 'config' | 'search' | 'collections';
+type WorkspaceTab = 'config' | 'search' | 'inbox' | 'collections';
 
 const TABS: { id: WorkspaceTab; label: string; icon: typeof Folder }[] = [
   { id: 'config', label: 'Sync', icon: GearSix },
   { id: 'search', label: 'Discover', icon: MagnifyingGlass },
+  { id: 'inbox', label: 'Inbox', icon: Tray },
   { id: 'collections', label: 'Commands', icon: Folder },
 ];
 
@@ -142,7 +144,16 @@ export default function App() {
                   className={`rail-item ${selected ? 'active' : ''} ${FOCUS_RING}`}
                   onClick={() => setTab(item.id)}
                 >
-                  <Icon size={17} weight="regular" aria-hidden="true" />
+                  <span className="rail-icon">
+                    <Icon size={17} weight="regular" aria-hidden="true" />
+                    {item.id === 'config' && (
+                      <span
+                        className={`sync-dot ${boundRoot ? 'connected' : 'disconnected'}`}
+                        title={boundRoot ? 'Folder connected' : 'No folder connected'}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </span>
                   <RailLabel tab={item} />
                 </button>
               );
@@ -162,6 +173,8 @@ export default function App() {
         {tab === 'config' && <ConfigPanel root={boundRoot} onPick={() => void handlePickFolder()} />}
 
         {tab === 'search' && <SkillSearch />}
+
+        {tab === 'inbox' && <InboxPanel key={`${boundRoot ?? 'session'}:${collectionsVersion}`} />}
 
         {tab === 'collections' && (
           <CollectionList key={`${boundRoot ?? 'session'}:${collectionsVersion}`}>

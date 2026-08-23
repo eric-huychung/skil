@@ -32,8 +32,7 @@ describe('App', () => {
     expect(screen.getByText('skil 0.2.2')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Commands' })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByText('No commands yet')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Scan (connect a folder first)' })).toBeDisabled();
-    expect(screen.getByText('Connect a project folder to scan')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Inbox' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create New Command' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Pick a project folder' })).not.toBeInTheDocument();
@@ -60,18 +59,39 @@ describe('App', () => {
     expect(screen.queryByRole('heading', { name: 'Pick a project folder' })).not.toBeInTheDocument();
   });
 
-  it('does not put Inbox on the rail', async () => {
+  it('puts Inbox on the rail above Commands', async () => {
     const engine = installTestBridge(createInMemoryEngine());
     engine.create('frontend', []);
     engine.addToInbox('obra/react-patterns');
 
     renderWithProviders(<App />);
 
-    expect(screen.queryByRole('tab', { name: 'Inbox' })).not.toBeInTheDocument();
+    const tabs = screen.getAllByRole('tab').map((tab) => tab.getAttribute('aria-label'));
+    expect(tabs.indexOf('Inbox')).toBeGreaterThan(-1);
+    expect(tabs.indexOf('Inbox')).toBeLessThan(tabs.indexOf('Commands'));
     expect(await screen.findByRole('heading', { name: 'Commands' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Inbox' })).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Add obra/react-patterns to frontend' })
     ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
+    expect(screen.getByRole('tab', { name: 'Inbox' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    expect(screen.getByText('obra/react-patterns')).toBeInTheDocument();
+  });
+
+  it('shows a red Sync rail dot until a folder is connected', async () => {
+    installTestBridge(createInMemoryEngine());
+
+    renderWithProviders(<App />);
+
+    const sync = screen.getByRole('tab', { name: 'Sync' });
+    expect(sync.querySelector('.sync-dot')).toHaveClass('disconnected');
+
+    await clickPickFolder();
+
+    expect(screen.getByRole('tab', { name: 'Sync' }).querySelector('.sync-dot')).toHaveClass('connected');
   });
 
   it('puts Pick folder on Sync, not the header', async () => {
@@ -116,7 +136,7 @@ describe('App', () => {
     expect(screen.queryByText('tdd')).not.toBeInTheDocument();
 
     await clickPickFolder();
-    await userEvent.click(screen.getByRole('tab', { name: 'Commands' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
 
     expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
     expect(screen.getByText('tdd')).toBeInTheDocument();

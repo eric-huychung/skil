@@ -459,10 +459,13 @@ describe('CollectionEngine', () => {
   });
 
   describe('exportCommand', () => {
-    it('writes a stamped cursor command file whose skills match the command', () => {
+    it('writes a stamped cursor command file whose skills match the command', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      fs.writeFile('.cursor/skills/design/SKILL.md', '# design\n');
+      engine.scan();
       engine.create('build', ['tdd', 'design']);
 
-      const result = engine.exportCommand('build', 'cursor');
+      const result = await engine.exportCommand('build', 'cursor');
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -481,13 +484,33 @@ describe('CollectionEngine', () => {
         expect(written.value).toContain('1. Use the skills listed in frontmatter when they apply.');
       }
       expect(skills.getConvertCallCount()).toBe(0);
+      expect(skills.getInstalls()).toEqual([]);
     });
 
-    it('refuses an existing unstamped file unless replace is set', () => {
+    it('writes the command file under dest without moving workspace state', async () => {
+      engine.create('build', ['obra/react-patterns']);
+
+      const result = await engine.exportCommand('build', 'cursor', { dest: '/tmp/other-project' });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.succeeded[0]).toBe('/tmp/other-project/.cursor/commands/build.md');
+      }
+      const written = fs.readFile('/tmp/other-project/.cursor/commands/build.md');
+      expect(isOk(written)).toBe(true);
+      if (isOk(written)) {
+        expect(written.value).toContain('generated_by: skil');
+        expect(written.value).toContain('- obra/react-patterns');
+      }
+      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(engine.list()).toEqual([expect.objectContaining({ name: 'build' })]);
+    });
+
+    it('refuses an existing unstamped file unless replace is set', async () => {
       engine.create('build', ['tdd']);
       fs.writeFile('.cursor/commands/build.md', '# their old /build\n');
 
-      const refused = engine.exportCommand('build', 'cursor');
+      const refused = await engine.exportCommand('build', 'cursor');
 
       expect(isErr(refused)).toBe(true);
       if (isErr(refused)) {
@@ -497,8 +520,9 @@ describe('CollectionEngine', () => {
         ok: true,
         value: '# their old /build\n',
       });
+      expect(skills.getInstalls()).toEqual([]);
 
-      const replaced = engine.exportCommand('build', 'cursor', { replace: true });
+      const replaced = await engine.exportCommand('build', 'cursor', { replace: true });
 
       expect(isOk(replaced)).toBe(true);
       const written = fs.readFile('.cursor/commands/build.md');
@@ -509,12 +533,12 @@ describe('CollectionEngine', () => {
       }
     });
 
-    it('overwrites a file already stamped by skil', () => {
+    it('overwrites a file already stamped by skil', async () => {
       engine.create('build', ['tdd']);
-      engine.exportCommand('build', 'cursor');
+      await engine.exportCommand('build', 'cursor');
       engine.addSkill('build', 'design');
 
-      const result = engine.exportCommand('build', 'cursor');
+      const result = await engine.exportCommand('build', 'cursor');
 
       expect(isOk(result)).toBe(true);
       const written = fs.readFile('.cursor/commands/build.md');
@@ -526,19 +550,19 @@ describe('CollectionEngine', () => {
       }
     });
 
-    it('fails when the command is missing and leaves other IDE files alone', () => {
-      engine.create('build', ['tdd']);
+    it('fails when the command is missing and leaves other IDE files alone', async () => {
+      engine.create('build', []);
       fs.writeFile('.claude/commands/build.md', '# keep me\n');
       fs.writeFile('.windsurf/workflows/build.md', '# keep windsurf\n');
 
-      const missing = engine.exportCommand('missing', 'cursor');
+      const missing = await engine.exportCommand('missing', 'cursor');
       expect(isErr(missing)).toBe(true);
       if (isErr(missing)) {
         expect(missing.error.message).toContain("Command 'missing' not found");
       }
       expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
 
-      const exported = engine.exportCommand('/build', 'cursor');
+      const exported = await engine.exportCommand('/build', 'cursor');
       expect(isOk(exported)).toBe(true);
       expect(fs.readFile('.claude/commands/build.md')).toEqual({ ok: true, value: '# keep me\n' });
       expect(fs.readFile('.windsurf/workflows/build.md')).toEqual({
@@ -547,18 +571,18 @@ describe('CollectionEngine', () => {
       });
     });
 
-    it('writes Claude, Windsurf, and agents files to their IDE paths', () => {
-      engine.create('build', ['tdd']);
+    it('writes Claude, Windsurf, and agents files to their IDE paths', async () => {
+      engine.create('build', []);
 
-      expect(engine.exportCommand('build', 'claude')).toEqual({
+      expect(await engine.exportCommand('build', 'claude')).toEqual({
         ok: true,
         value: { succeeded: ['.claude/commands/build.md'], failures: [] },
       });
-      expect(engine.exportCommand('build', 'windsurf')).toEqual({
+      expect(await engine.exportCommand('build', 'windsurf')).toEqual({
         ok: true,
         value: { succeeded: ['.windsurf/workflows/build.md'], failures: [] },
       });
-      expect(engine.exportCommand('build', 'agents')).toEqual({
+      expect(await engine.exportCommand('build', 'agents')).toEqual({
         ok: true,
         value: { succeeded: ['.agents/commands/build.md'], failures: [] },
       });
@@ -566,6 +590,63 @@ describe('CollectionEngine', () => {
       expect(isOk(fs.readFile('.claude/commands/build.md'))).toBe(true);
       expect(isOk(fs.readFile('.windsurf/workflows/build.md'))).toBe(true);
       expect(isOk(fs.readFile('.agents/commands/build.md'))).toBe(true);
+    });
+
+    it('copies filed local skills into the target IDE and leaves the source folder unchanged', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      fs.writeFile('.cursor/skills/tdd/references/notes.md', '# notes\n');
+      engine.scan();
+      engine.create('build', ['tdd']);
+
+      const result = await engine.exportCommand('build', 'claude');
+
+      expect(isOk(result)).toBe(true);
+      expect(fs.readFile('.claude/commands/build.md')).toMatchObject({ ok: true });
+      expect(fs.readFile('.claude/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
+      expect(fs.readFile('.claude/skills/tdd/references/notes.md')).toEqual({
+        ok: true,
+        value: '# notes\n',
+      });
+      expect(fs.readFile('.cursor/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
+      expect(fs.readFile('.cursor/skills/tdd/references/notes.md')).toEqual({
+        ok: true,
+        value: '# notes\n',
+      });
+      expect(skills.getInstalls()).toEqual([]);
+    });
+
+    it('leaves a skill already in the target IDE unchanged and does not copy again', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# cursor tdd\n');
+      fs.writeFile('.claude/skills/tdd/SKILL.md', '# claude tdd\n');
+      engine.scan();
+      engine.create('build', ['tdd']);
+
+      const result = await engine.exportCommand('build', 'claude');
+
+      expect(isOk(result)).toBe(true);
+      expect(fs.readFile('.claude/skills/tdd/SKILL.md')).toEqual({
+        ok: true,
+        value: '# claude tdd\n',
+      });
+      expect(fs.readFile('.cursor/skills/tdd/SKILL.md')).toEqual({
+        ok: true,
+        value: '# cursor tdd\n',
+      });
+      expect(skills.getInstalls()).toEqual([]);
+    });
+
+    it('installs Discover-only skills that have no local folder', async () => {
+      engine.create('build', ['obra/react-patterns']);
+
+      const result = await engine.exportCommand('build', 'claude');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.succeeded).toContain('.claude/commands/build.md');
+        expect(result.value.succeeded).toContain('.claude/skills/obra/react-patterns');
+        expect(result.value.failures).toEqual([]);
+      }
+      expect(skills.getInstalls()).toEqual([{ skillId: 'obra/react-patterns', ide: 'claude' }]);
     });
   });
 
@@ -681,6 +762,28 @@ describe('CollectionEngine', () => {
       if (isOk(persisted)) {
         expect(persisted.value.skills).toHaveLength(1);
         expect(persisted.value.skills[0]?.id).toBe('obra/react-patterns');
+      }
+    });
+
+    it('installs into dest and keeps catalog state on the current workspace', async () => {
+      const result = await engine.install('obra/react-patterns', 'cursor', { dest: '/tmp/other-project' });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.deployedTo).toEqual([
+          expect.objectContaining({
+            ide: 'cursor',
+            path: '/tmp/other-project/.cursor/skills/obra/react-patterns',
+          }),
+        ]);
+      }
+      expect(skills.getInstalls()).toEqual([
+        { skillId: 'obra/react-patterns', ide: 'cursor', cwd: '/tmp/other-project' },
+      ]);
+      const persisted = fs.readJSON<{ skills: Array<{ id: string }> }>(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.skills).toHaveLength(1);
       }
     });
   });

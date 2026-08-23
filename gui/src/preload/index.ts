@@ -14,9 +14,10 @@ const bridge: ContextKitBridge = {
   addSkill: (name, skillId) => ipcRenderer.invoke(IPC_CHANNELS.addSkill, name, skillId),
   deleteCollection: (name) => ipcRenderer.invoke(IPC_CHANNELS.deleteCollection, name),
   pickProjectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.pickProjectFolder),
+  pickDestinationFolder: () => ipcRenderer.invoke(IPC_CHANNELS.pickDestinationFolder),
   getProjectRoot: () => ipcRenderer.invoke(IPC_CHANNELS.getProjectRoot),
   scan: () => ipcRenderer.invoke(IPC_CHANNELS.scan),
-  install: (skillId, targetIDE) => ipcRenderer.invoke(IPC_CHANNELS.install, skillId, targetIDE),
+  install: (skillId, targetIDE, opts) => ipcRenderer.invoke(IPC_CHANNELS.install, skillId, targetIDE, opts),
 };
 
 contextBridge.exposeInMainWorld('contextkit', bridge);

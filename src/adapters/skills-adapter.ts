@@ -31,6 +31,19 @@ const SKILLS_ADD_AGENT: Record<IDE, string> = {
   agents: 'universal',
 };
 
+/**
+ * skills.sh ids are often `owner/repo/skill`. `npx skills add owner/repo/skill`
+ * treats the third segment as a repo-root folder and reports "No skills found"
+ * when the skill lives under `skills/`. The CLI's `owner/repo@skill` form works.
+ */
+function toSkillsAddSource(skillId: string): string {
+  const parts = skillId.split('/').filter(Boolean);
+  if (parts.length >= 3) {
+    return `${parts[0]}/${parts[1]}@${parts[parts.length - 1]}`;
+  }
+  return skillId;
+}
+
 function mapSkillsShHit(hit: SkillsShHit): Skill {
   return {
     id: hit.id,
@@ -84,14 +97,21 @@ export class SkillsAdapter implements ISkillsAdapter {
     }
   }
 
-  async install(skillId: string, targetIDE: IDE): Promise<Result<void>> {
+  async install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }): Promise<Result<void>> {
     try {
-      await execa('npx', ['skills', 'add', skillId, '--agent', SKILLS_ADD_AGENT[targetIDE]], {
-        cwd: this.projectRoot,
-      });
+      await execa(
+        'npx',
+        ['skills', 'add', toSkillsAddSource(skillId), '--agent', SKILLS_ADD_AGENT[targetIDE], '-y'],
+        { cwd: opts?.cwd ?? this.projectRoot }
+      );
       return ok(undefined);
     } catch (error) {
-      return err(new Error(`Failed to install skill '${skillId}': ${(error as Error).message}`));
+      const message = error instanceof Error ? error.message : String(error);
+      const stderr =
+        typeof error === 'object' && error && 'stderr' in error ? String((error as { stderr: unknown }).stderr).trim() : '';
+      return err(
+        new Error(`Failed to install skill '${skillId}': ${message}${stderr ? `\n${stderr}` : ''}`)
+      );
     }
   }
 

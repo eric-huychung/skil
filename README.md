@@ -6,7 +6,7 @@ A CLI and desktop GUI for mapping AI skills onto SDLC commands (`/build`, `/tdd`
 - **Commands** = named groups of skill ids in the app. Folders do not move when you file.
 - **Inbox** = unfiled inventory (scanned locals + Discover adds).
 - **Pull** = `scan` (skills dirs only — not `commands/`).
-- **Push** = `install` a skill into an IDE skills dir, and/or `export` **our** stamped command file.
+- **Push** = `install` a skill into an IDE skills dir, and/or `export` **our** stamped command file plus the filed skills that IDE is missing.
 
 Bin is `skil`. `contextkit` is an alias of the same entry.
 
@@ -16,7 +16,7 @@ Bin is `skil`. `contextkit` is an alias of the same entry.
 2. `skil scan` — find `SKILL.md` under `.cursor/skills`, `.claude/skills`, `.windsurf/skills`, `.agents/skills`.
 3. Unfiled ids sit in Inbox. Create `/build`, then `inbox file` a skill onto it. The map saves; folders stay put.
 4. `skil install <skillId> --to cursor` writes the skill into that IDE's skills dir.
-5. `skil export build --to cursor` writes **our** command file (`skills:` + short steps + `generated_by: skil`). An existing unstamped `/build.md` is left alone unless you pass `--replace`.
+5. `skil export build --to cursor` writes **our** command file (`skills:` + short steps + `generated_by: skil`) and copies filed local skills into that IDE if they are not already there. Discover-only ids are installed. An existing unstamped `/build.md` is left alone unless you pass `--replace`.
 6. Re-scan refreshes the catalog. The map stays. Gone folders are dropped and reported.
 
 Discover Add puts an id in Inbox. It does not download. Install is a later, explicit step.
@@ -34,7 +34,7 @@ skil list                                              # list commands
 skil add <command> <skillId>                           # add a skill to a command
 skil remove <command> <skillId>                        # remove a skill from a command
 skil install <skillId> --to <ide>                      # push a skill (cursor|claude|windsurf|agents)
-skil export <command> --to <ide> [--replace]           # write our stamped command file
+skil export <command> --to <ide> [--replace]           # write our command file and deploy filed skills
 skil search [query] [--trending]                       # typed search, or all-time / trending
 ```
 
@@ -48,15 +48,16 @@ Search and browse go through skil's backend, which authenticates to skills.sh wi
 
 An Electron app (`gui/`) shares the same engine as the CLI. Window and brand say skil.
 
-- **Commands** — Inbox, create `/build`, file, delete, install, export, re-scan. Gone ids from the last scan show as a status banner.
+- **Inbox** — unfiled skills, search, 25 per page, Scan / re-scan, install from Inbox (download icon, then pick an IDE). Install result is a modal. Gone ids from the last scan show as a status banner.
+- **Commands** — create `/build`, file from Inbox, delete, install filed, export.
 - **Discover** — All time / Trending, typed search, skill details from listing fields, Add → Inbox. Works with no folder. Add does not install.
 - **Sync** — pick or change the project folder. Not a live merge.
 
-Pick a folder and skil scans once. The Scan button is re-scan. Scan, install, and export stay disabled until a folder is connected.
+Pick a folder and skil scans once. The Scan button on Inbox is re-scan. Scan needs a connected folder. Install and export can pick a dest folder without binding the project.
 
-Install (Commands only): pick an IDE and install a known skill (Inbox or filed). Errors show as a visible alert.
+Install: pick an IDE on Inbox (unfiled) or Commands (filed). Errors show as a visible alert.
 
-Export (Commands only): pick an IDE and write our stamped command file. Does not install skills. If the target file exists and is not stamped by us, you see the error and can confirm Replace.
+Export (Commands only): pick an IDE, write our stamped command file, and deploy filed skills that IDE is missing (copy local folders; install Discover-only ids). Existing dest skill folders are left alone. Result is a modal. If the target command file exists and is not stamped by us, you can confirm Replace.
 
 Run it with `npm run gui:dev`.
 

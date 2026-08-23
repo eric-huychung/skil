@@ -73,8 +73,34 @@ describe('SkillsAdapter', () => {
       const result = await adapter.install('obra/x', 'cursor');
 
       expect(isOk(result)).toBe(true);
-      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', 'cursor'], {
+      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', 'cursor', '-y'], {
         cwd: '/tmp/proj',
+      });
+    });
+
+    it('rewrites owner/repo/skill ids to owner/repo@skill so npx can find nested skills', async () => {
+      vi.mocked(execa).mockResolvedValue({} as never);
+
+      const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
+      const result = await adapter.install('anthropics/skills/frontend-design', 'claude');
+
+      expect(isOk(result)).toBe(true);
+      expect(execa).toHaveBeenCalledWith(
+        'npx',
+        ['skills', 'add', 'anthropics/skills@frontend-design', '--agent', 'claude-code', '-y'],
+        { cwd: '/tmp/proj' }
+      );
+    });
+
+    it('installs with cwd override when dest is passed', async () => {
+      vi.mocked(execa).mockResolvedValue({} as never);
+
+      const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
+      const result = await adapter.install('obra/x', 'cursor', { cwd: '/tmp/other-project' });
+
+      expect(isOk(result)).toBe(true);
+      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', 'cursor', '-y'], {
+        cwd: '/tmp/other-project',
       });
     });
 
@@ -89,7 +115,7 @@ describe('SkillsAdapter', () => {
       const result = await adapter.install('obra/x', ide);
 
       expect(isOk(result)).toBe(true);
-      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', agent], {
+      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', agent, '-y'], {
         cwd: process.cwd(),
       });
     });

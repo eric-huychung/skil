@@ -12,7 +12,7 @@ Developers accumulate AI skills as folders (`SKILL.md`) across Cursor, Claude, W
 - **Commands** = named groups of skill ids. Those are the SDLC knobs. Skills sit under them **in the app**, not as a folder tree.
 - **Inbox** = unfiled inventory (scanned locals + Discover adds).
 - **Pull** = scan skills only (not `commands/`).
-- **Push** = install a skill into an IDE skills dir, and/or write **our** command template (`skills:` + short steps + stamps).
+- **Push** = install a skill into an IDE skills dir, and/or write **our** command template (`skills:` + short steps + stamps) and deploy filed skills that IDE is missing.
 
 We are **not** SoT for skill file contents.  
 We **are** SoT for: which skills exist here, hashes, where we deployed them, and which skills sit on which command after they file them.
@@ -26,7 +26,7 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 3. **Show the inventory.** Ungrouped until they file — that list is Inbox.
 4. **Organize:** create `/build`, drop `tdd` on it. Saves the map. Folders do not move.
 5. **Discover → Inbox → file onto a command → install** writes the skill into that IDE's skills dir.
-6. **Export** (explicit): generate **our** command file. Do not touch their old `/build.md` unless they opt in to replace.
+6. **Export** (explicit): generate **our** command file and deploy filed skills that IDE is missing. Do not touch their old `/build.md` unless they opt in to replace. Do not overwrite dest skill folders.
 7. **Re-scan** = refresh the skill list. Map stays. If a folder is gone, drop that id and tell them.
 
 ## User Stories
@@ -41,7 +41,7 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 8. As a developer, I want Discover (all-time / trending / typed search) without a folder, so I can browse before I connect
 9. As a developer, I want Add from Discover to land in Inbox and not download, so install is a later choice
 10. As a developer, I want to install a skill into a chosen IDE's skills dir, so push is explicit
-11. As a developer, I want export to write **skil's** command file (`skills:` + short steps + stamps), so I get a template I did not have to author
+11. As a developer, I want export to write **skil's** command file (`skills:` + short steps + stamps) and put filed skills in that IDE if they are missing, so the command is usable there
 12. As a developer, I want export to refuse an unstamped existing `/build.md` unless I say replace, so my old command text is safe
 13. As a developer, I want re-scan to keep my map and drop ids whose folders are gone, so the inventory is honest
 14. As a developer using several IDEs, I want one map and per-IDE install/export, so I do not keep four copies of the filing
@@ -88,7 +88,7 @@ State lives in `.skil/state.json`. Load falls back to `.contextkit/state.json` i
 - **Inbox is not a command.** Reserved name. `create inbox` errors.
 - **Command names have no leading slash.** `create /build` stores `build`. UI may still show `/build`.
 - **CLI help/errors and GUI chrome say command, not collection.**
-- **Connect scans once.** Pick folder pulls unfiled skills into Inbox. The Scan button is re-scan. Disabled until a folder is connected.
+- **Connect scans once.** Pick folder pulls unfiled skills into Inbox. The Scan button is re-scan. Click without a folder explains it needs a connected project.
 - **Scan does not create `/cursor` or `/claude`.** That would be the folder tree again.
 - **We do not scan `commands/` (or Windsurf `workflows/`).** We only write a command file on export. Engine method is `exportCommand`. Stamp is `generated_by: skil`. Unstamped existing files need replace.
 - **Command-file paths:** cursor / claude / agents use `commands/<name>.md` under their root. Windsurf uses `.windsurf/workflows/<name>.md`.
@@ -117,13 +117,13 @@ API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 ### GUI
 
 - Window and brand say skil. Connect folder (Sync tab). No login.
-- Commands tab: Inbox, create command, file, delete, install, export, re-scan
+- Inbox tab (above Commands): Discover-like list (25 per page), search to filter unfiled ids, re-scan icon, install from Inbox
+- Commands tab: create command, file from Inbox picker, delete, install filed, export
 - Discover: All time / Trending, typed search, Add → Inbox, details from listing fields
-- Discover does not require a folder; scan / install / export do
-- Inbox on Commands is the unfiled list (scan + Discover). Not a rail tab
-- Scan is disabled (with copy) until a folder is connected. Pick folder scans once; the Scan button is re-scan
-- Install on Commands: pick IDE (cursor / claude / windsurf / agents), call `engine.install(skillId, ide)`. Works from Inbox or a filed skill. Error is a visible alert, not `sr-only`. Disabled until a folder is connected
-- Export on Commands: pick IDE, call `engine.exportCommand(name, ide)`. Writes our stamped command file. Does not install skills. Unstamped existing file shows the error and a Replace confirm (`replace: true`). Disabled until a folder is connected
+- Discover does not require a folder. Scan needs a connected repo. Install and export can pick a dest folder without binding the session
+- Scan click without a folder opens a modal explaining why. Pick folder scans once; the Scan icon on Inbox is re-scan
+- Install: download icon, then pick IDE (cursor / claude / windsurf / agents), call `engine.install(skillId, ide)`. Inbox for unfiled; Commands for filed. Loading / success / failure is a modal. Failure alert is short; full error is collapsed Details. No connected folder → dest folder picker, then install there
+- Export on Commands: pick IDE (above Included skills, then From Inbox), call `engine.exportCommand(name, ide)`. Writes our stamped command file and deploys filed skills that IDE is missing (copy local; install Discover-only; skip dest that already exists). Loading / success / failure is a modal; failure details stay collapsed. Unstamped existing command file shows a Replace confirm (`replace: true`). IDE picker stays enabled with no folder; Export is a labeled white button (download icon) and picks a dest folder when no repo is bound. From Inbox filters as you type and pages at 10.
 - Discover Add still does not install and does not grow an Install control
 - Gone ids from the last scan show as a status banner
 - No typed skill-id fields in the GUI (CLI can still take ids)

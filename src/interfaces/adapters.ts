@@ -43,6 +43,13 @@ export interface IFileSystemAdapter {
    * Relative paths resolve under the adapter root; absolute paths stay absolute.
    */
   writeFile(path: string, data: string): Result<void>;
+
+  /**
+   * Copies every file under `from` into `to`, creating parent dirs.
+   * Missing source or a file-as-source is an error. Destination files
+   * are overwritten. Engine callers skip when dest already has SKILL.md.
+   */
+  copyDir(from: string, to: string): Result<void>;
 }
 
 /**
@@ -74,8 +81,9 @@ export interface ISkillsAdapter {
   /**
    * Installs a skill by ID via `npx skills add`. The agent/IDE flag is
    * chosen inside the adapter from `targetIDE` — callers do not pass flags.
+   * `cwd` overrides the adapter's project root for this call only.
    */
-  install(skillId: string, targetIDE: IDE): Promise<Result<void>>;
+  install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }): Promise<Result<void>>;
 
   /** Converts a skill to a target IDE's format via `skillsmith`. */
   convert(skillId: string, targetIDE: IDE): Promise<Result<void>>;

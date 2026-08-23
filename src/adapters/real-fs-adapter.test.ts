@@ -229,4 +229,25 @@ describe('RealFileSystemAdapter', () => {
       }
     });
   });
+
+  describe('copyDir', () => {
+    beforeEach(() => {
+      adapter = new RealFileSystemAdapter(tmpDir);
+    });
+
+    it('copies the folder tree under the adapter root', () => {
+      mkdirSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'references'), { recursive: true });
+      writeFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'SKILL.md'), '# tdd\n');
+      writeFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'references', 'notes.md'), '# notes\n');
+
+      const result = adapter.copyDir('.cursor/skills/tdd', '.claude/skills/tdd');
+
+      expect(isOk(result)).toBe(true);
+      expect(readFileSync(join(tmpDir, '.claude', 'skills', 'tdd', 'SKILL.md'), 'utf-8')).toBe('# tdd\n');
+      expect(readFileSync(join(tmpDir, '.claude', 'skills', 'tdd', 'references', 'notes.md'), 'utf-8')).toBe(
+        '# notes\n'
+      );
+      expect(readFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'SKILL.md'), 'utf-8')).toBe('# tdd\n');
+    });
+  });
 });

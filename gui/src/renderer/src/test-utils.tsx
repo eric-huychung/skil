@@ -42,6 +42,11 @@ export type TestBridgeOptions = {
    * Omitted → bind `DEFAULT_TEST_PROJECT_ROOT`. `null` → user canceled.
    */
   nextPick?: string | null;
+  /**
+   * What the next dest-only folder pick returns (install/export without a bind).
+   * Omitted → `/tmp/test-project`. `null` → user canceled.
+   */
+  nextDestination?: string | null;
 };
 
 /**
@@ -70,8 +75,12 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
       projectRoot = options.nextPick ?? DEFAULT_TEST_PROJECT_ROOT;
       return projectRoot;
     },
+    pickDestinationFolder: async () => {
+      if (options.nextDestination === null) return null;
+      return options.nextDestination ?? DEFAULT_TEST_PROJECT_ROOT;
+    },
     scan: async () => engine.scan(),
-    install: async (skillId, targetIDE) => engine.install(skillId, targetIDE),
+    install: async (skillId, targetIDE, opts) => engine.install(skillId, targetIDE, opts),
   };
 }
 

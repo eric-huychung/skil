@@ -56,12 +56,13 @@ export interface ICollectionEngine {
   /**
    * Installs a skill via the SkillsAdapter into `targetIDE`, then upserts
    * the catalog `SkillRecord` (`source`, `paths`, `deployedTo`). Does not
-   * write command files and does not require the id to be filed. Returns
-   * an error Result if the adapter fails, or if the updated state can't
+   * write command files and does not require the id to be filed. `dest`
+   * writes into that folder without rebinding the workspace. Returns an
+   * error Result if the adapter fails, or if the updated state can't
    * be saved (in which case no deploy is recorded — `install` can be
    * safely retried).
    */
-  install(skillId: string, targetIDE: IDE): Promise<Result<SkillRecord>>;
+  install(skillId: string, targetIDE: IDE, opts?: { dest?: string }): Promise<Result<SkillRecord>>;
 
   /**
    * Searches skills.sh for skills matching `query`, via the SkillsAdapter.
@@ -90,12 +91,22 @@ export interface ICollectionEngine {
 
   /**
    * Writes our stamped command file for `name` into `targetIDE`'s
-   * commands dir. Does not scan `commands/`, does not call `convert`,
-   * and does not install skills. If the target file exists and lacks
-   * `generated_by: skil`, returns an error unless `replace` is true.
-   * Missing command name is an error. Other IDE files are left alone.
+   * commands dir, then ensures each filed skill exists in that IDE's
+   * skills dir. Local folders already on disk are copied (never
+   * overwritten if dest has SKILL.md). Discover-only ids go through
+   * `install`. Does not scan `commands/` and does not call `convert`.
+   * If the target command file exists and lacks `generated_by: skil`,
+   * returns an error unless `replace` is true — no skill deploy in
+   * that case. Missing command name is an error. Other IDE files are
+   * left alone. Skill deploy failures are listed on `failures`; the
+   * command file is still written. `dest` writes into that folder
+   * without rebinding the workspace.
    */
-  exportCommand(name: string, targetIDE: IDE, opts?: { replace?: boolean }): Result<ExportResult>;
+  exportCommand(
+    name: string,
+    targetIDE: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>>;
 
   /**
    * Returns the Inbox holding list of skill IDs. Never downloads. Missing

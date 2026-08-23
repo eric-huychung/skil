@@ -45,13 +45,15 @@ describe('GUI workflow (real engine)', () => {
     await userEvent.selectOptions(within(detail).getByLabelText('Export frontend to'), 'windsurf');
     await userEvent.click(within(detail).getByRole('button', { name: 'Export frontend' }));
 
-    await waitFor(() => expect(within(detail).getByText('Exported to windsurf')).toBeInTheDocument());
+    expect(await screen.findByRole('dialog', { name: 'Exported' })).toHaveTextContent(
+      'Exported frontend to Windsurf in test-project'
+    );
     const written = fs.readFile('.windsurf/workflows/frontend.md');
     expect(isOk(written)).toBe(true);
     if (isOk(written)) {
       expect(written.value).toContain('generated_by: skil');
     }
-    expect(engine.skills()).toEqual([]);
+    expect(engine.skills()[0]?.deployedTo.map((row) => row.ide)).toEqual(['windsurf']);
     expect(engine.list()).toHaveLength(1);
   });
 });

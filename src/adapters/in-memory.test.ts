@@ -74,6 +74,30 @@ describe('InMemoryFileSystemAdapter', () => {
     expect(isErr(fs.readFile('.cursor/skills/tdd/SKILL.md'))).toBe(true);
     expect(fs.findSkillFolders('.cursor/skills')).toEqual({ ok: true, value: [] });
   });
+
+  it('copyDir copies the folder tree and leaves the source files in place', () => {
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    fs.writeFile('.cursor/skills/tdd/references/notes.md', '# notes\n');
+
+    const result = fs.copyDir('.cursor/skills/tdd', '.claude/skills/tdd');
+
+    expect(isOk(result)).toBe(true);
+    expect(fs.readFile('.claude/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
+    expect(fs.readFile('.claude/skills/tdd/references/notes.md')).toEqual({
+      ok: true,
+      value: '# notes\n',
+    });
+    expect(fs.readFile('.cursor/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
+  });
+
+  it('copyDir errors when the source folder is missing', () => {
+    const result = fs.copyDir('.cursor/skills/tdd', '.claude/skills/tdd');
+
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.message).toMatch(/not found/);
+    }
+  });
 });
 
 describe('InMemoryConfigAdapter', () => {

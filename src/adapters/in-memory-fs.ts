@@ -57,6 +57,31 @@ export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
     return ok(undefined);
   }
 
+  copyDir(from: string, to: string): Result<void> {
+    const src = normalizePath(from);
+    const dest = normalizePath(to);
+    if (this.textFiles.has(src)) {
+      return err(new Error(`Failed to copy '${from}': not a directory`));
+    }
+
+    const prefix = `${src}/`;
+    let copied = 0;
+    for (const [path, data] of this.textFiles) {
+      if (path !== src && !path.startsWith(prefix)) {
+        continue;
+      }
+      const relative = path === src ? '' : path.slice(prefix.length);
+      const destPath = relative === '' ? dest : `${dest}/${relative}`;
+      this.textFiles.set(destPath, data);
+      copied += 1;
+    }
+
+    if (copied === 0) {
+      return err(new Error(`Failed to copy '${from}': not found`));
+    }
+    return ok(undefined);
+  }
+
   /** Test helper: makes every writeJSON() call fail with `error` until cleared with `setWriteError(null)`. */
   setWriteError(error: Error | null): void {
     this.writeError = error;

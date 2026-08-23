@@ -105,10 +105,10 @@ export interface SyncResult {
   warnings: string[];
 }
 
-/** Outcome of an export. Product `exportCommand` puts the written path in `succeeded`. Leftover skillsmith `export` still uses `"command:skillId"` pairs. */
+/** Outcome of an export. Product `exportCommand` puts the command file and any copied/installed skill paths in `succeeded`. Leftover skillsmith `export` still uses `"command:skillId"` pairs. */
 export interface ExportResult {
-  /** Written command-file paths (`exportCommand`) or leftover convert pairs. */
+  /** Written command-file / skill dest paths (`exportCommand`) or leftover convert pairs. */
   succeeded: string[];
-  /** Actionable messages about files or leftover convert failures. */
+  /** Skill deploy failures, or leftover convert failures. The command file may still have been written. */
   failures: string[];
 }
