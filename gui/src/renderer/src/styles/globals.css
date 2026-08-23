@@ -486,6 +486,40 @@
   background: var(--surface-soft);
 }
 
+.included-skill-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skill-install {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.skill-install select {
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 26px 7px 9px;
+  font-size: 12px;
+}
+
+.skill-install .outline-button {
+  height: 32px;
+  padding: 0 10px;
+}
+
+.skill-install [role='alert'],
+.skill-install .muted-copy {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .scan-button {
   flex-shrink: 0;
   height: 36px;

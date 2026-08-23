@@ -9,6 +9,7 @@ All notable changes to ContextKit are documented here. Versions follow [Semantic
 
 ### Changed
 - `install` takes a target IDE. The skills adapter runs `npx skills add` with `--agent` (cursor → `cursor`, claude → `claude-code`, windsurf → `windsurf`, agents → `universal`). The engine upserts catalog `deployedTo`; leftover `installedSkills` is not the catalog. CLI `--to` is required and rejects an unknown IDE before the engine.
+- GUI Commands: pick an IDE and Install a known skill (Inbox or filed). Calls the engine; errors are a visible alert. Disabled until a folder is connected. Discover Add still does not download.
 - GUI layout now follows the example desktop shell: topbar, rail tabs (Commands / Discover / Sync), command list + detail, and a help dialog.
 - CLI, engine, and GUI product-loop copy say **command**, not collection. `fileToCollection` is now `file`. `create /build` stores the name `build`.
 

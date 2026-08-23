@@ -210,6 +210,87 @@ describe('CollectionList', () => {
     expect(screen.queryByText('design')).not.toBeInTheDocument();
   });
 
+  it('installs an Inbox skill to the chosen IDE', async () => {
+    const engine = createInMemoryEngine();
+    engine.addToInbox('obra/react-patterns');
+    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+
+    renderWithProviders(<CollectionList />, { bridge });
+    const inventory = (await screen.findByRole('heading', { name: 'Inbox' })).closest('.inbox-inventory');
+    if (!inventory) throw new Error('expected inbox inventory');
+
+    await waitFor(() =>
+      expect(within(inventory as HTMLElement).getByRole('button', { name: 'Install obra/react-patterns' })).toBeEnabled()
+    );
+    await userEvent.selectOptions(
+      within(inventory as HTMLElement).getByLabelText('Install obra/react-patterns to'),
+      'claude'
+    );
+    await userEvent.click(within(inventory as HTMLElement).getByRole('button', { name: 'Install obra/react-patterns' }));
+
+    await waitFor(() => {
+      expect(engine.skills().find((skill) => skill.id === 'obra/react-patterns')?.deployedTo.map((row) => row.ide)).toEqual([
+        'claude',
+      ]);
+    });
+    expect(engine.inbox()).toEqual(['obra/react-patterns']);
+  });
+
+  it('installs a filed skill from the command detail to the chosen IDE', async () => {
+    const engine = createInMemoryEngine();
+    engine.create('frontend', ['obra/react-patterns']);
+    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+
+    renderWithProviders(<CollectionList />, { bridge });
+    const detail = await screen.findByRole('region', { name: 'Command frontend details' });
+
+    await waitFor(() =>
+      expect(within(detail).getByRole('button', { name: 'Install obra/react-patterns' })).toBeEnabled()
+    );
+    await userEvent.selectOptions(within(detail).getByLabelText('Install obra/react-patterns to'), 'windsurf');
+    await userEvent.click(within(detail).getByRole('button', { name: 'Install obra/react-patterns' }));
+
+    await waitFor(() => {
+      expect(engine.skills()[0]?.deployedTo.map((row) => row.ide)).toEqual(['windsurf']);
+    });
+  });
+
+  it('shows a visible error when install fails', async () => {
+    const engine = createInMemoryEngine();
+    engine.addToInbox('obra/react-patterns');
+    const bridge = {
+      ...createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT }),
+      install: async () => err(new Error('npx skills add failed')),
+    };
+
+    renderWithProviders(<CollectionList />, { bridge });
+    const inventory = (await screen.findByRole('heading', { name: 'Inbox' })).closest('.inbox-inventory');
+    if (!inventory) throw new Error('expected inbox inventory');
+
+    await waitFor(() =>
+      expect(within(inventory as HTMLElement).getByRole('button', { name: 'Install obra/react-patterns' })).toBeEnabled()
+    );
+    await userEvent.click(within(inventory as HTMLElement).getByRole('button', { name: 'Install obra/react-patterns' }));
+
+    const alert = await within(inventory as HTMLElement).findByRole('alert');
+    expect(alert).toHaveTextContent(/npx skills add failed/);
+    expect(alert).not.toHaveClass('sr-only');
+    expect(engine.skills()).toEqual([]);
+  });
+
+  it('disables Install until a folder is connected', async () => {
+    const engine = createInMemoryEngine();
+    engine.addToInbox('obra/react-patterns');
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CollectionList />, { bridge });
+
+    expect(
+      await screen.findByRole('button', { name: 'Install obra/react-patterns (connect a folder first)' })
+    ).toBeDisabled();
+    expect(engine.skills()).toEqual([]);
+  });
+
   it('does not delete when the confirm dialog is canceled', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', []);

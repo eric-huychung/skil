@@ -844,13 +844,13 @@ One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys,
 **Description:** After a skill is known (Inbox or on a command), user picks an IDE and Install. Bridge `install(skillId, ide)` → engine. Discover does not grow Install.
 
 **Acceptance criteria:**
-- [ ] Install from the Commands surface calls the engine with the chosen IDE
-- [ ] Error is visible (not `sr-only`)
-- [ ] Discover Add still does not install
+- [x] Install from the Commands surface calls the engine with the chosen IDE
+- [x] Error is visible (not `sr-only`)
+- [x] Discover Add still does not install
 
 **Verification:**
-- [ ] Tests pass: `npm --workspace gui test`
-- [ ] `npm --workspace gui run typecheck` passes
+- [x] Tests pass: `npm --workspace gui test`
+- [x] `npm --workspace gui run typecheck` passes
 - [ ] Manual: file a skills.sh id, install `--to cursor`, confirm a folder under the picked project
 
 **Dependencies:** Task 35
@@ -864,8 +864,8 @@ One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys,
 ---
 
 ## Checkpoint: After Tasks 34–36 (push skills)
-- [ ] Discover Add does not download
-- [ ] Install writes into the target IDE skills dir and records `deployedTo`
+- [x] Discover Add does not download
+- [x] Install writes into the target IDE skills dir and records `deployedTo`
 - [ ] Human check: where did `npx skills add` write?
 
 ---

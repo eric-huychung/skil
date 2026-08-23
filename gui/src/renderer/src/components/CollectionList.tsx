@@ -4,18 +4,83 @@ import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import type { Collection, IDE, ScanResult } from '../../../shared/ipc';
 
-const IDE_OPTIONS: IDE[] = ['cursor', 'claude', 'windsurf'];
+const IDE_OPTIONS: IDE[] = ['cursor', 'claude', 'windsurf', 'agents'];
 
 type ExportState = { status: 'success'; ide: IDE } | { status: 'error'; message: string };
+
+function ideLabel(ide: IDE): string {
+  return ide.charAt(0).toUpperCase() + ide.slice(1);
+}
+
+function InstallSkill({ skillId, canInstall, instance }: { skillId: string; canInstall: boolean; instance: string }) {
+  const bridge = useBridge();
+  const [ide, setIde] = useState<IDE>('cursor');
+  const [error, setError] = useState<string | null>(null);
+  const [successIde, setSuccessIde] = useState<IDE | null>(null);
+  const [busy, setBusy] = useState(false);
+  const selectId = `install-ide-${instance}-${skillId}`;
+
+  async function handleInstall() {
+    if (!canInstall) return;
+    setError(null);
+    setSuccessIde(null);
+    setBusy(true);
+    const result = await bridge.install(skillId, ide);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setSuccessIde(ide);
+  }
+
+  return (
+    <div className="skill-install">
+      <label htmlFor={selectId} className="sr-only">
+        {`Install ${skillId} to`}
+      </label>
+      <select
+        id={selectId}
+        value={ide}
+        onChange={(event) => setIde(event.target.value as IDE)}
+        disabled={!canInstall || busy}
+        className={FOCUS_RING}
+      >
+        {IDE_OPTIONS.map((option) => (
+          <option key={option} value={option}>
+            {ideLabel(option)}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => void handleInstall()}
+        disabled={!canInstall || busy}
+        aria-label={canInstall ? `Install ${skillId}` : `Install ${skillId} (connect a folder first)`}
+        className={`outline-button ${FOCUS_RING}`}
+      >
+        {busy ? 'Installing…' : 'Install'}
+      </button>
+      {error && (
+        <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      {!error && successIde && <p className="muted-copy">{`Installed to ${successIde}`}</p>}
+    </div>
+  );
+}
 
 function CollectionDetail({
   collection,
   inbox,
+  canInstall,
   onChange,
   onDeleted,
 }: {
   collection: Collection;
   inbox: string[];
+  canInstall: boolean;
   onChange: () => void;
   onDeleted: () => void;
 }) {
@@ -159,7 +224,7 @@ function CollectionDetail({
         >
           {IDE_OPTIONS.map((ide) => (
             <option key={ide} value={ide}>
-              {ide.charAt(0).toUpperCase() + ide.slice(1)}
+              {ideLabel(ide)}
             </option>
           ))}
         </select>
@@ -172,19 +237,22 @@ function CollectionDetail({
         </div>
         {collection.skills.length === 0 && <p className="muted-copy">No skills in this command yet</p>}
         {collection.skills.map((skillId) => (
-          <div className="included-skill" key={skillId}>
-            <span className="checkmark" aria-hidden="true">
-              <Check size={11} weight="regular" />
-            </span>
-            <span>{skillId}</span>
-            <button
-              type="button"
-              onClick={() => handleRemoveSkill(skillId)}
-              aria-label={`Remove ${skillId}`}
-              className={FOCUS_RING}
-            >
-              <X size={14} weight="regular" />
-            </button>
+          <div className="included-skill-block" key={skillId}>
+            <div className="included-skill">
+              <span className="checkmark" aria-hidden="true">
+                <Check size={11} weight="regular" />
+              </span>
+              <span>{skillId}</span>
+              <button
+                type="button"
+                onClick={() => handleRemoveSkill(skillId)}
+                aria-label={`Remove ${skillId}`}
+                className={FOCUS_RING}
+              >
+                <X size={14} weight="regular" />
+              </button>
+            </div>
+            <InstallSkill skillId={skillId} canInstall={canInstall} instance={`filed-${collection.name}`} />
           </div>
         ))}
       </div>
@@ -370,7 +438,10 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
           ) : (
             <ul className="inbox-inventory-list">
               {inbox.map((skillId) => (
-                <li key={skillId}>{skillId}</li>
+                <li key={skillId}>
+                  <div>{skillId}</div>
+                  <InstallSkill skillId={skillId} canInstall={canScan} instance="inbox" />
+                </li>
               ))}
             </ul>
           )}
@@ -405,7 +476,13 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
         {children}
       </CollectionsPanel>
       {selected && (
-        <CollectionDetail collection={selected} inbox={inbox} onChange={refresh} onDeleted={refresh} />
+        <CollectionDetail
+          collection={selected}
+          inbox={inbox}
+          canInstall={canScan}
+          onChange={refresh}
+          onDeleted={refresh}
+        />
       )}
     </>
   );

@@ -209,6 +209,8 @@ Same engine. No business logic in React.
 
 After pick, the GUI calls `scan()` once. The Commands surface shows Inbox as unfiled inventory (scanned locals + Discover adds) — not a rail tab. Scan is disabled with a clear message when no folder is connected. Re-scan is the Scan button. Show gone ids from the last scan result (`role="status"`). Do not auto-create commands. Discover Add is unchanged (still no install).
 
+**Install (Commands only):** a known skill (Inbox or filed on a command) has an IDE picker and Install. That calls `bridge.install(skillId, ide)` → `engine.install`. Failure is a visible `role="alert"` (not `sr-only`). Install is disabled until a folder is connected. Discover does not grow an Install control.
+
 ## User Flow
 
 1. **Connect a repo.** No login.
@@ -405,6 +407,7 @@ Atomic JSON write. Schema version on every persist. v3 → v4 on load, no rewrit
 - **CLI/engine words are command (2026-08-22, Task 32):** `fileToCollection` is `file`. `create('/build')` stores `build`. Product-loop help/errors say command. Leftover sync/export/run may still mention collection internally.
 - **Install records catalog `deployedTo` (2026-08-22, Task 35):** `engine.install(skillId, targetIDE)` calls the adapter, then upserts `SkillRecord` (`source` stays `local` if already scanned, else `skills.sh`; `paths` + `deployedTo` for that IDE). Persist rolls back on write failure. Does not write command files and does not require the id to be filed. Leftover `installedSkills` / `getInstalled()` is not the catalog. CLI `install <skillId> --to <ide>` requires `--to` and rejects an unknown IDE before the engine.
 - **Install agent flag lives in the adapter (2026-08-22, Task 34):** `ISkillsAdapter.install(skillId, targetIDE)`. Real adapter runs `npx skills add <id> --agent <name>` with cwd = project root. Claude is `claude-code`; our `agents` IDE uses vercel's `universal`. In-memory adapter records `(skillId, ide)`. Convert unchanged.
+- **GUI install on Commands (2026-08-22, Task 36):** Inbox and filed skills pick an IDE and call `bridge.install(skillId, ide)` → engine. Error is a visible alert, not `sr-only`. Disabled until a folder is connected. Discover Add stays Inbox-only and does not grow Install. IDE picker includes `agents`.
 - **GUI chrome says Commands (2026-08-22, Task 33):** Tab, headings, create/delete/export copy, and empty states say command. Filenames (`CollectionList.tsx`) and the `Collection` type alias stay. Discover Add is still Inbox-only.
 - **GUI scans once after pick (2026-08-22, Task 31):** Pick folder calls `scan()`. Scan on Commands is the re-scan. Disabled until a folder is connected. Inbox is inventory on that surface, not a rail tab. Gone ids come from the last scan result.
 - **GUI design system (resolved, Task 44):** oklch tokens, Geist, Phosphor, shared `FOCUS_RING`.

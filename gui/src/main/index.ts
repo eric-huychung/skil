@@ -52,6 +52,9 @@ ipcMain.handle(IPC_CHANNELS.addSkill, (_event, name: string, skillId: string) =>
 );
 ipcMain.handle(IPC_CHANNELS.deleteCollection, (_event, name: string) => currentEngine().delete(name));
 ipcMain.handle(IPC_CHANNELS.scan, () => currentEngine().scan());
+ipcMain.handle(IPC_CHANNELS.install, (_event, skillId: string, targetIDE: IDE) =>
+  currentEngine().install(skillId, targetIDE)
+);
 
 function createWindow(): void {
   const window = new BrowserWindow({

@@ -25,6 +25,7 @@ describe('GUI workflow (real engine)', () => {
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: 'Add obra/react-patterns' }));
     await waitFor(() => expect(engine.inbox()).toEqual(['obra/react-patterns']));
+    expect(engine.skills()).toEqual([]);
 
     await userEvent.click(screen.getByRole('tab', { name: 'Commands' }));
     const detail = await screen.findByRole('region', { name: 'Command frontend details' });

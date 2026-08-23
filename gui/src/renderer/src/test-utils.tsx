@@ -71,6 +71,7 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
       return projectRoot;
     },
     scan: async () => engine.scan(),
+    install: async (skillId, targetIDE) => engine.install(skillId, targetIDE),
   };
 }
 

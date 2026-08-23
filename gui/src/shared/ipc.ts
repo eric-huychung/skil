@@ -1,7 +1,7 @@
 import type { Result } from '../../../src/core/result.js';
-import type { BrowseView, Collection, ExportResult, IDE, ScanResult, Skill } from '../../../src/types/index.js';
+import type { BrowseView, Collection, ExportResult, IDE, ScanResult, Skill, SkillRecord } from '../../../src/types/index.js';
 
-export type { BrowseView, Collection, ExportResult, IDE, Result, ScanResult, Skill };
+export type { BrowseView, Collection, ExportResult, IDE, Result, ScanResult, Skill, SkillRecord };
 
 /**
  * IPC channel names shared between the main process (handler registration)
@@ -22,6 +22,7 @@ export const IPC_CHANNELS = {
   pickProjectFolder: 'contextkit:pick-project-folder',
   getProjectRoot: 'contextkit:get-project-root',
   scan: 'contextkit:scan',
+  install: 'contextkit:install',
 } as const;
 
 /**
@@ -47,4 +48,6 @@ export interface ContextKitBridge {
   getProjectRoot(): Promise<string | null>;
   /** Pull: scan SKILL.md folders. New unfiled ids go to Inbox. Does not install. */
   scan(): Promise<Result<ScanResult>>;
+  /** Push a known skill into an IDE skills dir. Does not write command files. */
+  install(skillId: string, targetIDE: IDE): Promise<Result<SkillRecord>>;
 }
