@@ -83,7 +83,8 @@ export interface State {
   /** Schema version, for future migrations. */
   version: string;
   /**
-   * Leftover until install records `deployedTo`. Ignored as the catalog.
+   * Leftover. Ignored as the catalog — install records `deployedTo` on
+   * `skills`. Still loaded/persisted so old files do not break.
    */
   installedSkills: Skill[];
 }

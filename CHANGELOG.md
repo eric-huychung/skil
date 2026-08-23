@@ -8,7 +8,7 @@ All notable changes to ContextKit are documented here. Versions follow [Semantic
 - Discover: click a skill name to open a details dialog (route, repo, GitHub, skills.sh page, installs) from skills.sh listing fields already on the browse/search payload
 
 ### Changed
-- `install` takes a target IDE. The skills adapter runs `npx skills add` with `--agent` (cursor → `cursor`, claude → `claude-code`, windsurf → `windsurf`, agents → `universal`).
+- `install` takes a target IDE. The skills adapter runs `npx skills add` with `--agent` (cursor → `cursor`, claude → `claude-code`, windsurf → `windsurf`, agents → `universal`). The engine upserts catalog `deployedTo`; leftover `installedSkills` is not the catalog. CLI `--to` is required and rejects an unknown IDE before the engine.
 - GUI layout now follows the example desktop shell: topbar, rail tabs (Commands / Discover / Sync), command list + detail, and a help dialog.
 - CLI, engine, and GUI product-loop copy say **command**, not collection. `fileToCollection` is now `file`. `create /build` stores the name `build`.
 

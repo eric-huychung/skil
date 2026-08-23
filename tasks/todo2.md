@@ -819,14 +819,14 @@ One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys,
 **Description:** `engine.install(skillId, targetIDE)` calls the adapter, then upserts `SkillRecord` (`source: 'skills.sh'` or `local`), `paths`, `deployedTo`. Persist + rollback on write failure. CLI `install <skillId> --to <ide>`. Does not write command files. Does not require the id to be filed (flow recommends file first).
 
 **Acceptance criteria:**
-- [ ] After install to cursor, catalog has `deployedTo` for cursor
-- [ ] Adapter failure does not persist a deploy
-- [ ] CLI requires `--to`; rejects unknown IDE before the engine
-- [ ] Discover/Inbox tests still show zero install unless they call install
+- [x] After install to cursor, catalog has `deployedTo` for cursor
+- [x] Adapter failure does not persist a deploy
+- [x] CLI requires `--to`; rejects unknown IDE before the engine
+- [x] Discover/Inbox tests still show zero install unless they call install
 
 **Verification:**
-- [ ] Tests pass: `npm test -- collection-engine.test.ts install.test.ts`
-- [ ] Build succeeds: `npm run build`
+- [x] Tests pass: `npm test -- collection-engine.test.ts install.test.ts`
+- [x] Build succeeds: `npm run build`
 
 **Dependencies:** Task 29, Task 34
 

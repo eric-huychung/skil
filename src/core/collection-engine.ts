@@ -36,6 +36,13 @@ function commandNotFound(name: string): Error {
 /** Skill trees we pull from. We never walk `commands/`. */
 const SKILL_ROOTS = ['.cursor/skills', '.claude/skills', '.windsurf/skills', '.agents/skills'] as const;
 
+const SKILL_ROOT_BY_IDE: Record<IDE, string> = {
+  cursor: '.cursor/skills',
+  claude: '.claude/skills',
+  windsurf: '.windsurf/skills',
+  agents: '.agents/skills',
+};
+
 /** On-disk shape that may still use v3 `collections`. */
 interface PersistedState {
   version?: string;
@@ -201,32 +208,50 @@ export class CollectionEngine implements ICollectionEngine {
     return ok({ synced, warnings });
   }
 
-  async install(skillId: string, targetIDE: IDE): Promise<Result<Skill>> {
+  async install(skillId: string, targetIDE: IDE): Promise<Result<SkillRecord>> {
     const result = await this.skillsAdapter.install(skillId, targetIDE);
     if (!isOk(result)) {
       return err(result.error);
     }
 
-    const skill: Skill = { id: skillId, source: 'skills.sh', installedAt: new Date().toISOString() };
-    const existingIndex = this.state.installedSkills.findIndex((s) => s.id === skillId);
-    const previous = existingIndex >= 0 ? this.state.installedSkills[existingIndex] : undefined;
+    const deployPath = `${SKILL_ROOT_BY_IDE[targetIDE]}/${skillId}`;
+    const installedAt = new Date().toISOString();
+    const existingIndex = this.state.skills.findIndex((s) => s.id === skillId);
+    const previous = existingIndex >= 0 ? cloneSkillRecord(this.state.skills[existingIndex]) : undefined;
+    const hash = hashSkillAt(this.fs, deployPath) ?? previous?.hash ?? '';
+
+    const record: SkillRecord = previous
+      ? {
+          ...previous,
+          hash,
+          paths: previous.paths.includes(deployPath) ? previous.paths : [...previous.paths, deployPath],
+          deployedTo: upsertDeploy(previous.deployedTo, { ide: targetIDE, path: deployPath, installedAt }),
+        }
+      : {
+          id: skillId,
+          hash,
+          paths: [deployPath],
+          deployedTo: [{ ide: targetIDE, path: deployPath, installedAt }],
+          source: 'skills.sh',
+        };
+
     if (existingIndex >= 0) {
-      this.state.installedSkills[existingIndex] = skill;
+      this.state.skills[existingIndex] = record;
     } else {
-      this.state.installedSkills.push(skill);
+      this.state.skills.push(record);
     }
 
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
-      if (previous) {
-        this.state.installedSkills[existingIndex] = previous;
+      if (previous && existingIndex >= 0) {
+        this.state.skills[existingIndex] = previous;
       } else {
-        this.state.installedSkills.pop();
+        this.state.skills.pop();
       }
       return err(new Error(`Failed to save installed skill '${skillId}': ${persistResult.error.message}`));
     }
 
-    return ok(skill);
+    return ok(record);
   }
 
   search(query: string): Promise<Result<Skill[]>> {
@@ -476,4 +501,34 @@ function catalogId(folder: string, root: string): string {
   }
   const prefix = `${root}/`;
   return folder.startsWith(prefix) ? folder.slice(prefix.length) : folder;
+}
+
+function cloneSkillRecord(record: SkillRecord | undefined): SkillRecord | undefined {
+  if (!record) {
+    return undefined;
+  }
+  return {
+    ...record,
+    paths: [...record.paths],
+    deployedTo: record.deployedTo.map((entry) => ({ ...entry })),
+  };
+}
+
+function hashSkillAt(fs: IFileSystemAdapter, folder: string): string | undefined {
+  const contents = fs.readFile(`${folder}/SKILL.md`);
+  if (!isOk(contents)) {
+    return undefined;
+  }
+  return createHash('sha256').update(contents.value, 'utf8').digest('hex');
+}
+
+function upsertDeploy(
+  existing: SkillRecord['deployedTo'],
+  entry: SkillRecord['deployedTo'][number]
+): SkillRecord['deployedTo'] {
+  const index = existing.findIndex((deploy) => deploy.ide === entry.ide);
+  if (index === -1) {
+    return [...existing, entry];
+  }
+  return existing.map((deploy, i) => (i === index ? entry : deploy));
 }

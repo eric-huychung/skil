@@ -460,25 +460,71 @@ describe('CollectionEngine', () => {
   });
 
   describe('install', () => {
-    it('installs a skill via the skills adapter and returns it', async () => {
+    it('installs a skill via the skills adapter and records deployedTo on the catalog', async () => {
       const result = await engine.install('obra/react-patterns', 'cursor');
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.id).toBe('obra/react-patterns');
         expect(result.value.source).toBe('skills.sh');
-        expect(result.value.installedAt).toBeTruthy();
+        expect(result.value.paths).toEqual(['.cursor/skills/obra/react-patterns']);
+        expect(result.value.deployedTo).toEqual([
+          expect.objectContaining({
+            ide: 'cursor',
+            path: '.cursor/skills/obra/react-patterns',
+            installedAt: expect.any(String),
+          }),
+        ]);
+        expect(engine.skills()).toEqual([result.value]);
+      }
+      expect(engine.list()).toEqual([]);
+      expect(isErr(fs.readFile('.cursor/commands/obra/react-patterns.md'))).toBe(true);
+    });
+
+    it('persists the catalog deploy and does not require the id to be filed', async () => {
+      engine.addToInbox('obra/react-patterns');
+
+      await engine.install('obra/react-patterns', 'cursor');
+
+      expect(engine.inbox()).toEqual(['obra/react-patterns']);
+      const persisted = fs.readJSON<{ skills: Array<{ id: string; deployedTo: Array<{ ide: string }> }> }>(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.skills).toEqual([
+          expect.objectContaining({
+            id: 'obra/react-patterns',
+            source: 'skills.sh',
+            deployedTo: [expect.objectContaining({ ide: 'cursor' })],
+          }),
+        ]);
       }
     });
 
-    it('records the installed skill in state', async () => {
-      await engine.install('obra/react-patterns', 'cursor');
+    it('keeps source local when installing a scanned skill to another IDE', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      engine.scan();
 
-      const persisted = fs.readJSON<{ installedSkills: Array<{ id: string }> }>(STATE_PATH);
-      expect(isOk(persisted)).toBe(true);
-      if (isOk(persisted)) {
-        expect(persisted.value.installedSkills.map((s) => s.id)).toContain('obra/react-patterns');
-      }
+      const result = await engine.install('tdd', 'claude');
+
+      expect(isOk(result)).toBe(true);
+      const record = engine.skills().find((s) => s.id === 'tdd');
+      expect(record?.source).toBe('local');
+      expect(record?.paths).toEqual(['.cursor/skills/tdd', '.claude/skills/tdd']);
+      expect(record?.deployedTo).toEqual([
+        expect.objectContaining({ ide: 'claude', path: '.claude/skills/tdd' }),
+      ]);
+    });
+
+    it('upserts deployedTo when the same skill is installed to a second IDE', async () => {
+      await engine.install('obra/x', 'cursor');
+      await engine.install('obra/x', 'windsurf');
+
+      expect(engine.skills()).toHaveLength(1);
+      expect(engine.skills()[0]?.deployedTo.map((d) => d.ide)).toEqual(['cursor', 'windsurf']);
+      expect(engine.skills()[0]?.paths).toEqual([
+        '.cursor/skills/obra/x',
+        '.windsurf/skills/obra/x',
+      ]);
     });
 
     it('returns an error when the skills adapter fails to install', async () => {
@@ -492,20 +538,22 @@ describe('CollectionEngine', () => {
       }
     });
 
-    it('does not record the skill in state when install fails', async () => {
+    it('does not persist a deploy when the adapter fails', async () => {
       engine.create('frontend', []);
       skills.setInstallError(new Error('npx: command failed'));
 
       await engine.install('obra/react-patterns', 'cursor');
 
-      const persisted = fs.readJSON<{ installedSkills: unknown[] }>(STATE_PATH);
+      expect(engine.skills()).toEqual([]);
+      const persisted = fs.readJSON<{ skills: unknown[] }>(STATE_PATH);
       expect(isOk(persisted)).toBe(true);
       if (isOk(persisted)) {
-        expect(persisted.value.installedSkills).toEqual([]);
+        expect(persisted.value.skills).toEqual([]);
       }
+      expect(skills.getInstalls()).toEqual([]);
     });
 
-    it('returns an error and does not keep the skill recorded when persisting fails', async () => {
+    it('returns an error and does not keep the deploy when persisting fails', async () => {
       fs.setWriteError(new Error('Disk full'));
 
       const result = await engine.install('obra/react-patterns', 'cursor');
@@ -514,13 +562,15 @@ describe('CollectionEngine', () => {
       if (isErr(result)) {
         expect(result.error.message).toContain('Disk full');
       }
+      expect(engine.skills()).toEqual([]);
 
       fs.setWriteError(null);
       await engine.install('obra/react-patterns', 'cursor');
-      const persisted = fs.readJSON<{ installedSkills: Array<{ id: string }> }>(STATE_PATH);
+      const persisted = fs.readJSON<{ skills: Array<{ id: string }> }>(STATE_PATH);
       expect(isOk(persisted)).toBe(true);
       if (isOk(persisted)) {
-        expect(persisted.value.installedSkills).toHaveLength(1);
+        expect(persisted.value.skills).toHaveLength(1);
+        expect(persisted.value.skills[0]?.id).toBe('obra/react-patterns');
       }
     });
   });
@@ -569,19 +619,18 @@ describe('CollectionEngine', () => {
   });
 
   describe('loading installed skills on startup', () => {
-    it('merges skills already installed by external tooling into state', async () => {
+    it('does not treat leftover getInstalled() as the catalog; install records deployedTo', async () => {
       skills.seedInstalled([{ id: 'obra/react-patterns', source: 'skills.sh', installedAt: '2024-01-01T00:00:00.000Z' }]);
       const loadedEngine = new CollectionEngine(fs, config, skills);
 
+      expect(loadedEngine.skills()).toEqual([]);
+
       await loadedEngine.install('addyosmani/performance-review', 'cursor');
 
-      const persisted = fs.readJSON<{ installedSkills: Array<{ id: string }> }>(STATE_PATH);
-      expect(isOk(persisted)).toBe(true);
-      if (isOk(persisted)) {
-        expect(persisted.value.installedSkills.map((s) => s.id)).toEqual(
-          expect.arrayContaining(['obra/react-patterns', 'addyosmani/performance-review'])
-        );
-      }
+      expect(loadedEngine.skills().map((s) => s.id)).toEqual(['addyosmani/performance-review']);
+      expect(loadedEngine.skills()[0]?.deployedTo).toEqual([
+        expect.objectContaining({ ide: 'cursor' }),
+      ]);
     });
   });
 
@@ -614,6 +663,7 @@ describe('CollectionEngine', () => {
         expect(persisted.value.inbox).toEqual(['obra/react-patterns']);
       }
       expect(skills.getInstalled()).toEqual([]);
+      expect(engine.skills()).toEqual([]);
     });
 
     it('is idempotent: adding the same ID twice keeps one entry', () => {
@@ -681,6 +731,7 @@ describe('CollectionEngine', () => {
       expect(engine.inbox()).toEqual([]);
       expect(engine.list()[0]?.skills).toEqual(['obra/react-patterns']);
       expect(skills.getInstalled()).toEqual([]);
+      expect(engine.skills()).toEqual([]);
     });
 
     it('drops the ID from inbox even if the collection already has it', () => {

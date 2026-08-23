@@ -54,7 +54,7 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 
 ### Core Architecture
 
-- **Thin wrapper:** skil does not host skills or rewrite `SKILL.md`. Discover goes through skil's Vercel OIDC proxy. Install shells out to `npx skills add` (agent flag inside the adapter: cursor → `cursor`, claude → `claude-code`, windsurf → `windsurf`, agents → `universal`).
+- **Thin wrapper:** skil does not host skills or rewrite `SKILL.md`. Discover goes through skil's Vercel OIDC proxy. Install shells out to `npx skills add` (agent flag inside the adapter: cursor → `cursor`, claude → `claude-code`, windsurf → `windsurf`, agents → `universal`). The engine then records `deployedTo` on the catalog. Adapter failure does not persist a deploy. Filing is recommended first but not required.
 - **Map, not trees:** Commands are id lists in our state. Disk folders do not move when you file.
 - **Pull / push:** `scan` is pull. `install` and `export` are push. Re-scan is not a live merge.
 - **No "active" command:** Nothing is switched on. You file, then push what you want.
@@ -102,7 +102,7 @@ State lives in `.skil/state.json` (read-fallback `.contextkit/state.json` until 
 - `skil delete <name>`
 - `skil list`
 - `skil inbox` / `inbox add <skillId>` / `inbox file <skillId> <command>` — engine method is `file`
-- `skil install <skillId> --to cursor|claude|windsurf|agents`
+- `skil install <skillId> --to cursor|claude|windsurf|agents` — records `deployedTo` on the catalog; unknown `--to` is rejected before the engine
 - `skil export <command> --to <ide> [--replace]`
 - `skil search [query] [--trending]`
 
