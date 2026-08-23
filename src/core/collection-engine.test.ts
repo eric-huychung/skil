@@ -232,11 +232,11 @@ describe('CollectionEngine', () => {
     it('writes state to the state file after creating a collection', () => {
       engine.create('frontend', ['react-patterns']);
 
-      const persisted = fs.readJSON<{ collections: Array<{ name: string }> }>(STATE_PATH);
+      const persisted = fs.readJSON<{ commands: Array<{ name: string }> }>(STATE_PATH);
 
       expect(isOk(persisted)).toBe(true);
       if (isOk(persisted)) {
-        expect(persisted.value.collections.map((c) => c.name)).toEqual(['frontend']);
+        expect(persisted.value.commands.map((c) => c.name)).toEqual(['frontend']);
       }
     });
 
@@ -245,10 +245,10 @@ describe('CollectionEngine', () => {
 
       engine.create('frontend', ['dup']);
 
-      const persisted = fs.readJSON<{ collections: unknown[] }>(STATE_PATH);
+      const persisted = fs.readJSON<{ commands: unknown[] }>(STATE_PATH);
       expect(isOk(persisted)).toBe(true);
       if (isOk(persisted)) {
-        expect(persisted.value.collections).toHaveLength(1);
+        expect(persisted.value.commands).toHaveLength(1);
       }
     });
   });
@@ -288,10 +288,10 @@ describe('CollectionEngine', () => {
 
       engine.sync('.contextkit.yml');
 
-      const persisted = fs.readJSON<{ collections: Array<{ name: string }> }>(STATE_PATH);
+      const persisted = fs.readJSON<{ commands: Array<{ name: string }> }>(STATE_PATH);
       expect(isOk(persisted)).toBe(true);
       if (isOk(persisted)) {
-        expect(persisted.value.collections.map((c) => c.name)).toContain('frontend');
+        expect(persisted.value.commands.map((c) => c.name)).toContain('frontend');
       }
     });
 
@@ -755,6 +755,132 @@ describe('CollectionEngine', () => {
       expect(isErr(result)).toBe(true);
       fs.setWriteError(null);
       expect(engine.list().map((c) => c.name)).toEqual(['frontend']);
+    });
+  });
+
+  describe('scan', () => {
+    it('adds a scanned skill to the catalog and inbox', () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.added).toEqual(['tdd']);
+        expect(result.value.gone).toEqual([]);
+        expect(result.value.changed).toEqual([]);
+      }
+      expect(engine.inbox()).toEqual(['tdd']);
+      const record = engine.skills().find((s) => s.id === 'tdd');
+      expect(record).toEqual(
+        expect.objectContaining({
+          id: 'tdd',
+          paths: ['.cursor/skills/tdd'],
+          source: 'local',
+        })
+      );
+      expect(record?.hash).toBeTruthy();
+      expect(skills.getInstalled()).toEqual([]);
+    });
+
+    it('uses a nested path relative to the skills root as the catalog id', () => {
+      fs.writeFile('.cursor/skills/ui/styling/SKILL.md', '# styling\n');
+
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.added).toEqual(['ui/styling']);
+      }
+      expect(engine.inbox()).toEqual(['ui/styling']);
+      expect(engine.skills()[0]?.id).toBe('ui/styling');
+    });
+
+    it('merges the same id under two IDE trees into one catalog row', () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      fs.writeFile('.claude/skills/tdd/SKILL.md', '# tdd\n');
+
+      engine.scan();
+
+      expect(engine.skills()).toEqual([
+        expect.objectContaining({
+          id: 'tdd',
+          paths: ['.cursor/skills/tdd', '.claude/skills/tdd'],
+        }),
+      ]);
+      expect(engine.inbox()).toEqual(['tdd']);
+    });
+
+    it('keeps a filed command map on re-scan and reports gone ids', () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      fs.writeFile('.cursor/skills/design/SKILL.md', '# design\n');
+      engine.scan();
+      engine.create('build', []);
+      engine.fileToCollection('tdd', 'build');
+
+      const persisted = fs.readJSON(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (!isOk(persisted)) {
+        return;
+      }
+
+      fs.reset();
+      fs.writeJSON(STATE_PATH, persisted.value);
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+
+      const reloaded = new CollectionEngine(fs, config, skills);
+      const result = reloaded.scan();
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.gone).toEqual(['design']);
+        expect(result.value.added).toEqual([]);
+      }
+      expect(reloaded.list()[0]?.skills).toEqual(['tdd']);
+      expect(reloaded.inbox()).toEqual([]);
+      expect(reloaded.skills().map((s) => s.id)).toEqual(['tdd']);
+    });
+
+    it('succeeds when skill trees are missing and ignores commands/ files', () => {
+      fs.writeFile('.cursor/commands/build.md', '# not a skill');
+
+      const result = engine.scan();
+
+      expect(result).toEqual({ ok: true, value: { added: [], gone: [], changed: [] } });
+      expect(engine.skills()).toEqual([]);
+      expect(engine.list()).toEqual([]);
+      expect(skills.getInstalled()).toEqual([]);
+    });
+
+    it('reports a hash change without dropping the catalog row', () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      engine.scan();
+
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd changed\n');
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.changed).toEqual(['tdd']);
+        expect(result.value.added).toEqual([]);
+        expect(result.value.gone).toEqual([]);
+      }
+      expect(engine.skills()).toHaveLength(1);
+      expect(engine.inbox()).toEqual(['tdd']);
+    });
+
+    it('loads v3 collections as commands and missing skills as []', () => {
+      fs.writeJSON(STATE_PATH, {
+        collections: [{ name: 'build', skills: ['tdd'], createdAt: '2024-01-01T00:00:00.000Z' }],
+        installedSkills: [],
+        version: '3.0',
+      });
+      const loaded = new CollectionEngine(fs, config, skills);
+
+      expect(loaded.list()).toEqual([
+        { name: 'build', skills: ['tdd'], createdAt: '2024-01-01T00:00:00.000Z' },
+      ]);
+      expect(loaded.skills()).toEqual([]);
     });
   });
 });

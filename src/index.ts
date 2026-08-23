@@ -15,13 +15,16 @@ export type { ICollectionEngine } from './interfaces/engine.js';
 export type { IFileSystemAdapter, IConfigAdapter, ISkillsAdapter } from './interfaces/adapters.js';
 
 export type {
+  BrowseView,
   Collection,
+  Command,
   Config,
   ExportResult,
   IDE,
+  ScanResult,
   Skill,
+  SkillRecord,
   SkillSource,
   State,
   SyncResult,
-  BrowseView,
 } from './types/index.js';

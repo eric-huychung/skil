@@ -1,5 +1,5 @@
 import type { Result } from '../core/result.js';
-import type { BrowseView, Collection, ExportResult, IDE, Skill, SyncResult } from '../types/index.js';
+import type { BrowseView, Collection, ExportResult, IDE, ScanResult, Skill, SkillRecord, SyncResult } from '../types/index.js';
 
 /**
  * CollectionEngine is ContextKit's deep module: a small interface backed by
@@ -124,4 +124,15 @@ export interface ICollectionEngine {
    * can't be saved (in which case collections are left unchanged).
    */
   delete(name: string): Result<void>;
+
+  /**
+   * Pull: walk IDE skill trees, hash SKILL.md, reconcile the catalog.
+   * New unfiled ids go to Inbox. Filed ids stay filed. Gone folders drop
+   * the id from catalog, commands, and inbox. Does not create commands
+   * and does not call install.
+   */
+  scan(): Result<ScanResult>;
+
+  /** Catalog rows we are SoT for. */
+  skills(): SkillRecord[];
 }

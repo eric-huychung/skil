@@ -1,8 +1,8 @@
 /** Where a skill originated from. */
 export type SkillSource = 'skills.sh' | 'github' | 'local';
 
-/** IDEs ContextKit can convert skills for via `contextkit convert`/`export`. */
-export type IDE = 'cursor' | 'claude' | 'windsurf';
+/** IDEs skil can scan and push to. */
+export type IDE = 'cursor' | 'claude' | 'windsurf' | 'agents';
 
 /** Leaderboard views proxied from skills.sh. */
 export type BrowseView = 'all-time' | 'trending';
@@ -27,41 +27,65 @@ export interface Skill {
   url?: string;
 }
 
-/** A named group of skills. */
-export interface Collection {
+/** A named group of skill ids (SDLC knob: `/build`). Display as `/name`. */
+export interface Command {
   name: string;
-  /** Skill IDs belonging to this collection. */
+  /** Catalog ids filed on this command. */
   skills: string[];
-  /** ISO 8601 timestamp of when the collection was created. */
+  /** ISO 8601 timestamp of when the command was created. */
   createdAt: string;
   /**
-   * Optional shell command template associated with this collection, run
-   * via `contextkit run <name>`. Absent on collections created before this
-   * field existed — always check before use.
+   * Leftover shell template for `contextkit run`. Absent on commands
+   * created without it — always check before use.
    */
   command?: string;
+}
+
+/** Temporary alias so CLI/GUI keep typechecking while copy catches up. */
+export type Collection = Command;
+
+/** One skill we have seen on disk or deployed. We are SoT for this row. */
+export interface SkillRecord {
+  /** Path relative to that IDE's skills root (`tdd`, `ui/styling`). */
+  id: string;
+  /** sha256 of SKILL.md (utf-8). */
+  hash: string;
+  /** Folders we have seen, relative to the project root. */
+  paths: string[];
+  deployedTo: Array<{ ide: IDE; path: string; installedAt: string }>;
+  source: 'local' | 'skills.sh';
+}
+
+/** Outcome of `scan()` — pull. */
+export interface ScanResult {
+  added: string[];
+  gone: string[];
+  changed: string[];
 }
 
 /**
  * Persisted engine state, stored at `.contextkit/state.json`.
  *
- * Schema v3 (current): added `inbox`, a holding list of skill IDs that is
- * not a collection. Schema v2 dropped `activeCollection` and
- * `Collection.lastUsedAt` when symlink-based activation was replaced by
- * IDE export. Older files without `inbox` load as `[]` — no rewrite on
- * read. v1 `activeCollection`/`lastUsedAt` fields are still ignored.
+ * Schema v4: `commands` (was `collections`), `skills` catalog, `inbox`.
+ * Load v3: `collections` → `commands`, missing `skills` → `[]`.
+ * `installedSkills` is leftover (not the catalog). Missing `inbox` → `[]`.
+ * v1 `activeCollection` is still ignored. No rewrite on read.
  */
 export interface State {
-  collections: Collection[];
-  installedSkills: Skill[];
+  commands: Command[];
+  skills: SkillRecord[];
   /**
-   * Skill IDs waiting to be filed into a named collection. Not a
-   * collection — reserved name `inbox` cannot be created. Missing on
-   * pre-v3 files; treat as `[]`.
+   * Unfiled skill ids (scanned locals + Discover adds). Not a command —
+   * reserved name `inbox` cannot be created. Missing on pre-v3 files;
+   * treat as `[]`.
    */
   inbox: string[];
   /** Schema version, for future migrations. */
   version: string;
+  /**
+   * Leftover until install records `deployedTo`. Ignored as the catalog.
+   */
+  installedSkills: Skill[];
 }
 
 /** Parsed representation of a team `.contextkit.yml` file. */

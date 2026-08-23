@@ -1,23 +1,54 @@
+import { createHash } from 'node:crypto';
 import type { ICollectionEngine } from '../interfaces/engine.js';
 import type { IFileSystemAdapter, IConfigAdapter, ISkillsAdapter } from '../interfaces/adapters.js';
-import type { BrowseView, Collection, ExportResult, IDE, Skill, State, SyncResult } from '../types/index.js';
+import type {
+  BrowseView,
+  Collection,
+  Command,
+  ExportResult,
+  IDE,
+  ScanResult,
+  Skill,
+  SkillRecord,
+  State,
+  SyncResult,
+} from '../types/index.js';
 import { err, isOk, ok, type Result } from './result.js';
 
 /** Path to the persisted engine state, relative to the project root. */
 export const STATE_PATH = '.contextkit/state.json';
 
-/** Current state schema version. See `State`'s doc comment for the v1 -> v3 notes. */
-const STATE_VERSION = '3.0';
+/** Current state schema version. See `State`'s doc comment for the v3 → v4 notes. */
+const STATE_VERSION = '4.0';
 
 /** Collection name reserved for the Inbox holding list on `State`. */
 const INBOX_NAME = 'inbox';
 
-function emptyState(): State {
-  return { collections: [], installedSkills: [], inbox: [], version: STATE_VERSION };
+/** Skill trees we pull from. We never walk `commands/`. */
+const SKILL_ROOTS = ['.cursor/skills', '.claude/skills', '.windsurf/skills', '.agents/skills'] as const;
+
+/** On-disk shape that may still use v3 `collections`. */
+interface PersistedState {
+  version?: string;
+  commands?: Command[];
+  collections?: Command[];
+  skills?: SkillRecord[];
+  inbox?: string[];
+  installedSkills?: Skill[];
 }
 
-function normalizeState(state: State): State {
-  return { ...state, inbox: state.inbox ?? [] };
+function emptyState(): State {
+  return { commands: [], skills: [], installedSkills: [], inbox: [], version: STATE_VERSION };
+}
+
+function normalizeState(raw: PersistedState): State {
+  return {
+    commands: raw.commands ?? raw.collections ?? [],
+    skills: raw.skills ?? [],
+    installedSkills: raw.installedSkills ?? [],
+    inbox: raw.inbox ?? [],
+    version: raw.version ?? STATE_VERSION,
+  };
 }
 
 /**
@@ -31,9 +62,9 @@ export class CollectionEngine implements ICollectionEngine {
   constructor(
     private readonly fs: IFileSystemAdapter,
     private readonly config: IConfigAdapter,
-    private readonly skills: ISkillsAdapter
+    private readonly skillsAdapter: ISkillsAdapter
   ) {
-    const loaded = this.fs.readJSON<State>(STATE_PATH);
+    const loaded = this.fs.readJSON<PersistedState>(STATE_PATH);
     this.state = isOk(loaded) ? normalizeState(loaded.value) : emptyState();
     this.mergeExternallyInstalledSkills();
   }
@@ -42,7 +73,7 @@ export class CollectionEngine implements ICollectionEngine {
     if (name === INBOX_NAME) {
       return err(new Error(`'inbox' is not a collection. Inbox is a holding list of skill IDs — add with 'contextkit inbox add' and file them into a named collection.`));
     }
-    if (this.state.collections.some((c) => c.name === name)) {
+    if (this.state.commands.some((c) => c.name === name)) {
       return err(new Error(`Collection '${name}' already exists. Choose a different name or run 'contextkit list' to see existing collections.`));
     }
 
@@ -52,10 +83,10 @@ export class CollectionEngine implements ICollectionEngine {
       createdAt: new Date().toISOString(),
       ...(command !== undefined ? { command } : {}),
     };
-    this.state.collections.push(collection);
+    this.state.commands.push(collection);
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
-      this.state.collections.pop();
+      this.state.commands.pop();
       return err(new Error(`Failed to save collection '${name}': ${persistResult.error.message}`));
     }
 
@@ -63,7 +94,7 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   addSkill(name: string, skillId: string): Result<Collection> {
-    const collection = this.state.collections.find((c) => c.name === name);
+    const collection = this.state.commands.find((c) => c.name === name);
     if (!collection) {
       return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
     }
@@ -82,7 +113,7 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   removeSkill(name: string, skillId: string): Result<Collection> {
-    const collection = this.state.collections.find((c) => c.name === name);
+    const collection = this.state.commands.find((c) => c.name === name);
     if (!collection) {
       return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
     }
@@ -103,7 +134,7 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   getCommand(name: string): Result<string> {
-    const collection = this.state.collections.find((c) => c.name === name);
+    const collection = this.state.commands.find((c) => c.name === name);
     if (!collection) {
       return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
     }
@@ -114,7 +145,7 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   list(): Collection[] {
-    return [...this.state.collections];
+    return [...this.state.commands];
   }
 
   sync(configPath: string): Result<SyncResult> {
@@ -129,18 +160,18 @@ export class CollectionEngine implements ICollectionEngine {
     }
 
     const configNames = new Set(Object.keys(configResult.value.collections));
-    const warnings = this.state.collections
+    const warnings = this.state.commands
       .filter((c) => !configNames.has(c.name))
       .map((c) => `Local collection '${c.name}' is not in the config file. Add it to '${configPath}' or remove it locally.`);
 
-    const snapshot = this.state.collections.map((c) => ({ ...c }));
+    const snapshot = this.state.commands.map((c) => ({ ...c }));
     const synced: string[] = [];
     for (const [name, skillIds] of Object.entries(configResult.value.collections)) {
-      const existing = this.state.collections.find((c) => c.name === name);
+      const existing = this.state.commands.find((c) => c.name === name);
       if (existing) {
         existing.skills = skillIds;
       } else {
-        this.state.collections.push({
+        this.state.commands.push({
           name,
           skills: skillIds,
           createdAt: new Date().toISOString(),
@@ -151,7 +182,7 @@ export class CollectionEngine implements ICollectionEngine {
 
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
-      this.state.collections = snapshot;
+      this.state.commands = snapshot;
       return err(new Error(`Failed to save synced collections: ${persistResult.error.message}`));
     }
 
@@ -159,7 +190,7 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   async install(skillId: string): Promise<Result<Skill>> {
-    const result = await this.skills.install(skillId);
+    const result = await this.skillsAdapter.install(skillId);
     if (!isOk(result)) {
       return err(result.error);
     }
@@ -187,15 +218,15 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   search(query: string): Promise<Result<Skill[]>> {
-    return this.skills.search(query);
+    return this.skillsAdapter.search(query);
   }
 
   browse(view: BrowseView): Promise<Result<Skill[]>> {
-    return this.skills.browse(view);
+    return this.skillsAdapter.browse(view);
   }
 
   convert(skillId: string, targetIDE: IDE): Promise<Result<void>> {
-    return this.skills.convert(skillId, targetIDE);
+    return this.skillsAdapter.convert(skillId, targetIDE);
   }
 
   async export(collectionNames: string[], targetIDE: IDE): Promise<Result<ExportResult>> {
@@ -203,14 +234,14 @@ export class CollectionEngine implements ICollectionEngine {
     const failures: string[] = [];
 
     for (const name of collectionNames) {
-      const collection = this.state.collections.find((c) => c.name === name);
+      const collection = this.state.commands.find((c) => c.name === name);
       if (!collection) {
         failures.push(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`);
         continue;
       }
 
       for (const skillId of collection.skills) {
-        const result = await this.skills.convert(skillId, targetIDE);
+        const result = await this.skillsAdapter.convert(skillId, targetIDE);
         if (isOk(result)) {
           succeeded.push(`${name}:${skillId}`);
         } else {
@@ -258,7 +289,7 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   fileToCollection(skillId: string, collectionName: string): Result<Collection> {
-    const collection = this.state.collections.find((c) => c.name === collectionName);
+    const collection = this.state.commands.find((c) => c.name === collectionName);
     if (!collection) {
       return err(new Error(`Collection '${collectionName}' not found. Run 'contextkit list' to see available collections.`));
     }
@@ -287,23 +318,120 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   delete(name: string): Result<void> {
-    const index = this.state.collections.findIndex((c) => c.name === name);
+    const index = this.state.commands.findIndex((c) => c.name === name);
     if (index === -1) {
       return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
     }
 
-    const removed = this.state.collections[index];
+    const removed = this.state.commands[index];
     if (removed === undefined) {
       return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
     }
-    this.state.collections.splice(index, 1);
+    this.state.commands.splice(index, 1);
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
-      this.state.collections.splice(index, 0, removed);
+      this.state.commands.splice(index, 0, removed);
       return err(new Error(`Failed to save after deleting '${name}': ${persistResult.error.message}`));
     }
 
     return ok(undefined);
+  }
+
+  scan(): Result<ScanResult> {
+    const found = new Map<string, { hash: string; paths: string[] }>();
+
+    for (const root of SKILL_ROOTS) {
+      const folders = this.fs.findSkillFolders(root);
+      if (!isOk(folders)) {
+        return err(folders.error);
+      }
+
+      for (const folder of folders.value) {
+        const id = catalogId(folder, root);
+        if (id === '') {
+          continue;
+        }
+
+        const contents = this.fs.readFile(`${folder}/SKILL.md`);
+        if (!isOk(contents)) {
+          return err(contents.error);
+        }
+
+        const hash = createHash('sha256').update(contents.value, 'utf8').digest('hex');
+        const existing = found.get(id);
+        if (existing) {
+          existing.paths.push(folder);
+        } else {
+          found.set(id, { hash, paths: [folder] });
+        }
+      }
+    }
+
+    const snapshot = {
+      skills: this.state.skills.map((record) => ({ ...record, paths: [...record.paths], deployedTo: [...record.deployedTo] })),
+      inbox: [...this.state.inbox],
+      commands: this.state.commands.map((command) => ({ ...command, skills: [...command.skills] })),
+    };
+
+    const previous = new Map(this.state.skills.map((record) => [record.id, record]));
+    const filed = new Set(this.state.commands.flatMap((command) => command.skills));
+    const added: string[] = [];
+    const changed: string[] = [];
+    const nextSkills: SkillRecord[] = [];
+
+    for (const [id, seen] of found) {
+      const prev = previous.get(id);
+      if (!prev) {
+        added.push(id);
+        nextSkills.push({
+          id,
+          hash: seen.hash,
+          paths: seen.paths,
+          deployedTo: [],
+          source: 'local',
+        });
+        if (!filed.has(id) && !this.state.inbox.includes(id)) {
+          this.state.inbox.push(id);
+        }
+      } else {
+        if (prev.hash !== seen.hash) {
+          changed.push(id);
+        }
+        nextSkills.push({
+          ...prev,
+          hash: seen.hash,
+          paths: seen.paths,
+        });
+      }
+    }
+
+    const gone: string[] = [];
+    for (const prev of this.state.skills) {
+      if (found.has(prev.id)) {
+        continue;
+      }
+      gone.push(prev.id);
+      this.state.inbox = this.state.inbox.filter((entry) => entry !== prev.id);
+      for (const command of this.state.commands) {
+        command.skills = command.skills.filter((skillId) => skillId !== prev.id);
+      }
+    }
+
+    this.state.skills = nextSkills;
+
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      this.state.skills = snapshot.skills;
+      this.state.inbox = snapshot.inbox;
+      this.state.commands = snapshot.commands;
+      return err(new Error(`Failed to save scan: ${persistResult.error.message}`));
+    }
+
+    return ok({ added, gone, changed });
+  }
+
+  skills(): SkillRecord[] {
+    return [...this.state.skills];
   }
 
   /** Writes state to disk. Returns an error Result if the write fails; callers must check it rather than assume the mutation was saved. */
@@ -319,11 +447,19 @@ export class CollectionEngine implements ICollectionEngine {
    */
   private mergeExternallyInstalledSkills(): void {
     const known = new Set(this.state.installedSkills.map((s) => s.id));
-    for (const skill of this.skills.getInstalled()) {
+    for (const skill of this.skillsAdapter.getInstalled()) {
       if (!known.has(skill.id)) {
         this.state.installedSkills.push(skill);
         known.add(skill.id);
       }
     }
   }
+}
+
+function catalogId(folder: string, root: string): string {
+  if (folder === root) {
+    return '.';
+  }
+  const prefix = `${root}/`;
+  return folder.startsWith(prefix) ? folder.slice(prefix.length) : folder;
 }

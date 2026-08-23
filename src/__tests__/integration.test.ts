@@ -36,7 +36,7 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
     engine.create('frontend', ['react-patterns']);
 
     const persisted = JSON.parse(readFileSync(join(tmpDir, '.contextkit', 'state.json'), 'utf-8'));
-    expect(persisted.collections).toEqual([
+    expect(persisted.commands).toEqual([
       expect.objectContaining({ name: 'frontend', skills: ['react-patterns'] }),
     ]);
   });
@@ -71,7 +71,7 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
     expect(isOk(result)).toBe(true);
     expect(engine.list().map((c) => c.name)).toEqual(['frontend']);
     const persisted = JSON.parse(readFileSync(join(tmpDir, '.contextkit', 'state.json'), 'utf-8'));
-    expect(persisted.collections).toEqual([
+    expect(persisted.commands).toEqual([
       expect.objectContaining({ name: 'frontend', skills: ['react-patterns'] }),
     ]);
   });
