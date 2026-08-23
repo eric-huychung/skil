@@ -28,6 +28,7 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
   private searchError: Error | null = null;
   private browseError: Error | null = null;
   private convertError: Error | null = null;
+  private convertCalls = 0;
 
   async search(_query: string): Promise<Result<Skill[]>> {
     if (this.searchError) {
@@ -53,6 +54,7 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
   }
 
   async convert(_skillId: string, _targetIDE: IDE): Promise<Result<void>> {
+    this.convertCalls += 1;
     if (this.convertError) {
       return err(this.convertError);
     }
@@ -66,6 +68,11 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
   /** Test helper: (skillId, ide) pairs passed to install(). */
   getInstalls(): Array<{ skillId: string; ide: IDE }> {
     return [...this.installs];
+  }
+
+  /** Test helper: how many times leftover convert() was called. */
+  getConvertCallCount(): number {
+    return this.convertCalls;
   }
 
   /** Test helper: makes the next install() call(s) fail with `error`. */
@@ -101,5 +108,6 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     this.searchError = null;
     this.browseError = null;
     this.convertError = null;
+    this.convertCalls = 0;
   }
 }

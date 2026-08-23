@@ -60,7 +60,7 @@ Tasks live in `tasks/todo2.md` Phase 11.
 
 ### Phase 11: Push command file
 
-- [ ] Task 37: Engine `exportCommand` (stamp, no clobber)
+- [x] Task 37: Engine `exportCommand` (stamp, no clobber)
 - [ ] Task 38: CLI + GUI export
 
 ### Checkpoint: Push templates

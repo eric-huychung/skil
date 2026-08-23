@@ -83,13 +83,19 @@ export interface ICollectionEngine {
   convert(skillId: string, targetIDE: IDE): Promise<Result<void>>;
 
   /**
-   * Converts every skill in each named collection to `targetIDE`'s format.
-   * Never fails the whole call for one bad collection or skill: a
-   * non-existent collection, or a skill that fails to convert, is recorded
-   * in `failures` and the rest continue. Only returns an error Result for
-   * something outside any single collection/skill's control.
+   * Leftover skillsmith convert-all. Product export is `exportCommand`.
+   * CLI/GUI still call this until the export-our-file task lands.
    */
   export(collectionNames: string[], targetIDE: IDE): Promise<Result<ExportResult>>;
+
+  /**
+   * Writes our stamped command file for `name` into `targetIDE`'s
+   * commands dir. Does not scan `commands/`, does not call `convert`,
+   * and does not install skills. If the target file exists and lacks
+   * `generated_by: skil`, returns an error unless `replace` is true.
+   * Missing command name is an error. Other IDE files are left alone.
+   */
+  exportCommand(name: string, targetIDE: IDE, opts?: { replace?: boolean }): Result<ExportResult>;
 
   /**
    * Returns the Inbox holding list of skill IDs. Never downloads. Missing

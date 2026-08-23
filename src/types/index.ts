@@ -104,10 +104,10 @@ export interface SyncResult {
   warnings: string[];
 }
 
-/** Outcome of a bulk export operation. */
+/** Outcome of an export. Product `exportCommand` puts the written path in `succeeded`. Leftover skillsmith `export` still uses `"command:skillId"` pairs. */
 export interface ExportResult {
-  /** `"collection/skillId"` pairs successfully converted for the target IDE. */
+  /** Written command-file paths (`exportCommand`) or leftover convert pairs. */
   succeeded: string[];
-  /** Actionable messages about skills or collections that failed to export. */
+  /** Actionable messages about files or leftover convert failures. */
   failures: string[];
 }

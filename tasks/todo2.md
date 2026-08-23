@@ -874,15 +874,15 @@ One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys,
 **Description:** Replace the product meaning of export. `exportCommand(name, targetIDE, { replace?: boolean })` writes `.cursor/commands/<name>.md` (and the sibling paths in architecture). Frontmatter: `name`, `skills`, `generated_by: skil`, `generated_at`. Short stub body. If the file exists and lacks `generated_by: skil`, error unless `replace`. If stamped by us, overwrite. Do not scan `commands/`. Do not call `convert` / skillsmith. Old `export(names[], ide)` tests that expect convert must move to this contract or die.
 
 **Acceptance criteria:**
-- [ ] Export `build` → cursor writes `.cursor/commands/build.md` with `skills:` matching the command
-- [ ] Existing unstamped `build.md` → error; `replace: true` overwrites
-- [ ] Stamped file may be rewritten
-- [ ] Missing command name is a failure; other IDEs keep their files
+- [x] Export `build` → cursor writes `.cursor/commands/build.md` with `skills:` matching the command
+- [x] Existing unstamped `build.md` → error; `replace: true` overwrites
+- [x] Stamped file may be rewritten
+- [x] Missing command name is a failure; other IDEs keep their files
 
 **Verification:**
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
-- [ ] Build succeeds: `npm run build`
-- [ ] In-memory skills adapter `convert` is not called
+- [x] Tests pass: `npm test -- collection-engine.test.ts`
+- [x] Build succeeds: `npm run build`
+- [x] In-memory skills adapter `convert` is not called
 
 **Dependencies:** Task 28, Task 29
 

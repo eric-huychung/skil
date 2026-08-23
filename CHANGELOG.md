@@ -5,6 +5,7 @@ All notable changes to ContextKit are documented here. Versions follow [Semantic
 ## [Unreleased]
 
 ### Added
+- Engine `exportCommand` writes our stamped command file (`generated_by: skil`) into the target IDE dir. Unstamped existing files are left alone unless `replace: true`. Windsurf writes `.windsurf/workflows/`. Leftover skillsmith `export` is unchanged until the CLI/GUI task.
 - Discover: click a skill name to open a details dialog (route, repo, GitHub, skills.sh page, installs) from skills.sh listing fields already on the browse/search payload
 
 ### Changed

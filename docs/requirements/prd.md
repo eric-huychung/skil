@@ -63,7 +63,7 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 
 1. **Engine** — scan, catalog, inbox, commands, file, install, export. One deep module (today `CollectionEngine`).
 2. **FileSystemAdapter** — state JSON plus walk/read/write for `SKILL.md` discovery and command-file output.
-3. **SkillsAdapter** — search, browse, install. Convert/skillsmith is leftover.
+3. **SkillsAdapter** — search, browse, install. Convert/skillsmith is leftover. Product export is engine `exportCommand`, not skillsmith.
 4. **CLI** — parse and print.
 5. **GUI** — bind to the engine. Commands / Discover / folder pick.
 
@@ -90,7 +90,8 @@ State lives in `.skil/state.json` (read-fallback `.contextkit/state.json` until 
 - **CLI help/errors and GUI chrome say command, not collection.**
 - **Connect scans once.** Pick folder pulls unfiled skills into Inbox. The Scan button is re-scan. Disabled until a folder is connected.
 - **Scan does not create `/cursor` or `/claude`.** That would be the folder tree again.
-- **We do not scan `commands/`.** We only write a command file on export.
+- **We do not scan `commands/` (or Windsurf `workflows/`).** We only write a command file on export. Engine method is `exportCommand`. Stamp is `generated_by: skil`. Unstamped existing files need replace.
+- **Command-file paths:** cursor / claude / agents use `commands/<name>.md` under their root. Windsurf uses `.windsurf/workflows/<name>.md`.
 - **No version pinning.** Catalog hash is content identity, not a lockfile.
 - **Team YAML sync is leftover.** Not in this loop. No `.skil.yml` this phase.
 - **`run` / shell templates are leftover.** "Command template" now means the markdown file we generate, not `skil run`.
@@ -158,7 +159,6 @@ Until the bin rename, the executable may still be `contextkit`. The product name
 
 ## Open Questions
 
-- Confirm Windsurf / agents command-file directories when export is built
 - Is `skil` available as an npm bin name?
 
 ### Success Metrics
