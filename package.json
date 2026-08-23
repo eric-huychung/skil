@@ -4,6 +4,7 @@
   "description": "CLI-first AI skill collection manager for Cursor, Claude, and Windsurf",
   "type": "module",
   "bin": {
+    "skil": "dist/cli/index.js",
     "contextkit": "dist/cli/index.js"
   },
   "workspaces": [

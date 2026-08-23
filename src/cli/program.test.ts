@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { CONTEXTKIT_VERSION } from '../index.js';
 import { CollectionEngine } from '../core/collection-engine.js';
@@ -40,11 +43,21 @@ describe('createProgram', () => {
       expect(() => program.parse(['--help'], { from: 'user' })).toThrow();
     });
 
-    expect(output).toContain('contextkit');
+    expect(program.name()).toBe('skil');
+    expect(output).toContain('Usage: skil');
     expect(output).toContain('inbox');
     expect(output).toContain('delete');
     expect(output).toContain('scan');
     expect(output.toLowerCase()).not.toContain('staging');
     expect(output.toLowerCase()).not.toContain('collection');
+  });
+
+  it('exposes skil as the primary bin and keeps contextkit as an alias', () => {
+    const pkg = JSON.parse(
+      readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../package.json'), 'utf-8')
+    ) as { bin: Record<string, string> };
+
+    expect(pkg.bin.skil).toBe('dist/cli/index.js');
+    expect(pkg.bin.contextkit).toBe('dist/cli/index.js');
   });
 });
