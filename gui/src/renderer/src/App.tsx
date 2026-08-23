@@ -56,7 +56,7 @@ function ConfigPanel({ root, onPick }: { root: string | null; onPick: () => void
             <p className="muted-copy">No project connected</p>
           )}
           <p className="muted-copy">
-            Connect a folder to read and write that project&apos;s .contextkit state. Skip this if you just want to
+            Connect a folder to read and write that project&apos;s .skil state. Skip this if you just want to
             sketch commands or browse skills.
           </p>
           <button
@@ -118,7 +118,7 @@ export default function App() {
           <span className="brand-glyph" aria-hidden="true">
             <Sparkle size={15} weight="regular" />
           </span>
-          <span>ContextKit</span>
+          <span>skil</span>
           <span className="beta-pill">BETA</span>
         </div>
         <div className="top-actions">
@@ -174,7 +174,7 @@ export default function App() {
         <span>
           <span className="live-dot" aria-hidden="true" /> Config is in dev
         </span>
-        <span>ContextKit 0.2.2</span>
+        <span>skil 0.2.2</span>
       </footer>
 
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}

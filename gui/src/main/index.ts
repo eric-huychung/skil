@@ -63,6 +63,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 640,
     show: false,
+    title: 'skil',
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
     webPreferences: {

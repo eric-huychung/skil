@@ -28,7 +28,8 @@ describe('App', () => {
 
     renderWithProviders(<App />);
 
-    expect(screen.getByText('ContextKit')).toBeInTheDocument();
+    expect(screen.getByText('skil')).toBeInTheDocument();
+    expect(screen.getByText('skil 0.2.2')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Commands' })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByText('No commands yet')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Scan (connect a folder first)' })).toBeDisabled();
