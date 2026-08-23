@@ -118,7 +118,7 @@ interface SkilEngine {
 - Install writes a skill folder into that IDE's skills dir and records the deploy. It does not write command files.
 
 **Implementation responsibilities**
-- Persist the map and catalog in `.skil/state.json` (read-fallback: `.contextkit/state.json` until the rename task lands).
+- Persist the map and catalog in `.skil/state.json`. Load falls back to `.contextkit/state.json` if the new file is missing. The next persist writes `.skil/` (no copy on load).
 - Walk the four skill roots, hash `SKILL.md`, reconcile gone/changed/new.
 - Coordinate `npx skills add` (or a copy into another IDE tree) and record `deployedTo`.
 - Write stamped command markdown. Leave their old `/build.md` alone unless they opt in.
@@ -167,7 +167,7 @@ interface SkillsAdapter {
 }
 ```
 
-- `search` / `browse`: our Vercel backend + OIDC. No user API key. Browse is CDN-cached (`Cache-Control` on 200 only). Not a skil registry.
+- `search` / `browse`: our Vercel backend + OIDC. No user API key. Browse is CDN-cached (`Cache-Control` on 200 only). Not a skil registry. Origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 - `install`: `npx skills add <id> --agent <name>` with `cwd` = project root. Agent/IDE flag stays **inside** the adapter. Engine `install(skillId, targetIDE)` does not grow extra flags.
 
   | skil IDE | `--agent` (vercel-labs/skills) |
@@ -194,13 +194,13 @@ Target verbs:
 - `skil export <command> --to <ide> [--replace]` — push our command file
 - `skil search [query] [--trending]` — unchanged discover
 
-Until the bin rename lands, the binary may still be `contextkit`. Help and product-loop errors say **command**, not collection. Engine method is `file` (was `fileToCollection`). `Collection` remains a type alias. GUI chrome says Commands.
+Bin is `skil`. `contextkit` is an alias of the same entry. Help and product-loop errors say **command**, not collection. Engine method is `file` (was `fileToCollection`). `Collection` remains a type alias. GUI chrome says Commands. Window/title says skil.
 
 ### 6. GUI (Thin)
 
 Same engine. No business logic in React.
 
-**Connect:** folder picker (already on Sync). No login. Discover works with no folder. Scan and install/export need a connected repo (or CLI cwd).
+**Connect:** folder picker (already on Sync). No login. Discover works with no folder. Scan and install/export need a connected repo (or CLI cwd). Window title and brand say **skil**.
 
 **Tabs (target):**
 - **Commands** — command list, Inbox (unfiled), file, create `/build`, delete, install, export
@@ -390,12 +390,13 @@ Atomic JSON write. Schema version on every persist. v3 → v4 on load, no rewrit
 ## Open Questions
 
 1. One skill on many commands — the map allows it (`addSkill` / a second file). GUI this phase files from Inbox only.
-2. npm name `skil` — may be taken. Product name is skil either way; bin alias can wait.
+2. npm package name is still `contextkit`. Bins are `skil` and `contextkit`. Publish-as-`skil` can wait if the name is taken.
 3. After we rewrite a stamped file, do we preserve a user-edited body? v1 no. Revisit if people use export as a round-trip editor.
 4. Team YAML sync — keep or delete. Not in this loop.
 
 ## Decision Log
 
+- **State path and bin are skil (2026-08-22, Task 39):** Persist `.skil/state.json`. Load falls back to `.contextkit/state.json` with no copy until the next persist. Bins: `skil` + `contextkit` alias. API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`. GUI title/brand say skil. Engine class and IPC stay `CollectionEngine` / `window.contextkit`.
 - **Product is skil; groupings are commands (2026-08-22):** ContextKit / collections were the old names. User-facing language is skil + command. Engine class may stay `CollectionEngine` until a rename task. State target: `.skil/state.json`.
 - **Map + inbox + deploy, not folder trees (2026-08-22):** Commands are named id lists. Skills stay where they are on disk. Inbox is the unfiled inventory (scan + Discover).
 - **Pull = scan skills; push = install and/or write our command file (2026-08-22):** Re-scan is not a live merge. Export does not parse their `commands/`.

@@ -932,14 +932,14 @@ One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys,
 **Description:** Persist at `.skil/state.json`. On load, if missing, read `.contextkit/state.json` (no copy until next persist). Add bin `skil` (keep `contextkit` so old scripts work). `SKIL_API_URL` with fallback to `CONTEXTKIT_API_URL`. GUI window/title can say skil. Do not rename `CollectionEngine` or every IPC channel in this task.
 
 **Acceptance criteria:**
-- [ ] New project writes `.skil/state.json`
-- [ ] Old `.contextkit/state.json` still loads
-- [ ] `npx skil scan --help` or `node dist/cli` under the `skil` bin works
-- [ ] Existing tests that hardcode the old path are updated or covered by the fallback test
+- [x] New project writes `.skil/state.json`
+- [x] Old `.contextkit/state.json` still loads
+- [x] `npx skil scan --help` or `node dist/cli` under the `skil` bin works
+- [x] Existing tests that hardcode the old path are updated or covered by the fallback test
 
 **Verification:**
-- [ ] Tests pass: `npm test -- collection-engine.test.ts real-fs-adapter.test.ts program.test.ts`
-- [ ] Build succeeds: `npm run build`
+- [x] Tests pass: `npm test -- collection-engine.test.ts real-fs-adapter.test.ts program.test.ts`
+- [x] Build succeeds: `npm run build`
 
 **Dependencies:** Task 29
 

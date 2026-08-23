@@ -81,7 +81,7 @@ inbox:
   - some-unfiled-skill
 ```
 
-State lives in `.skil/state.json` (read-fallback `.contextkit/state.json` until rename). Project-local. CLI = cwd. GUI = picked folder.
+State lives in `.skil/state.json`. Load falls back to `.contextkit/state.json` if the new file is missing; the next persist writes `.skil/` (no copy on load). Project-local. CLI = cwd. GUI = picked folder.
 
 ### Key Product Decisions
 
@@ -107,11 +107,13 @@ State lives in `.skil/state.json` (read-fallback `.contextkit/state.json` until 
 - `skil export <command> --to <ide> [--replace]`
 - `skil search [query] [--trending]`
 
-Until the bin rename, the executable may still be `contextkit`. The product name is skil.
+Bin is `skil`. `contextkit` stays as an alias so old scripts work. The product name is skil.
+
+API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 
 ### GUI
 
-- Connect folder (Sync tab). No login.
+- Window and brand say skil. Connect folder (Sync tab). No login.
 - Commands tab: Inbox, create command, file, delete, install, export, re-scan
 - Discover: All time / Trending, typed search, Add → Inbox, details from listing fields
 - Discover does not require a folder; scan / install / export do
@@ -153,14 +155,14 @@ Until the bin rename, the executable may still be `contextkit`. The product name
 ### Deferred
 
 - Cross-platform GUI polish beyond macOS-first
-- npm bin fully `skil` if the name is taken (alias is enough)
+- npm package rename from `contextkit` to `skil` if the name is free
 - Preserving user edits on re-export of a stamped file
 - One skill filed onto many commands from the GUI
 - Public command-template packs
 
 ## Open Questions
 
-- Is `skil` available as an npm bin name?
+- Is `skil` free as an npm *package* name? The bin alias already ships.
 
 ### Success Metrics
 
@@ -170,6 +172,6 @@ Until the bin rename, the executable may still be `contextkit`. The product name
 
 ### Distribution
 
-- npm CLI (bin `skil` or `contextkit` alias)
+- npm CLI (bin `skil`; `contextkit` alias)
 - Electron app, same engine
 - Site already at skil.website for the search/browse proxy

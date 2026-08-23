@@ -70,7 +70,7 @@ Tasks live in `tasks/todo2.md` Phase 11.
 
 ### Phase 11: Name + docs
 
-- [ ] Task 39: `.skil/state.json` + bin alias `skil`
+- [x] Task 39: `.skil/state.json` + bin alias `skil`
 - [ ] Task 40: README (architecture/PRD already updated)
 
 ### Checkpoint: Complete

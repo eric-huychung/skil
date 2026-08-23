@@ -7,8 +7,12 @@ All notable changes to ContextKit are documented here. Versions follow [Semantic
 ### Added
 - Engine `exportCommand` writes our stamped command file (`generated_by: skil`) into the target IDE dir. Unstamped existing files are left alone unless `replace: true`. Windsurf writes `.windsurf/workflows/`.
 - Discover: click a skill name to open a details dialog (route, repo, GitHub, skills.sh page, installs) from skills.sh listing fields already on the browse/search payload
+- `skil` CLI bin (keeps `contextkit` as an alias)
 
 ### Changed
+- Engine state persists at `.skil/state.json`. Old `.contextkit/state.json` still loads; the next persist writes the new path.
+- API origin override is `SKIL_API_URL`, then `CONTEXTKIT_API_URL`.
+- GUI window title and brand say skil.
 - CLI `export <command> --to <ide> [--replace]` and GUI Export write our stamped command file via `exportCommand`. Not skillsmith convert. Unstamped files need `--replace` or a GUI Replace confirm. Export does not install skills.
 - `install` takes a target IDE. The skills adapter runs `npx skills add` with `--agent` (cursor → `cursor`, claude → `claude-code`, windsurf → `windsurf`, agents → `universal`). The engine upserts catalog `deployedTo`; leftover `installedSkills` is not the catalog. CLI `--to` is required and rejects an unknown IDE before the engine.
 - GUI Commands: pick an IDE and Install a known skill (Inbox or filed). Calls the engine; errors are a visible alert. Disabled until a folder is connected. Discover Add still does not download.
