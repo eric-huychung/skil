@@ -110,6 +110,7 @@ interface SkilEngine {
 - Scan never creates commands and never moves folders.
 - Inbox = skill ids not filed on any command. Scan puts new unfiled ids there. Discover Add does too.
 - Filing updates the map only. Disk does not move.
+- `removeSkill` updates the map only. It does not move the id to Inbox; a later scan will if the folder is still unfiled.
 - `create('inbox')` is an error. Inbox is not a command. `create('/inbox')` is the same error.
 - Command names store without a leading slash. `create('/build')` and `file(..., '/build')` normalize to `build`. UI may show `/build`.
 - Re-scan refreshes the catalog. The map stays. If a folder is gone, drop that id from catalog, commands, and inbox, and report it.
@@ -190,6 +191,7 @@ Target verbs:
 - `skil create <name>` — empty command; `/build` stores `build`
 - `skil delete <name>`
 - `skil list`
+- `skil add <command> <skillId>` / `skil remove <command> <skillId>` — map edits; remove does not auto-inbox
 - `skil install <skillId> --to <ide>` — push a skill
 - `skil export <command> --to <ide> [--replace]` — push our command file
 - `skil search [query] [--trending]` — unchanged discover
@@ -396,6 +398,7 @@ Atomic JSON write. Schema version on every persist. v3 → v4 on load, no rewrit
 
 ## Decision Log
 
+- **README matches the loop (2026-08-22, Task 40):** User-facing README documents scan → Inbox → file → install and/or export. Primary bin is `skil`. No one-click install from Discover, no import-from-IDE, no skillsmith export, no team YAML / `run` / linter as product. Architecture + PRD stay the spec; README stays the loop.
 - **State path and bin are skil (2026-08-22, Task 39):** Persist `.skil/state.json`. Load falls back to `.contextkit/state.json` with no copy until the next persist. Bins: `skil` + `contextkit` alias. API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`. GUI title/brand say skil. Engine class and IPC stay `CollectionEngine` / `window.contextkit`.
 - **Product is skil; groupings are commands (2026-08-22):** ContextKit / collections were the old names. User-facing language is skil + command. Engine class may stay `CollectionEngine` until a rename task. State target: `.skil/state.json`.
 - **Map + inbox + deploy, not folder trees (2026-08-22):** Commands are named id lists. Skills stay where they are on disk. Inbox is the unfiled inventory (scan + Discover).
@@ -430,4 +433,5 @@ Atomic JSON write. Schema version on every persist. v3 → v4 on load, no rewrit
 - Deep module design: `.cursor/skills/design/codebase-design/SKILL.md`
 - TDD: `.cursor/skills/philosophy/tdd/SKILL.md`
 - PRD: `docs/requirements/prd.md`
+- User-facing loop: `README.md`
 - Phase tasks: `tasks/todo2.md` Phase 11, `tasks/plan.md`

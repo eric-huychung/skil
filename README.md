@@ -1,52 +1,78 @@
-# ContextKit
+# skil
 
-A CLI (and desktop GUI) for managing collections of AI skills, and exporting them to Cursor, Claude, or Windsurf format. Group skills into named collections, edit them freely, tie a command template to each one, then export to whichever IDE format you need.
+A CLI and desktop GUI for mapping AI skills onto SDLC commands (`/build`, `/tdd`), then pushing a skill or a generated command file. No login.
+
+- **Skills** = folders with `SKILL.md`. Disk owns the body. We hash it; we do not edit it.
+- **Commands** = named groups of skill ids in the app. Folders do not move when you file.
+- **Inbox** = unfiled inventory (scanned locals + Discover adds).
+- **Pull** = `scan` (skills dirs only — not `commands/`).
+- **Push** = `install` a skill into an IDE skills dir, and/or `export` **our** stamped command file.
+
+Bin is `skil`. `contextkit` is an alias of the same entry.
+
+## Loop
+
+1. Connect a repo (CLI = current directory; GUI = folder picker on Sync).
+2. `skil scan` — find `SKILL.md` under `.cursor/skills`, `.claude/skills`, `.windsurf/skills`, `.agents/skills`.
+3. Unfiled ids sit in Inbox. Create `/build`, then `inbox file` a skill onto it. The map saves; folders stay put.
+4. `skil install <skillId> --to cursor` writes the skill into that IDE's skills dir.
+5. `skil export build --to cursor` writes **our** command file (`skills:` + short steps + `generated_by: skil`). An existing unstamped `/build.md` is left alone unless you pass `--replace`.
+6. Re-scan refreshes the catalog. The map stays. Gone folders are dropped and reported.
+
+Discover Add puts an id in Inbox. It does not download. Install is a later, explicit step.
 
 ## Commands
 
 ```bash
-contextkit create <name> --skills skill-a,skill-b [--command "<cmd>"]  # define a collection, optionally with a command template
-contextkit add <collection> <skillId>                 # add a skill to an existing collection
-contextkit remove <collection> <skillId>               # remove a skill from an existing collection
-contextkit run <collection>                            # run the collection's command template
-contextkit list                                        # list all collections
-contextkit search [query] [--trending]                 # typed search, or all-time/trending leaderboard when query is omitted
-contextkit install <skillId>                           # install a skill via npx skills add
-contextkit convert <skillId> --to <ide>                # convert a single skill to cursor/claude/windsurf format via skillsmith
-contextkit export <collections...> --to <ide>          # convert every skill in one or more collections to an IDE format
-contextkit sync [--config <path>]                      # sync collections from .contextkit.yml
+skil scan                                              # pull: SKILL.md folders in this repo
+skil inbox                                             # list unfiled skill ids
+skil inbox add <skillId>                               # hold an id in Inbox (no download)
+skil inbox file <skillId> <command>                    # file an Inbox id onto a command
+skil create <name> [--skills id-a,id-b]                # /build stores build; inbox is reserved
+skil delete <name>                                     # drop a command; skills on disk stay
+skil list                                              # list commands
+skil add <command> <skillId>                           # add a skill to a command
+skil remove <command> <skillId>                        # remove a skill from a command
+skil install <skillId> --to <ide>                      # push a skill (cursor|claude|windsurf|agents)
+skil export <command> --to <ide> [--replace]           # write our stamped command file
+skil search [query] [--trending]                       # typed search, or all-time / trending
 ```
 
-State lives in `.contextkit/state.json`; skill sources live in `.contextkit/skills/`. Both are project-local. The CLI uses the current working directory. The GUI connects a folder from the Sync tab — it does not `chdir`.
+State lives in `.skil/state.json`. If that file is missing, we still load `.contextkit/state.json`; the next save writes `.skil/`. Project-local. The CLI uses the current working directory. The GUI connects a folder from the Sync tab — it does not `chdir`.
 
-`contextkit search` with no query lists the skills.sh all-time leaderboard (top 10, with install counts). `contextkit search --trending` lists trending. A typed query (`contextkit search react`) still searches and ignores `--trending`.
+`skil search` with no query lists the skills.sh all-time leaderboard (top 10, with install counts). `skil search --trending` lists trending. A typed query (`skil search react`) still searches and ignores `--trending`.
 
-`contextkit search` and `contextkit install` go through ContextKit's own backend, which authenticates to skills.sh with a Vercel OIDC token — no `SKILLS_API_KEY` needed. Typed search hits `GET /api/skills/search`; the leaderboard hits `GET /api/skills?view=` and is cached on Vercel's CDN. Default origin is `src/config/website.json` (`https://www.skil.website`). Override with `CONTEXTKIT_API_URL`.
+Search and browse go through skil's backend, which authenticates to skills.sh with a Vercel OIDC token — no `SKILLS_API_KEY`. Typed search hits `GET /api/skills/search`; the leaderboard hits `GET /api/skills?view=` and is cached on Vercel's CDN. Default origin is `src/config/website.json` (`https://www.skil.website`). Override with `SKIL_API_URL`, then `CONTEXTKIT_API_URL`.
 
 ## Desktop GUI
 
-An Electron app (`gui/`) shares the same `CollectionEngine` as the CLI: create collections, add/remove skills, search and install from skills.sh (empty Search shows All time / Trending leaderboards; click a skill name for route / repo / GitHub / skills.sh links), and export a collection to an IDE — all as thin UI over the same business logic. Connect a project folder from Sync when you want those writes in a repo; Discover and Collections work before that. Run it with `npm run gui:dev`.
+An Electron app (`gui/`) shares the same engine as the CLI. Window and brand say skil.
+
+- **Commands** — Inbox, create `/build`, file, delete, install, export, re-scan. Gone ids from the last scan show as a status banner.
+- **Discover** — All time / Trending, typed search, skill details from listing fields, Add → Inbox. Works with no folder. Add does not install.
+- **Sync** — pick or change the project folder. Not a live merge.
+
+Pick a folder and skil scans once. The Scan button is re-scan. Scan, install, and export stay disabled until a folder is connected.
+
+Install (Commands only): pick an IDE and install a known skill (Inbox or filed). Errors show as a visible alert.
+
+Export (Commands only): pick an IDE and write our stamped command file. Does not install skills. If the target file exists and is not stamped by us, you see the error and can confirm Replace.
+
+Run it with `npm run gui:dev`.
 
 ## Troubleshooting
 
-**`Collection '<name>' already exists`**
-Choose a different name, or run `contextkit list` to see existing collections.
+**`Command '<name>' already exists`**
+Choose a different name, or run `skil list`.
 
-**`Collection '<name>' not found`**
-Run `contextkit list` to see available collections.
+**`Command '<name>' not found`**
+Run `skil list` to see available commands.
 
-**`Collection '<name>' has no command defined`**
-Set one with `contextkit create <name> --command "<cmd>"`, or edit `.contextkit/state.json` directly.
+**`'inbox' is not a command`**
+Inbox is the unfiled list. Create a named command (`skil create build`) and file onto it.
 
-**`skillsmith is not installed`**
-`contextkit convert`/`contextkit export` shell out to `skillsmith`. Run `npm install -g skillsmith` and try again.
+**`Command file exists and was not generated by skil`**
+Export writes our template. Re-run with `--replace` (CLI) or confirm Replace (GUI) if you want to overwrite their file.
 
-**Config errors from `contextkit sync`**
-`.contextkit.yml` must have a top-level `collections` object mapping collection names to arrays of skill IDs:
-
-```yaml
-version: "1.0"
-collections:
-  frontend:
-    - owner/skill-name
-```
+**Scan reports no skills**
+Scan looks for `SKILL.md` under the four IDE skills dirs. It does not read `commands/` or Windsurf `workflows/`.

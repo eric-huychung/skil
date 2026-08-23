@@ -958,12 +958,12 @@ One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys,
 **Description:** Architecture and PRD are already updated. README still says collections + skillsmith export. Rewrite commands and the GUI flow. No "one-click install from search." No import-from-IDE. Point at Inbox, scan, install, export-our-file.
 
 **Acceptance criteria:**
-- [ ] README verbs match Phase 11
-- [ ] No leftover "active collection" or "export converts every skill"
-- [ ] No new promises (linter, team sync, marketplace)
+- [x] README verbs match Phase 11
+- [x] No leftover "active collection" or "export converts every skill"
+- [x] No new promises (linter, team sync, marketplace)
 
 **Verification:**
-- [ ] Docs match implemented commands after Tasks 30–39
+- [x] Docs match implemented commands after Tasks 30–39
 - [ ] Human skim
 
 **Dependencies:** Task 38, Task 39

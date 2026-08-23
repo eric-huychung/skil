@@ -10,6 +10,7 @@ All notable changes to ContextKit are documented here. Versions follow [Semantic
 - `skil` CLI bin (keeps `contextkit` as an alias)
 
 ### Changed
+- README documents the skil loop: scan → Inbox → file → install and/or export our stamped command file. `contextkit` is listed as a bin alias, not the product name.
 - Engine state persists at `.skil/state.json`. Old `.contextkit/state.json` still loads; the next persist writes the new path.
 - API origin override is `SKIL_API_URL`, then `CONTEXTKIT_API_URL`.
 - GUI window title and brand say skil.

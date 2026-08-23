@@ -36,7 +36,7 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 3. As a developer, I want unfiled skills in Inbox, so I can sort them onto commands when I am ready
 4. As a developer, I want to create a named command (`/build`), so I can group skills by SDLC step
 5. As a developer, I want to file a skill onto a command without moving folders, so the repo layout stays mine
-6. As a developer, I want to remove a skill from a command and see it back in Inbox, so unfiled stays true
+6. As a developer, I want to remove a skill from a command without moving folders, so the map can change; a later scan puts a still-unfiled id back in Inbox
 7. As a developer, I want to delete a command, so the map can shrink; skills on disk stay
 8. As a developer, I want Discover (all-time / trending / typed search) without a folder, so I can browse before I connect
 9. As a developer, I want Add from Discover to land in Inbox and not download, so install is a later choice
@@ -95,6 +95,8 @@ State lives in `.skil/state.json`. Load falls back to `.contextkit/state.json` i
 - **No version pinning.** Catalog hash is content identity, not a lockfile.
 - **Team YAML sync is leftover.** Not in this loop. No `.skil.yml` this phase.
 - **`run` / shell templates are leftover.** "Command template" now means the markdown file we generate, not `skil run`.
+- **README is the user-facing loop.** Scan → Inbox → file → install and/or export. Do not advertise leftover `sync` / `run` / convert, a marketplace, or a linter.
+- **`remove` does not auto-inbox.** Map only. A later scan puts a still-unfiled on-disk id back in Inbox.
 
 ### CLI (target)
 
@@ -102,6 +104,7 @@ State lives in `.skil/state.json`. Load falls back to `.contextkit/state.json` i
 - `skil create <name>` — `/build` stores `build`; `inbox` is reserved
 - `skil delete <name>`
 - `skil list`
+- `skil add <command> <skillId>` / `skil remove <command> <skillId>` — map only; remove does not auto-inbox
 - `skil inbox` / `inbox add <skillId>` / `inbox file <skillId> <command>` — engine method is `file`
 - `skil install <skillId> --to cursor|claude|windsurf|agents` — records `deployedTo` on the catalog; unknown `--to` is rejected before the engine
 - `skil export <command> --to <ide> [--replace]`
@@ -175,3 +178,4 @@ API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 - npm CLI (bin `skil`; `contextkit` alias)
 - Electron app, same engine
 - Site already at skil.website for the search/browse proxy
+- `README.md` is the user-facing loop (scan → Inbox → file → install / export)
