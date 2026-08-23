@@ -62,6 +62,11 @@ export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
     this.writeError = error;
   }
 
+  /** Test helper: drop a seeded utf-8 file so re-scan can report it gone. */
+  removeFile(path: string): void {
+    this.textFiles.delete(normalizePath(path));
+  }
+
   /** Test helper: clears all in-memory state between tests. */
   reset(): void {
     this.files.clear();

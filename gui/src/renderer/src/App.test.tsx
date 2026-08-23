@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import {
   createInMemoryEngine,
+  createInMemoryWorkspace,
   DEFAULT_TEST_PROJECT_ROOT,
   installTestBridge,
   renderWithProviders,
@@ -30,6 +31,8 @@ describe('App', () => {
     expect(screen.getByText('ContextKit')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Collections' })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByText('No collections yet')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Scan (connect a folder first)' })).toBeDisabled();
+    expect(screen.getByText('Connect a project folder to scan')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create New Collection' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Pick a project folder' })).not.toBeInTheDocument();
@@ -53,6 +56,20 @@ describe('App', () => {
     expect(screen.getByRole('tab', { name: 'Discover' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByLabelText('Search skills')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Pick a project folder' })).not.toBeInTheDocument();
+  });
+
+  it('does not put Inbox on the rail', async () => {
+    const engine = installTestBridge(createInMemoryEngine());
+    engine.create('frontend', []);
+    engine.addToInbox('obra/react-patterns');
+
+    renderWithProviders(<App />);
+
+    expect(screen.queryByRole('tab', { name: 'Inbox' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Collections' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Add obra/react-patterns to frontend' })
+    ).toBeInTheDocument();
   });
 
   it('puts Pick folder on Sync, not the header', async () => {
@@ -83,6 +100,28 @@ describe('App', () => {
 
     expect(screen.getByText('test-project')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Change folder' })).toBeInTheDocument();
+  });
+
+  it('scans the picked folder and lists unfiled skills in Inbox without creating commands', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    fs.writeFile('.cursor/skills/ui/styling/SKILL.md', '# styling\n');
+    installTestBridge(engine);
+
+    renderWithProviders(<App />);
+
+    expect(await screen.findByText('No collections yet')).toBeInTheDocument();
+    expect(screen.queryByText('tdd')).not.toBeInTheDocument();
+
+    await clickPickFolder();
+    await userEvent.click(screen.getByRole('tab', { name: 'Collections' }));
+
+    expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    expect(screen.getByText('tdd')).toBeInTheDocument();
+    expect(screen.getByText('ui/styling')).toBeInTheDocument();
+    expect(engine.inbox()).toEqual(['tdd', 'ui/styling']);
+    expect(engine.list()).toEqual([]);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Scan' })).toBeEnabled());
   });
 
   it('opens a help dialog from the rail', async () => {

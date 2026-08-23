@@ -11,11 +11,11 @@ const bridge: ContextKitBridge = {
   browseSkills: (view) => ipcRenderer.invoke(IPC_CHANNELS.browseSkills, view),
   listInbox: () => ipcRenderer.invoke(IPC_CHANNELS.listInbox),
   addToInbox: (skillId) => ipcRenderer.invoke(IPC_CHANNELS.addToInbox, skillId),
-  fileToCollection: (skillId, collectionName) =>
-    ipcRenderer.invoke(IPC_CHANNELS.fileToCollection, skillId, collectionName),
+  addSkill: (name, skillId) => ipcRenderer.invoke(IPC_CHANNELS.addSkill, name, skillId),
   deleteCollection: (name) => ipcRenderer.invoke(IPC_CHANNELS.deleteCollection, name),
   pickProjectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.pickProjectFolder),
   getProjectRoot: () => ipcRenderer.invoke(IPC_CHANNELS.getProjectRoot),
+  scan: () => ipcRenderer.invoke(IPC_CHANNELS.scan),
 };
 
 contextBridge.exposeInMainWorld('contextkit', bridge);

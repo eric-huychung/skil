@@ -27,13 +27,12 @@ describe('GUI workflow (real engine)', () => {
     await waitFor(() => expect(engine.inbox()).toEqual(['obra/react-patterns']));
 
     await userEvent.click(screen.getByRole('tab', { name: 'Collections' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'File obra/react-patterns into frontend' }));
+    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
+    await userEvent.click(within(detail).getByRole('button', { name: 'Add obra/react-patterns to frontend' }));
 
     await waitFor(() => expect(engine.list()[0]?.skills).toEqual(['obra/react-patterns']));
-    expect(engine.inbox()).toEqual([]);
-
-    const detail = screen.getByRole('region', { name: 'Collection frontend details' });
-    expect(within(detail).getByText('obra/react-patterns')).toBeInTheDocument();
+    expect(engine.inbox()).toEqual(['obra/react-patterns']);
+    expect(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' })).toBeInTheDocument();
 
     await userEvent.selectOptions(within(detail).getByLabelText('Export frontend to'), 'windsurf');
     await userEvent.click(within(detail).getByRole('button', { name: 'Export frontend' }));

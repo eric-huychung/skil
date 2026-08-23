@@ -1,7 +1,7 @@
 import type { Result } from '../../../src/core/result.js';
-import type { BrowseView, Collection, ExportResult, IDE, Skill } from '../../../src/types/index.js';
+import type { BrowseView, Collection, ExportResult, IDE, ScanResult, Skill } from '../../../src/types/index.js';
 
-export type { BrowseView, Collection, ExportResult, IDE, Result, Skill };
+export type { BrowseView, Collection, ExportResult, IDE, Result, ScanResult, Skill };
 
 /**
  * IPC channel names shared between the main process (handler registration)
@@ -17,10 +17,11 @@ export const IPC_CHANNELS = {
   browseSkills: 'contextkit:browse-skills',
   listInbox: 'contextkit:list-inbox',
   addToInbox: 'contextkit:add-to-inbox',
-  fileToCollection: 'contextkit:file-to-collection',
+  addSkill: 'contextkit:add-skill',
   deleteCollection: 'contextkit:delete-collection',
   pickProjectFolder: 'contextkit:pick-project-folder',
   getProjectRoot: 'contextkit:get-project-root',
+  scan: 'contextkit:scan',
 } as const;
 
 /**
@@ -38,10 +39,12 @@ export interface ContextKitBridge {
   browseSkills(view: BrowseView): Promise<Result<Skill[]>>;
   listInbox(): Promise<string[]>;
   addToInbox(skillId: string): Promise<Result<string[]>>;
-  fileToCollection(skillId: string, collectionName: string): Promise<Result<Collection>>;
+  addSkill(name: string, skillId: string): Promise<Result<Collection>>;
   deleteCollection(name: string): Promise<Result<void>>;
   /** Opens a directory dialog. Returns the picked path, or `null` if canceled. */
   pickProjectFolder(): Promise<string | null>;
   /** Currently bound project folder, or `null` if none has been picked this session. */
   getProjectRoot(): Promise<string | null>;
+  /** Pull: scan SKILL.md folders. New unfiled ids go to Inbox. Does not install. */
+  scan(): Promise<Result<ScanResult>>;
 }

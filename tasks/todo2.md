@@ -1,7 +1,9 @@
-# ContextKit Refactor: Management + Export Focus
+# skil tasks (was ContextKit refactor)
 
 ## Overview
-Shift from symlink management to collection organization and IDE conversion. Add OIDC auth, make collections editable, add command templates, remove activation logic. Phase 5 (after that refactor) adds skills.sh all-time/trending browse through the existing OIDC proxy, cached on Vercel's CDN.
+Phases 1–7: OIDC browse, editable groups, folder picker, Inbox. **Current work is Phase 11:** map + scan + command file. Product spec: `docs/design/architecture.md`. Plan index: `tasks/plan.md`.
+
+Phases 8–10 (import-as-IDE-collection, export-as-skillsmith) are superseded — see Status 2026-08-22.
 
 ## Phase 1: Backend Infrastructure
 
@@ -482,34 +484,43 @@ Not in this phase: last-folder persistence, GitHub remotes, putting the picker o
 - [x] `npm test` and `npm --workspace gui test` pass
 - [x] CLI from a project dir still uses that dir
 - [x] GUI can bind to a folder without `chdir`
-- [ ] Review with human before Inbox UI copy
+- [x] Review with human before Inbox UI copy — 2026-08-21, see below
 
 ---
 
-## Phase 7: Inbox
+## Human review: after Phase 6 (2026-08-21)
 
-Inbox is a real holding list of skill IDs on `State`. Not a collection. Not downloaded. Schema v3: `inbox: string[]`. Old state files missing the field load as `[]` (same ignore-unknown-fields approach as v1 → v2).
+Phase 6 is done (folder picker + scratch workspace + Discover browse with no folder). Inbox is not. The four GUI notes are one slice — that is Phase 7. Import / export-fetch / docs wait.
 
-**Seams under test:** `CollectionEngine.addToInbox` / `inbox` / `removeFromInbox` / `fileToCollection` at the engine interface. CLI handlers with in-memory engine. Do not test persist-helper internals.
+Restart `gui:dev` after main-process edits (no HMR). Do not copy the `context-kit/` mock: its Add dumps onto the selected collection; ours is Inbox then file. No auto-named collections. No typed skill IDs in the GUI.
 
 ---
 
-### Task 17: `State.inbox` + add / list / remove
-**Description:** Add `inbox: string[]` to `State`. `addToInbox(skillId)` is idempotent, persists, rolls back on write failure (same pattern as `addSkill`). `inbox()` returns a copy of the IDs. `removeFromInbox(skillId)` is a no-op if missing. `create('inbox', …)` returns an error — Inbox is not a collection name. Constructor treats missing `inbox` as `[]`.
+## Phase 7: Inbox + Collections chrome
+
+One vertical slice. Inbox is a holding list of skill IDs on `State` (`inbox: string[]`, schema v3, missing → `[]`). Not a collection, not a download. Discover Add writes Inbox. Collections: name-only create modal, delete, Inbox list → file into a named collection. CLI stays thin over the same engine methods.
+
+**Seams under test:** engine `addToInbox` / `inbox` / `removeFromInbox` / `fileToCollection` / `delete`; CLI with in-memory engine; GUI via the bridge. Do not test persist-helper internals. Do not disable Add when no folder is picked — write to `currentEngine()` (scratch or picked).
+
+**Not in this phase:** GitHub, last-folder persistence, mock Add-to-active-collection, `npx skills add` from Discover, skill IDs in the create modal.
+
+---
+
+### Task 17: Engine — inbox, file, delete
+**Description:** `State.inbox`. `addToInbox` / `inbox` / `removeFromInbox` as already specified (idempotent add, no-op remove, missing field → `[]`, `create('inbox')` errors). `fileToCollection(skillId, collectionName)` moves one Inbox ID into an existing collection (one persist, rollback on failure; error if collection missing or ID not in inbox; already-in-collection still drops from inbox). `delete(name)` removes a collection; missing name is an error; deleting the last collection is allowed. None of these call `install`.
 
 **Acceptance criteria:**
-- [ ] `addToInbox('obra/react-patterns')` persists under `.contextkit/state.json` `inbox`
-- [ ] Adding the same ID twice leaves one entry
-- [ ] `create('inbox', [])` errors; no collection named `inbox` is stored
-- [ ] State file without `inbox` loads; `inbox()` is `[]`
-- [ ] Write failure leaves in-memory inbox unchanged
+- [ ] `addToInbox('obra/react-patterns')` persists under `.contextkit/state.json` `inbox`; duplicates stay one entry
+- [ ] `create('inbox', [])` errors; old state without `inbox` loads as `[]`
+- [ ] Filing into `frontend` moves the ID; missing collection / ID not in inbox errors and leaves state unchanged
+- [ ] `delete('frontend')` removes it; last collection may be deleted; write failure rolls back
+- [ ] In-memory `install` call count stays 0
 
 **Verification:**
 - [ ] Tests pass: `npm test -- collection-engine.test.ts`
 - [ ] Build succeeds: `npm run build`
-- [ ] `npx skills add` is not invoked (in-memory adapter `install` call count stays 0)
 
-**Dependencies:** None (can parallelize with Task 15)
+**Dependencies:** None
 
 **Files likely touched:**
 - `src/types/index.ts`
@@ -517,125 +528,113 @@ Inbox is a real holding list of skill IDs on `State`. Not a collection. Not down
 - `src/core/collection-engine.ts`
 - `src/core/collection-engine.test.ts`
 
-**Estimated scope:** Medium (4 files)
+**Estimated scope:** Medium
 
 ---
 
-### Task 18: File Inbox item into a named collection
-**Description:** `fileToCollection(skillId, collectionName)` moves one Inbox ID into an existing collection: append to `collection.skills` (idempotent if already there), remove from `inbox`, one persist, rollback on failure. Error if the collection does not exist. Error if `skillId` is not in the inbox (do not silently `addSkill`). Does not call `install`.
+### Task 18: CLI — inbox + delete
+**Description:** `contextkit inbox` lists IDs. `inbox add <skillId>` / `inbox file <skillId> <collection>`. `contextkit delete <name>`. Help: Inbox is a holding list; Export (not inbox) downloads. No `staging` alias.
 
 **Acceptance criteria:**
-- [ ] Filing `'obra/react-patterns'` into `'frontend'` adds the ID to that collection and drops it from `inbox()`
-- [ ] Filing into a missing collection returns an error; inbox unchanged
-- [ ] Filing an ID not in the inbox returns an error; collection unchanged
-- [ ] Filing an ID already in the collection still removes it from inbox (move is done)
-- [ ] Write failure restores both inbox and collection
+- [ ] The four commands work against the engine; errors print
+- [ ] `contextkit --help` lists inbox and delete; no "staging" in CLI source
 
 **Verification:**
-- [ ] Tests pass: `npm test -- collection-engine.test.ts`
+- [ ] Tests pass: `npm test -- inbox.test.ts` (and a small delete CLI test)
 - [ ] Build succeeds: `npm run build`
-- [ ] Manual: not required; CLI coverage is Task 19
 
 **Dependencies:** Task 17
 
 **Files likely touched:**
-- `src/interfaces/engine.ts`
-- `src/core/collection-engine.ts`
-- `src/core/collection-engine.test.ts`
+- `src/cli/commands/inbox.ts` (new) + test
+- `src/cli/commands/delete.ts` (new) + test
+- `src/cli/program.ts`
 
-**Estimated scope:** Small (3 files)
+**Estimated scope:** Small
 
 ---
 
-### Task 19: CLI inbox commands
-**Description:** Thin CLI over the new engine methods. `contextkit inbox` lists IDs. `contextkit inbox add <skillId>` calls `addToInbox`. `contextkit inbox file <skillId> <collection>` calls `fileToCollection`. Help text says Inbox is a holding list and that Export (not this command) downloads. Do not add a `staging` alias.
+### Task 19: GUI — Discover Add, create modal, Inbox file, delete
+**Description:** Discover row is Add → `addToInbox`, copy Add / Added, visible errors (not `sr-only`). Drop `installSkill` from the bridge. Collections: Create opens a name-only modal (`create(name, [])`); trash on the detail header confirms then `delete`; Inbox list with File into a named collection. Remove typed "skill id" inputs. CLI `contextkit add` can stay; GUI does not type IDs.
 
 **Acceptance criteria:**
-- [ ] `contextkit inbox` prints current inbox IDs (friendly empty message)
-- [ ] `contextkit inbox add obra/react-patterns` succeeds without installing
-- [ ] `contextkit inbox file obra/react-patterns frontend` moves the ID
-- [ ] Errors from the engine are printed; help documents the three commands
+- [ ] Add on a browse/search row lands in Inbox and does not call `install`; duplicate Add is fine
+- [ ] Create fields are hidden until Create is clicked; submit makes an empty collection; cancel does not
+- [ ] Trash deletes the selected collection (empty list is ok)
+- [ ] Inbox IDs show on Collections; File moves them into a named collection
+- [ ] No `installSkill` on `ContextKitBridge`; no typed skill-id fields left
 
 **Verification:**
-- [ ] Tests pass: `npm test -- inbox.test.ts` (or equivalent new CLI test file)
-- [ ] Build succeeds: `npm run build`
-- [ ] `contextkit --help` lists inbox; no "staging" string in CLI source
+- [ ] Tests pass: `npm --workspace gui test`
+- [ ] `npm --workspace gui run typecheck` passes
+- [ ] Manual: Add from Discover → create `frontend` → file → see it on the collection (export still does not download in this phase)
 
-**Dependencies:** Task 18
+**Dependencies:** Task 17
 
 **Files likely touched:**
-- `src/cli/commands/inbox.ts` (new)
-- `src/cli/commands/inbox.test.ts` (new)
-- `src/cli/program.ts`
+- `gui/src/shared/ipc.ts` / main / preload / test-utils
+- `gui/src/renderer/src/components/SkillSearch.tsx` + test
+- `gui/src/renderer/src/components/CreateCollectionForm.tsx` + test
+- `gui/src/renderer/src/components/CollectionList.tsx` + test
+- `gui/src/renderer/src/App.tsx`
 
-**Estimated scope:** Small (3 files)
+**Estimated scope:** Medium (one GUI vertical slice)
 
 ---
 
 ## Checkpoint: After Phase 7
-- [ ] Inbox IDs persist with no `npx skills add`
-- [ ] Filing moves Inbox → collection
-- [ ] `create inbox` is rejected
-- [ ] Review with human before Discover button copy
+- [x] Discover Add → Inbox, no download — landed in engine/CLI/GUI (boxes on Tasks 17–19 were stale)
+- [x] Create is a name-only modal; delete trash works; skills come from Inbox
+- [x] `create inbox` is rejected
+- [x] CLI inbox + delete work
 
 ---
 
-## Phase 8: Discover → Inbox
+## Status (2026-08-22)
 
-Browse/search stay as Phase 5. Only the row action changes: Add writes Inbox. Stop calling `engine.install` / `npx skills add` from Discover.
+Product is now **skil** (one L): map + inbox + skill deploy + generated command files. Spec: `docs/design/architecture.md`, `docs/requirements/prd.md`. Plan: `tasks/plan.md`.
+
+Phase 7 is in the tree. **Phases 8–10 are superseded** (old task text is in git history). Do not implement `importFromIDE`, export-as-fetch+skillsmith, or the old docs task. Next work is Phase 11.
 
 ---
 
-### Task 20: GUI Discover Add → Inbox
-**Description:** Replace Discover's Install control with Add. Click calls `addToInbox`, not `installSkill`. Drop `installSkill` from `ContextKitBridge` / IPC / preload / test bridge so the GUI cannot regress. Keep leaderboard tabs, typed search, install-count display (that number is skills.sh popularity, not "installed locally"). Copy: Add / Added — never Install, never Staging.
+## Phases 8–10 — superseded
+
+Old plan: one-IDE import into a `cursor`/`claude` collection; export = `npx skills add` then skillsmith convert.
+
+That fights the new loop: scan skills only → Inbox → file onto a **command** → install writes a skill folder; export writes **our** command file. We do not scan `commands/`.
+
+Tasks 21–27 are not to be implemented as written. Old task text is in git history.
+
+---
+
+## Phase 11: skil map + pull + push
+
+One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys, command membership.
+
+**Pull** = `scan`. **Push** = `install` and/or `exportCommand`.
+
+**Seams:** engine `scan` / `file` / `install` / `exportCommand`; `IFileSystemAdapter.findSkillFolders` + `readFile` + `writeFile`; `ISkillsAdapter.install(skillId, targetIDE)`; CLI handlers; GUI via the bridge. Do not add a Scanner adapter. Do not test `createEngine` string-forwarding.
+
+**Not in this phase:** import-as-command, skillsmith export, team YAML, `run`, scanning `commands/`, full identifier sweep of every `contextkit` string (Task 39 is path + bin only), token linter.
+
+**TDD:** red → green per task at the seam above.
+
+---
+
+### Task 28: FS — find `SKILL.md` folders + read/write bytes
+**Description:** Grow `IFileSystemAdapter` so scan and export do not pretend the disk is JSON-only. `findSkillFolders(root)` walks nested dirs and returns relative paths of folders that contain a file named `SKILL.md`. Missing root → `ok([])`. File-at-root → error. `readFile` / `writeFile` for hashing and command-file output. In-memory adapter: seedable files + dirs (not only JSON maps).
 
 **Acceptance criteria:**
-- [ ] Add on a browse/search row puts the ID in `engine.inbox()` and does not call `install`
-- [ ] Duplicate Add is success (idempotent); button can show Added
-- [ ] Error from `addToInbox` is shown inline
-- [ ] No `installSkill` on `ContextKitBridge`
-- [ ] Existing browse/search tests still pass aside from the renamed action
-
-**Verification:**
-- [ ] Tests pass: `npm --workspace gui test -- SkillSearch.test.tsx`
-- [ ] `npm --workspace gui run typecheck` passes
-- [ ] `npm test` (root) still passes
-
-**Dependencies:** Task 17, Task 16 (folder should be picked before mutating; if no folder, Add is disabled with the same empty state as Task 16)
-
-**Files likely touched:**
-- `gui/src/shared/ipc.ts`
-- `gui/src/main/index.ts`
-- `gui/src/preload/index.ts`
-- `gui/src/renderer/src/test-utils.tsx`
-- `gui/src/renderer/src/components/SkillSearch.tsx`
-- `gui/src/renderer/src/components/SkillSearch.test.tsx`
-
-**Estimated scope:** Medium (6 files)
-
----
-
-## Phase 9: One-IDE import
-
-Scan **one** of `.cursor/skills` or `.claude/skills` under the project root. Import seeds Collections. Empty is success. This is not `sync`.
-
-**Seams under test:** `IFileSystemAdapter.listDirectories`; `CollectionEngine.importFromIDE` (skill IDs + upsert collection). CLI `runImport`. Do not test path-string concatenation as a separate engine test if `listDirectories` already returns names.
-
----
-
-### Task 21: `listDirectories` on the FS adapter
-**Description:** Add `listDirectories(path): Result<string[]>` to `IFileSystemAdapter`. Real adapter: directory names only (not files), relative to the adapter root like JSON paths. Missing path → ok empty list (import treats "no skills dir" as empty, not a crash). Not-a-directory → error. In-memory adapter: seedable map of path → child names for engine tests.
-
-**Acceptance criteria:**
-- [ ] Real adapter lists subdirectory names under a rooted path
-- [ ] Missing directory returns `ok([])`, not an error
-- [ ] File-at-path returns an error Result
-- [ ] In-memory adapter can seed `.cursor/skills` → `['react-patterns']`
+- [ ] Real adapter finds nested `a/b` when `a/b/SKILL.md` exists and does not treat parent `a` as a skill unless `a/SKILL.md` exists
+- [ ] Missing root is `ok([])`, not an error
+- [ ] `readFile` / `writeFile` work relative to the adapter root; absolute paths stay absolute
+- [ ] In-memory adapter can seed `.cursor/skills/tdd/SKILL.md` for engine tests
 
 **Verification:**
 - [ ] Tests pass: `npm test -- real-fs-adapter.test.ts in-memory.test.ts`
 - [ ] Build succeeds: `npm run typecheck`
-- [ ] `IFileSystemAdapter` fakes in other tests compile (add `listDirectories` returning `ok([])`)
+- [ ] Other `IFileSystemAdapter` fakes compile
 
 **Dependencies:** Task 15 (rooted paths)
 
@@ -650,22 +649,22 @@ Scan **one** of `.cursor/skills` or `.claude/skills` under the project root. Imp
 
 ---
 
-### Task 22: `importFromIDE('cursor' | 'claude')`
-**Description:** `importFromIDE(ide)` lists `.cursor/skills` or `.claude/skills` (only those trees). Directory names become skill IDs with `source: 'local'` recorded on `installedSkills` if not already present (they are already on disk — this is not a fetch). If IDs length > 0, upsert a collection named `cursor` or `claude` whose `skills` **replace** with the scan (disk is source of truth for that one collection). Empty scan: `ok({ ide, skillIds: [] })` and do not create/overwrite a collection. Do not touch inbox, other collections, or `.contextkit.yml`. Do not scan `.cursor/rules`, `.agents`, Windsurf, or home-dir skills. Type is `'cursor' | 'claude'` — not the full `IDE` union.
+### Task 29: Engine — catalog + `scan()` (schema v4)
+**Description:** Persist `commands` (was `collections`), `skills: SkillRecord[]`, `inbox`. Load v3: `collections` → `commands`, missing `skills` → `[]`. Id = path relative to that IDE's skills root. Hash = sha256 of `SKILL.md`. `scan()` walks `.cursor/skills`, `.claude/skills`, `.windsurf/skills`, `.agents/skills` only. New unfiled ids → inbox. Already-on-a-command → stay filed. Gone from all `paths` → drop id from catalog, commands, inbox; list it in `ScanResult.gone`. Hash change → update hash, `changed`. Do not create commands. Do not read `commands/`. Keep `export type Collection = Command` so CLI/GUI still typecheck.
 
 **Acceptance criteria:**
-- [ ] Cursor scan of `react-patterns` upserts collection `cursor` with that ID
-- [ ] Claude scan uses `.claude/skills` and collection name `claude`
-- [ ] Empty or missing skills dir succeeds with `skillIds: []` and no new collection
-- [ ] Re-import replaces that IDE collection's skill list; other collections unchanged
-- [ ] Inbox unchanged; `sync` codepath uncalled
+- [ ] Scan of `.cursor/skills/tdd/SKILL.md` yields catalog id `tdd`, hash set, id in inbox
+- [ ] Nested `.cursor/skills/ui/styling/SKILL.md` → id `ui/styling`
+- [ ] Same id under `.cursor` and `.claude` is one row with two `paths`
+- [ ] Re-scan after filing keeps the command map; gone folder drops the id and reports it
+- [ ] Empty / missing skill trees succeed; `commands/` files are ignored
 
 **Verification:**
 - [ ] Tests pass: `npm test -- collection-engine.test.ts`
 - [ ] Build succeeds: `npm run build`
-- [ ] In-memory skills adapter `install` is not called
+- [ ] `install` call count stays 0
 
-**Dependencies:** Task 21
+**Dependencies:** Task 28
 
 **Files likely touched:**
 - `src/types/index.ts`
@@ -677,176 +676,310 @@ Scan **one** of `.cursor/skills` or `.claude/skills` under the project root. Imp
 
 ---
 
-### Task 23: CLI `import --from`
-**Description:** `contextkit import --from cursor|claude` calls `importFromIDE`. Reports how many IDs landed and the collection name, or a friendly empty message. Rejects `--from` values other than `cursor`/`claude` (including `windsurf`, `all`, comma-separated). Help text: one IDE, empty is fine, this is not `sync`.
+### Task 30: CLI `scan` (pull)
+**Description:** `contextkit scan` (help may say `skil scan`) calls `engine.scan()`. Print added / gone / changed counts and ids. Empty is success. Help: skills only, map stays, this is pull, not team sync.
 
 **Acceptance criteria:**
-- [ ] `--from cursor` and `--from claude` work
-- [ ] Invalid `--from` errors before the engine is called
-- [ ] Empty import prints a success empty message, not an error
-- [ ] Help does not mention GitHub or multi-IDE
+- [ ] Scan prints a friendly empty message when nothing is found
+- [ ] Gone ids are visible in output
+- [ ] Invalid extra flags do not call the engine
+- [ ] Help does not say import or collection-from-IDE
 
 **Verification:**
-- [ ] Tests pass: `npm test -- import.test.ts`
+- [ ] Tests pass: `npm test -- scan.test.ts`
 - [ ] Build succeeds: `npm run build`
-- [ ] Manual: `npx contextkit import --from cursor` in this repo (has `.cursor/skills`)
+- [ ] Manual: run scan in this repo (has `.cursor/skills`)
 
-**Dependencies:** Task 22
+**Dependencies:** Task 29
 
 **Files likely touched:**
-- `src/cli/commands/import.ts` (new)
-- `src/cli/commands/import.test.ts` (new)
+- `src/cli/commands/scan.ts` (new)
+- `src/cli/commands/scan.test.ts` (new)
 - `src/cli/program.ts`
 
 **Estimated scope:** Small (3 files)
 
 ---
 
-### Task 24: GUI pick one IDE and import
-**Description:** After a folder is picked, Collections (or a first-run prompt there — not Sync) offers **one** choice: Cursor or Claude, then Import. Empty result is a normal success state. Do not offer "both", Windsurf, or GitHub. Show imported IDs via the existing collection list (`cursor` / `claude` row).
+### Task 31: GUI — scan, inventory in Inbox, gone banner
+**Description:** After a folder is picked, call `scan()` (once on pick is ok). Commands surface shows Inbox = unfiled (scanned + Discover). Re-scan control. Show `gone` from the last result. Do not auto-create commands. Discover Add unchanged (still no install).
 
 **Acceptance criteria:**
-- [ ] User can import from Cursor **or** Claude, not both in one click
-- [ ] Empty import does not error the UI
-- [ ] After import, `CollectionList` shows the `cursor` or `claude` collection when IDs exist
-- [ ] No third holding-list label; Sync tab still unused for this
+- [x] Pick this repo → Inbox lists scanned skill ids that are not on a command
+- [x] Re-scan after deleting a fixture folder surfaces a gone message
+- [x] No folder: Discover still works; Scan is disabled or no-ops with a clear message
+- [x] Existing Discover Add / file tests still pass
 
 **Verification:**
-- [ ] Tests pass: `npm --workspace gui test -- CollectionList.test.tsx` (or a focused import component test)
-- [ ] `npm --workspace gui run typecheck` passes
-- [ ] Manual: pick this repo, import Cursor, see `.cursor/skills` names
+- [x] Tests pass: `npm --workspace gui test -- App.test.tsx CollectionList.test.tsx`
+- [x] `npm --workspace gui run typecheck` passes
+- [ ] Manual: pick this repo, see Inbox, restart `gui:dev` after main-process edits
 
-**Dependencies:** Task 16, Task 22
+**Dependencies:** Task 16, Task 29
 
 **Files likely touched:**
 - `gui/src/shared/ipc.ts`
 - `gui/src/main/index.ts`
 - `gui/src/preload/index.ts`
 - `gui/src/renderer/src/test-utils.tsx`
-- `gui/src/renderer/src/components/CollectionList.tsx` (or a small import control next to it)
+- `gui/src/renderer/src/App.tsx` and/or `CollectionList.tsx` (+ tests)
 
-**Estimated scope:** Medium (5 files)
-
----
-
-## Checkpoint: After Phase 9
-- [ ] One-IDE import works empty and non-empty
-- [ ] `contextkit sync` tests unchanged in behavior
-- [ ] No multi-IDE import UI
-- [ ] Review local-ID vs `owner/repo` mapping before Export work if names look wrong
+**Estimated scope:** Medium (one GUI vertical slice)
 
 ---
 
-## Phase 10: Export fetches
-
-`export` is the download + convert step. Discover/Inbox/import only stored IDs (import also noted local files). Keep CLI `contextkit install` as an escape hatch; GUI Discover must not grow Install back.
+## Checkpoint: After Tasks 28–31 (pull)
+- [x] Nested skills scan; Inbox unfiled; no auto commands
+- [x] Re-scan keeps map; gone ids reported
+- [x] `npm test` and `npm --workspace gui test` pass
+- [ ] Review with human before Command chrome / install
 
 ---
 
-### Task 25: `export` install-then-convert per skill
-**Description:** For each skill in each named collection, `export` first `skills.install(skillId)` then `skills.convert(skillId, targetIDE)`. Same continue-on-failure rules as today: missing collection or one bad skill goes to `failures`, the rest continue. Successful fetch records `installedSkills` (reuse `install()` or equivalent persist). Convert failure after a successful fetch is still a per-skill failure (files may exist; user can retry export). Do not fetch from Discover. `SkillsAdapter.install` already has project `cwd` from Task 15. If `npx skills add` needs an agent flag to land in `.cursor` vs `.claude`, put that flag **inside** the adapter — `export()`'s interface stays `(names, targetIDE)`.
+### Task 32: CLI/engine words — command, not collection
+**Description:** User-facing CLI: command not collection. `fileToCollection` → `file` (or `fileToCommand` on the engine; CLI `inbox file <id> <command>`). Errors and `--help` say command. Strip a leading `/` on create (`/build` → `build`). Keep the `Collection` type alias. Do not rename every GUI file in this task.
 
 **Acceptance criteria:**
-- [ ] Export of a collection whose IDs were only in state (never installed) calls install then convert per ID
-- [ ] Install failure for one skill skips convert for that skill, continues the rest
-- [ ] Convert-only failure still recorded; other skills proceed
-- [ ] Existing multi-collection and missing-collection export cases still hold
-- [ ] Discover/Inbox tests still show zero `install` calls
+- [ ] `create inbox` still errors
+- [ ] `create /build` stores name `build`
+- [ ] Help/errors do not teach "collection" as the product word
+- [ ] Existing inbox file tests updated and passing
 
 **Verification:**
-- [ ] Tests pass: `npm test -- collection-engine.test.ts export.test.ts`
+- [ ] Tests pass: `npm test -- inbox.test.ts create.test.ts delete.test.ts program.test.ts`
 - [ ] Build succeeds: `npm run build`
-- [ ] Manual: Inbox-add a skills.sh ID, file it, export `--to cursor`, confirm files appear under the project (not the GUI app dir)
 
-**Dependencies:** Task 15, Task 8 (existing export)
+**Dependencies:** Task 29
 
 **Files likely touched:**
+- `src/interfaces/engine.ts`
+- `src/core/collection-engine.ts`
+- `src/cli/commands/*.ts` (copy + create)
+- `src/cli/program.ts`
+
+**Estimated scope:** Medium (≤5 files if you only touch help + file + create; do not rename GUI)
+
+---
+
+### Task 33: GUI — Commands chrome
+**Description:** Tab and copy say Commands. Create modal is still name-only (`/build` ok). Inbox file target is a command. Do not rename `CollectionList.tsx` unless you have room; labels matter more than the filename.
+
+**Acceptance criteria:**
+- [ ] No user-visible "Collections" as the product word
+- [ ] Create `/build`, file from Inbox, delete still work
+- [ ] Discover Add still Inbox-only
+
+**Verification:**
+- [ ] Tests pass: `npm --workspace gui test`
+- [ ] `npm --workspace gui run typecheck` passes
+
+**Dependencies:** Task 32
+
+**Files likely touched:**
+- `gui/src/renderer/src/App.tsx`
+- `gui/src/renderer/src/components/CollectionList.tsx` (+ test)
+- `gui/src/renderer/src/components/CreateCollectionForm.tsx` (+ test)
+
+**Estimated scope:** Medium
+
+---
+
+## Checkpoint: After Tasks 32–33 (organize)
+- [ ] `/build` + file `tdd`; folders do not move
+- [ ] Inbox = unfiled only
+
+---
+
+### Task 34: Adapter `install(skillId, targetIDE)`
+**Description:** `ISkillsAdapter.install` takes a target IDE. Real adapter: `npx skills add` with `cwd` = project root and the agent flag **inside** the adapter. In-memory adapter records `(skillId, ide)` so engine tests can assert the target. `convert` unchanged (leftover).
+
+**Acceptance criteria:**
+- [ ] `install('obra/x', 'cursor')` invokes execa with cwd = root and a cursor agent flag
+- [ ] Claude / windsurf / agents pass a different flag (or documented equivalent)
+- [ ] Failure returns `Result` err, same style as today
+- [ ] Call sites that still use one-arg `install` are updated
+
+**Verification:**
+- [ ] Tests pass: `npm test -- skills-adapter.test.ts`
+- [ ] `npm run typecheck` passes
+
+**Dependencies:** Task 15
+
+**Files likely touched:**
+- `src/interfaces/adapters.ts`
+- `src/adapters/skills-adapter.ts`
+- `src/adapters/skills-adapter.test.ts`
+- `src/adapters/in-memory-skills.ts`
+
+**Estimated scope:** Medium (4 files)
+
+---
+
+### Task 35: Engine + CLI — install records deploy
+**Description:** `engine.install(skillId, targetIDE)` calls the adapter, then upserts `SkillRecord` (`source: 'skills.sh'` or `local`), `paths`, `deployedTo`. Persist + rollback on write failure. CLI `install <skillId> --to <ide>`. Does not write command files. Does not require the id to be filed (flow recommends file first).
+
+**Acceptance criteria:**
+- [ ] After install to cursor, catalog has `deployedTo` for cursor
+- [ ] Adapter failure does not persist a deploy
+- [ ] CLI requires `--to`; rejects unknown IDE before the engine
+- [ ] Discover/Inbox tests still show zero install unless they call install
+
+**Verification:**
+- [ ] Tests pass: `npm test -- collection-engine.test.ts install.test.ts`
+- [ ] Build succeeds: `npm run build`
+
+**Dependencies:** Task 29, Task 34
+
+**Files likely touched:**
+- `src/interfaces/engine.ts`
 - `src/core/collection-engine.ts`
 - `src/core/collection-engine.test.ts`
-- `src/cli/commands/export.ts` (help text: fetch + convert)
-- `src/adapters/skills-adapter.ts` (only if `--agent` / cwd must change)
+- `src/cli/commands/install.ts` (+ test)
+
+**Estimated scope:** Medium (4 files)
+
+---
+
+### Task 36: GUI — install to an IDE
+**Description:** After a skill is known (Inbox or on a command), user picks an IDE and Install. Bridge `install(skillId, ide)` → engine. Discover does not grow Install.
+
+**Acceptance criteria:**
+- [ ] Install from the Commands surface calls the engine with the chosen IDE
+- [ ] Error is visible (not `sr-only`)
+- [ ] Discover Add still does not install
+
+**Verification:**
+- [ ] Tests pass: `npm --workspace gui test`
+- [ ] `npm --workspace gui run typecheck` passes
+- [ ] Manual: file a skills.sh id, install `--to cursor`, confirm a folder under the picked project
+
+**Dependencies:** Task 35
+
+**Files likely touched:**
+- `gui/src/shared/ipc.ts` / main / preload / test-utils
+- `gui/src/renderer/src/components/CollectionList.tsx` (+ test)
+
+**Estimated scope:** Medium (one GUI slice)
+
+---
+
+## Checkpoint: After Tasks 34–36 (push skills)
+- [ ] Discover Add does not download
+- [ ] Install writes into the target IDE skills dir and records `deployedTo`
+- [ ] Human check: where did `npx skills add` write?
+
+---
+
+### Task 37: Engine `exportCommand` (our file, stamp, no clobber)
+**Description:** Replace the product meaning of export. `exportCommand(name, targetIDE, { replace?: boolean })` writes `.cursor/commands/<name>.md` (and the sibling paths in architecture). Frontmatter: `name`, `skills`, `generated_by: skil`, `generated_at`. Short stub body. If the file exists and lacks `generated_by: skil`, error unless `replace`. If stamped by us, overwrite. Do not scan `commands/`. Do not call `convert` / skillsmith. Old `export(names[], ide)` tests that expect convert must move to this contract or die.
+
+**Acceptance criteria:**
+- [ ] Export `build` → cursor writes `.cursor/commands/build.md` with `skills:` matching the command
+- [ ] Existing unstamped `build.md` → error; `replace: true` overwrites
+- [ ] Stamped file may be rewritten
+- [ ] Missing command name is a failure; other IDEs keep their files
+
+**Verification:**
+- [ ] Tests pass: `npm test -- collection-engine.test.ts`
+- [ ] Build succeeds: `npm run build`
+- [ ] In-memory skills adapter `convert` is not called
+
+**Dependencies:** Task 28, Task 29
+
+**Files likely touched:**
+- `src/interfaces/engine.ts`
+- `src/core/collection-engine.ts`
+- `src/core/collection-engine.test.ts`
+- `src/cli/commands/export.ts` (help only if you also do Task 38 here — prefer not)
 
 **Estimated scope:** Medium (3–4 files)
 
 ---
 
-## Checkpoint: After Phase 10
-- [ ] Discover Add still does not download
-- [ ] Export downloads + converts into the picked project
-- [ ] CLI `install` still exists; GUI Discover does not call it
-- [ ] Human check: where did `npx skills add` actually write?
-
----
-
-## Phase 11: Inbox in the GUI
-
-Engine + CLI inbox already exist. Collections UI needs a visible Inbox list and a way to file into a **named** collection (dropdown of existing collections + File). User creates the collection first if needed (`CreateCollectionForm` already exists).
-
----
-
-### Task 26: Inbox list + file into a named collection
-**Description:** Collections workspace shows Inbox IDs (empty Inbox is fine). Each row: pick a collection, File → `fileToCollection`. Refresh collection list after. Do not call this panel Staging. Do not auto-create a collection on file. Disabled until a project folder is picked (Task 16).
+### Task 38: CLI + GUI export our command file
+**Description:** `export <command> --to <ide> [--replace]`. GUI: explicit Export on a command, IDE pick, replace confirm if the engine says the file is unstamped. One vertical slice (CLI + GUI) because the contract is the same method.
 
 **Acceptance criteria:**
-- [ ] Inbox IDs from Discover Add appear here without a reload hack beyond existing version keys
-- [ ] Filing into a named collection removes the row from Inbox and adds the skill to that collection
-- [ ] Filing with no collection selected is blocked in the UI
-- [ ] Engine errors surface inline
-- [ ] Copy uses Inbox / File only
+- [ ] CLI writes the stamped file; `--replace` maps to `replace: true`
+- [ ] GUI Export does not install skills
+- [ ] Unstamped conflict is shown; user can opt in to replace
+- [ ] Help: this is push of our template, not skillsmith convert
 
 **Verification:**
-- [ ] Tests pass: `npm --workspace gui test` (Inbox control + existing CollectionList)
-- [ ] `npm --workspace gui run typecheck` passes
-- [ ] Manual: Add from Discover → file into `frontend` → export still the download step
+- [ ] Tests pass: `npm test -- export.test.ts` and `npm --workspace gui test`
+- [ ] Typecheck passes (root + gui)
+- [ ] Manual: export `/build` to cursor; confirm their old unstamped file is left alone
 
-**Dependencies:** Task 18, Task 20
+**Dependencies:** Task 37
 
 **Files likely touched:**
-- `gui/src/shared/ipc.ts`
-- `gui/src/main/index.ts`
-- `gui/src/preload/index.ts`
-- `gui/src/renderer/src/test-utils.tsx`
-- `gui/src/renderer/src/components/CollectionList.tsx` (or `InboxList.tsx` next to it)
-- matching test file
+- `src/cli/commands/export.ts` (+ test)
+- `gui/src/shared/ipc.ts` / main / preload / test-utils
+- `gui/src/renderer/src/components/CollectionList.tsx` (+ test)
 
-**Estimated scope:** Medium (5–6 files)
+**Estimated scope:** Medium (GUI slice + CLI)
 
 ---
 
-## Phase 12: Docs
-
-PRD/architecture still describe install-on-discover and convert-only export. Update them to match this flow. Keep out-of-scope: GitHub connect, multi-IDE import, marketplace, token UI.
+## Checkpoint: After Tasks 37–38 (push templates)
+- [ ] Our command file has `skills:` + `generated_by: skil`
+- [ ] Unstamped `/build.md` survives without `--replace`
+- [ ] Install and export are separate pushes
 
 ---
 
-### Task 27: Sync architecture, PRD, and README with Inbox + deferred export
-**Description:** Record project root, Inbox on `State` (v3), `importFromIDE` vs `sync`, Discover → Inbox, export = fetch + convert. Decision Log entries for (1) Inbox is not a collection, (2) import is not sync, (3) Discover does not install. PRD: replace story 16 one-click install with Add to Inbox; keep story 5 as optional CLI `install`; GUI features list folder picker, one-IDE import, Inbox, file, export. README: `inbox`, `import --from`, export description. No "staging".
+### Task 39: State path `.skil/` + bin alias `skil`
+**Description:** Persist at `.skil/state.json`. On load, if missing, read `.contextkit/state.json` (no copy until next persist). Add bin `skil` (keep `contextkit` so old scripts work). `SKIL_API_URL` with fallback to `CONTEXTKIT_API_URL`. GUI window/title can say skil. Do not rename `CollectionEngine` or every IPC channel in this task.
 
 **Acceptance criteria:**
-- [ ] `docs/design/architecture.md`: engine methods, `listDirectories`, rooted adapters, schema v3, Decision Log
-- [ ] `docs/requirements/prd.md`: user flow + stories match; sync still team config; out of scope lists GitHub connect / multi-IDE import
-- [ ] `README.md`: new CLI commands and the GUI flow
-- [ ] No leftover "one-click install from search" as current behavior
+- [ ] New project writes `.skil/state.json`
+- [ ] Old `.contextkit/state.json` still loads
+- [ ] `npx skil scan --help` or `node dist/cli` under the `skil` bin works
+- [ ] Existing tests that hardcode the old path are updated or covered by the fallback test
 
 **Verification:**
-- [ ] Docs match implemented commands and interfaces
-- [ ] No new product promises (GitHub, both IDEs at once, staging)
+- [ ] Tests pass: `npm test -- collection-engine.test.ts real-fs-adapter.test.ts program.test.ts`
+- [ ] Build succeeds: `npm run build`
 
-**Dependencies:** Task 25, Task 26
+**Dependencies:** Task 29
 
 **Files likely touched:**
-- `docs/design/architecture.md`
-- `docs/requirements/prd.md`
+- `src/core/collection-engine.ts`
+- `package.json`
+- `src/cli/program.ts`
+- `src/config/website.ts` (or env reader)
+- integration test path fixtures
+
+**Estimated scope:** Medium (≤5 files if you skip an IPC rename)
+
+---
+
+### Task 40: README matches the loop
+**Description:** Architecture and PRD are already updated. README still says collections + skillsmith export. Rewrite commands and the GUI flow. No "one-click install from search." No import-from-IDE. Point at Inbox, scan, install, export-our-file.
+
+**Acceptance criteria:**
+- [ ] README verbs match Phase 11
+- [ ] No leftover "active collection" or "export converts every skill"
+- [ ] No new promises (linter, team sync, marketplace)
+
+**Verification:**
+- [ ] Docs match implemented commands after Tasks 30–39
+- [ ] Human skim
+
+**Dependencies:** Task 38, Task 39
+
+**Files likely touched:**
 - `README.md`
 
-**Estimated scope:** Small (3 files)
+**Estimated scope:** Small (1 file)
 
 ---
 
-## Checkpoint: After Phase 12 (complete)
-- [ ] All tests pass (root + gui)
-- [ ] Flow: pick folder → optional one-IDE import → Discover Add → Inbox → file → Export fetch+convert
-- [ ] Sync is still `.contextkit.yml` only
-- [ ] Words in UI/CLI: Inbox, not staging
-- [ ] Not built: GitHub connect, multi-IDE import
-- [ ] Human review before changing team sync or adding last-folder persistence
+## Checkpoint: After Phase 11 (complete)
+- [ ] Connect → scan → Inbox → create command → file → install and/or export
+- [ ] Re-scan keeps the map; gone ids dropped and reported
+- [ ] We do not scan `commands/`; we do not overwrite unstamped command files
+- [ ] Discover Add still does not download
+- [ ] Phases 8–10 not implemented
+- [ ] Human review before deleting `sync`/`run` or building a skill linter
+

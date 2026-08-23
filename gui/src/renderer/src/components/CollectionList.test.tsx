@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CollectionList from './CollectionList';
-import { createInMemoryEngine, createTestBridge, renderWithProviders } from '../test-utils';
+import {
+  createInMemoryEngine,
+  createInMemoryWorkspace,
+  createTestBridge,
+  DEFAULT_TEST_PROJECT_ROOT,
+  renderWithProviders,
+} from '../test-utils';
 import { err, ok } from '../../../../../src/core/result.js';
 import type { ExportResult } from '../../../../../src/types/index.js';
 
@@ -13,6 +19,8 @@ describe('CollectionList', () => {
     renderWithProviders(<CollectionList />, { bridge });
 
     await waitFor(() => expect(screen.getByText('No collections yet')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Scan (connect a folder first)' })).toBeDisabled();
+    expect(screen.getByText('Connect a project folder to scan')).toBeInTheDocument();
   });
 
   it('renders one card per collection and shows the selected collection skills in the detail panel', async () => {
@@ -35,21 +43,80 @@ describe('CollectionList', () => {
     expect(within(backendDetail).queryByText('obra/react-patterns')).not.toBeInTheDocument();
   });
 
-  it('files an Inbox ID into a named collection', async () => {
+  it('shows Inbox as unfiled inventory, not as a collection card', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', []);
     engine.addToInbox('obra/react-patterns');
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
-    await screen.findByRole('listitem', { name: 'Collection frontend' });
+    const heading = await screen.findByRole('heading', { name: 'Collections' });
+    const panel = heading.closest('section');
+    if (!panel) throw new Error('expected collections panel');
 
-    await userEvent.click(screen.getByRole('button', { name: 'File obra/react-patterns into frontend' }));
+    expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    expect(within(panel as HTMLElement).getByText('obra/react-patterns')).toBeInTheDocument();
+    expect(screen.queryByRole('listitem', { name: 'Collection Inbox' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('File into')).not.toBeInTheDocument();
+  });
 
-    await waitFor(() => expect(engine.inbox()).toEqual([]));
-    expect(engine.list()[0]?.skills).toEqual(['obra/react-patterns']);
-    const detail = screen.getByRole('region', { name: 'Collection frontend details' });
-    expect(within(detail).getByText('obra/react-patterns')).toBeInTheDocument();
+  it('adds an Inbox ID to the selected collection without removing it from Inbox', async () => {
+    const engine = createInMemoryEngine();
+    engine.create('frontend', []);
+    engine.create('backend', []);
+    engine.addToInbox('obra/react-patterns');
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CollectionList />, { bridge });
+    await userEvent.click(await screen.findByRole('listitem', { name: 'Collection backend' }));
+
+    const detail = screen.getByRole('region', { name: 'Collection backend details' });
+    await userEvent.click(within(detail).getByRole('button', { name: 'Add obra/react-patterns to backend' }));
+
+    await waitFor(() =>
+      expect(engine.list().find((collection) => collection.name === 'backend')?.skills).toEqual([
+        'obra/react-patterns',
+      ])
+    );
+    expect(engine.inbox()).toEqual(['obra/react-patterns']);
+    expect(engine.list().find((collection) => collection.name === 'frontend')?.skills).toEqual([]);
+    expect(within(detail).getByRole('button', { name: 'Added obra/react-patterns' })).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('listitem', { name: 'Collection frontend' }));
+    const frontendDetail = screen.getByRole('region', { name: 'Collection frontend details' });
+    await userEvent.click(within(frontendDetail).getByRole('button', { name: 'Add obra/react-patterns to frontend' }));
+
+    await waitFor(() =>
+      expect(engine.list().find((collection) => collection.name === 'frontend')?.skills).toEqual([
+        'obra/react-patterns',
+      ])
+    );
+    expect(engine.inbox()).toEqual(['obra/react-patterns']);
+  });
+
+  it('collapses the Inbox picker on a collection', async () => {
+    const engine = createInMemoryEngine();
+    engine.create('frontend', []);
+    engine.addToInbox('obra/react-patterns');
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CollectionList />, { bridge });
+    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
+    const toggle = within(detail).getByRole('button', { name: 'From Inbox, 1 skill' });
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(within(detail).getByRole('button', { name: 'Add obra/react-patterns to frontend' })).toBeInTheDocument();
+
+    await userEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(within(detail).queryByRole('button', { name: 'Add obra/react-patterns to frontend' })).not.toBeInTheDocument();
+
+    await userEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(within(detail).getByRole('button', { name: 'Add obra/react-patterns to frontend' })).toBeInTheDocument();
   });
 
   it('removes a skill from a collection when its remove button is clicked', async () => {
@@ -121,6 +188,26 @@ describe('CollectionList', () => {
 
     await waitFor(() => expect(engine.list()).toEqual([]));
     expect(screen.getByText('No collections yet')).toBeInTheDocument();
+  });
+
+  it('surfaces gone ids after Scan when a skill folder is removed', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    fs.writeFile('.cursor/skills/design/SKILL.md', '# design\n');
+    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+
+    renderWithProviders(<CollectionList />, { bridge });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Scan' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: 'Scan' }));
+
+    expect(await screen.findByText('design')).toBeInTheDocument();
+    fs.removeFile('.cursor/skills/design/SKILL.md');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Scan' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Gone: design');
+    expect(engine.inbox()).toEqual(['tdd']);
+    expect(screen.queryByText('design')).not.toBeInTheDocument();
   });
 
   it('does not delete when the confirm dialog is canceled', async () => {

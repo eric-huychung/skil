@@ -104,6 +104,7 @@ export default function App() {
     const picked = await bridge.pickProjectFolder();
     rootLoadId.current += 1;
     if (picked === null) return;
+    await bridge.scan();
     setProjectRoot(picked);
     setCollectionsVersion((version) => version + 1);
   }

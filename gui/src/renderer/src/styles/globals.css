@@ -454,6 +454,61 @@
   font-size: 10px;
 }
 
+.inbox-heading {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.inbox-inventory {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.inbox-inventory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.inbox-inventory-list li {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--surface-soft);
+}
+
+.scan-button {
+  flex-shrink: 0;
+  height: 36px;
+}
+
+.scan-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.scan-hint {
+  margin: 8px 0 0;
+}
+
+.scan-gone {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  font-size: 12px;
+}
+
 .included-skill,
 .library-skill {
   display: flex;

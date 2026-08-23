@@ -13,10 +13,22 @@ import { BridgeProvider } from './bridge-context';
  * Builds a CollectionEngine backed by the same in-memory adapters the
  * CLI/engine tests use, rather than hand-rolled component mocks. Component
  * tests exercise the real business logic; only the file system, config, and
- * skills.sh boundaries are faked.
+ * skills.sh boundaries are faked. Return `fs` when a test needs to seed
+ * SKILL.md files for scan.
  */
+export function createInMemoryWorkspace(): {
+  engine: ICollectionEngine;
+  fs: InMemoryFileSystemAdapter;
+} {
+  const fs = new InMemoryFileSystemAdapter();
+  return {
+    fs,
+    engine: new CollectionEngine(fs, new InMemoryConfigAdapter(), new InMemorySkillsAdapter()),
+  };
+}
+
 export function createInMemoryEngine(): ICollectionEngine {
-  return new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+  return createInMemoryWorkspace().engine;
 }
 
 /** Default path a test Pick/Change click binds when `nextPick` is omitted. */
@@ -50,7 +62,7 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
     browseSkills: async (view) => engine.browse(view),
     listInbox: async () => engine.inbox(),
     addToInbox: async (skillId) => engine.addToInbox(skillId),
-    fileToCollection: async (skillId, collectionName) => engine.fileToCollection(skillId, collectionName),
+    addSkill: async (name, skillId) => engine.addSkill(name, skillId),
     deleteCollection: async (name) => engine.delete(name),
     getProjectRoot: async () => projectRoot,
     pickProjectFolder: async () => {
@@ -58,6 +70,7 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
       projectRoot = options.nextPick ?? DEFAULT_TEST_PROJECT_ROOT;
       return projectRoot;
     },
+    scan: async () => engine.scan(),
   };
 }
 

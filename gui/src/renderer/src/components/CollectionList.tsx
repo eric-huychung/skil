@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { ArrowDown, Check, Trash, X } from '@phosphor-icons/react';
+import { ArrowDown, ArrowsClockwise, CaretDown, Check, Plus, Trash, X } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
-import type { Collection, IDE } from '../../../shared/ipc';
+import type { Collection, IDE, ScanResult } from '../../../shared/ipc';
 
 const IDE_OPTIONS: IDE[] = ['cursor', 'claude', 'windsurf'];
 
@@ -10,10 +10,12 @@ type ExportState = { status: 'success'; ide: IDE } | { status: 'error'; message:
 
 function CollectionDetail({
   collection,
+  inbox,
   onChange,
   onDeleted,
 }: {
   collection: Collection;
+  inbox: string[];
   onChange: () => void;
   onDeleted: () => void;
 }) {
@@ -23,6 +25,18 @@ function CollectionDetail({
   const [exportState, setExportState] = useState<ExportState | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(true);
+  const inboxPickerId = `inbox-picker-${collection.name}`;
+
+  async function handleAddFromInbox(skillId: string) {
+    setError(null);
+    const result = await bridge.addSkill(collection.name, skillId);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    onChange();
+  }
 
   async function handleRemoveSkill(skillId: string) {
     setError(null);
@@ -90,6 +104,48 @@ function CollectionDetail({
         </p>
       )}
 
+      {inbox.length > 0 && (
+        <div className="active-skills inbox-picker">
+          <button
+            type="button"
+            className={`inbox-toggle ${FOCUS_RING}`}
+            aria-expanded={inboxOpen}
+            aria-controls={inboxPickerId}
+            aria-label={`From Inbox, ${inbox.length === 1 ? '1 skill' : `${inbox.length} skills`}`}
+            onClick={() => setInboxOpen((open) => !open)}
+          >
+            <span>From Inbox</span>
+            <span className="count-pill">{inbox.length}</span>
+            <CaretDown className="inbox-caret" size={14} weight="regular" aria-hidden="true" />
+          </button>
+          <div id={inboxPickerId} hidden={!inboxOpen} className="inbox-picker-list">
+            {inbox.map((skillId) => {
+              const added = collection.skills.includes(skillId);
+              return (
+                <div className="library-skill" key={skillId}>
+                  <div className="skill-info">
+                    <div className="skill-name">{skillId}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleAddFromInbox(skillId)}
+                    aria-label={added ? `Added ${skillId}` : `Add ${skillId} to ${collection.name}`}
+                    aria-pressed={added}
+                    className={`add-icon-button ${FOCUS_RING}`}
+                  >
+                    {added ? (
+                      <Check size={16} weight="regular" aria-hidden="true" />
+                    ) : (
+                      <Plus size={16} weight="regular" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="target-row">
         <span>Target IDE</span>
         <label htmlFor={`export-ide-${collection.name}`} className="sr-only">
@@ -114,6 +170,7 @@ function CollectionDetail({
           <span>Included skills</span>
           <span className="count-pill">{collection.skills.length}</span>
         </div>
+        {collection.skills.length === 0 && <p className="muted-copy">No skills in this collection yet</p>}
         {collection.skills.map((skillId) => (
           <div className="included-skill" key={skillId}>
             <span className="checkmark" aria-hidden="true">
@@ -178,90 +235,6 @@ function CollectionDetail({
   );
 }
 
-function InboxList({
-  ids,
-  collections,
-  onFiled,
-}: {
-  ids: string[];
-  collections: Collection[];
-  onFiled: () => void;
-}) {
-  const bridge = useBridge();
-  const [target, setTarget] = useState(collections[0]?.name ?? '');
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (target && collections.some((collection) => collection.name === target)) return;
-    setTarget(collections[0]?.name ?? '');
-  }, [collections, target]);
-
-  async function handleFile(skillId: string) {
-    setError(null);
-    if (!target) {
-      setError('Create a collection to file Inbox items.');
-      return;
-    }
-    const result = await bridge.fileToCollection(skillId, target);
-    if (!result.ok) {
-      setError(result.error.message);
-      return;
-    }
-    onFiled();
-  }
-
-  return (
-    <div className="inbox-list">
-      <div className="subheading">
-        <span>Inbox</span>
-        <span className="count-pill">{ids.length}</span>
-      </div>
-      {ids.length === 0 ? (
-        <p className="muted-copy">Inbox is empty</p>
-      ) : (
-        <>
-          {collections.length > 0 && (
-            <div className="target-row inbox-target">
-              <label htmlFor="inbox-file-target">File into</label>
-              <select
-                id="inbox-file-target"
-                value={target}
-                onChange={(event) => setTarget(event.target.value)}
-                className={FOCUS_RING}
-              >
-                {collections.map((collection) => (
-                  <option key={collection.name} value={collection.name}>
-                    {collection.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {ids.map((skillId) => (
-            <div className="included-skill" key={skillId}>
-              <span>{skillId}</span>
-              <button
-                type="button"
-                onClick={() => void handleFile(skillId)}
-                disabled={!target}
-                aria-label={`File ${skillId} into ${target || 'a collection'}`}
-                className={`text-button inbox-file ${FOCUS_RING}`}
-              >
-                File
-              </button>
-            </div>
-          ))}
-        </>
-      )}
-      {error && (
-        <p role="alert" className="muted-copy text-destructive">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
 function selectCollection(event: KeyboardEvent<HTMLLIElement>, name: string, onSelect: (name: string) => void) {
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
@@ -269,7 +242,25 @@ function selectCollection(event: KeyboardEvent<HTMLLIElement>, name: string, onS
   }
 }
 
-function CollectionsPanel({ children }: { children: ReactNode }) {
+function goneMessage(ids: string[]): string {
+  return `Gone: ${ids.join(', ')}`;
+}
+
+function CollectionsPanel({
+  children,
+  canScan,
+  scanning,
+  scanError,
+  lastScan,
+  onScan,
+}: {
+  children: ReactNode;
+  canScan: boolean;
+  scanning: boolean;
+  scanError: string | null;
+  lastScan: ScanResult | null;
+  onScan: () => void;
+}) {
   return (
     <section className="collections-panel panel-section">
       <div className="section-heading">
@@ -277,7 +268,30 @@ function CollectionsPanel({ children }: { children: ReactNode }) {
           <p className="eyebrow">Workspace</p>
           <h1>Collections</h1>
         </div>
+        <button
+          type="button"
+          className={`outline-button scan-button ${FOCUS_RING}`}
+          onClick={onScan}
+          disabled={!canScan || scanning}
+          aria-label={canScan ? 'Scan' : 'Scan (connect a folder first)'}
+        >
+          <ArrowsClockwise size={16} weight="regular" aria-hidden="true" />
+          {scanning ? 'Scanning…' : 'Scan'}
+        </button>
       </div>
+      {!canScan && (
+        <p className="muted-copy scan-hint">Connect a project folder to scan</p>
+      )}
+      {scanError && (
+        <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {scanError}
+        </p>
+      )}
+      {lastScan && lastScan.gone.length > 0 && (
+        <p role="status" aria-atomic="true" className="scan-gone">
+          {goneMessage(lastScan.gone)}
+        </p>
+      )}
       {children}
     </section>
   );
@@ -288,6 +302,10 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
   const [collections, setCollections] = useState<Collection[] | null>(null);
   const [inbox, setInbox] = useState<string[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [canScan, setCanScan] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [lastScan, setLastScan] = useState<ScanResult | null>(null);
 
   const refresh = useCallback(async () => {
     const [next, nextInbox] = await Promise.all([bridge.listCollections(), bridge.listInbox()]);
@@ -300,18 +318,63 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
   }, [bridge]);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void bridge.getProjectRoot().then((root) => {
+      if (!cancelled) setCanScan(root !== null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge]);
+
+  const handleScan = useCallback(async () => {
+    if (!canScan) return;
+    setScanError(null);
+    setScanning(true);
+    const result = await bridge.scan();
+    setScanning(false);
+    if (!result.ok) {
+      setScanError(result.error.message);
+      return;
+    }
+    setLastScan(result.value);
+    await refresh();
+  }, [bridge, canScan, refresh]);
+
+  const panelProps = { canScan, scanning, scanError, lastScan, onScan: () => void handleScan() };
+
   if (collections === null) {
-    return <CollectionsPanel>{children}</CollectionsPanel>;
+    return <CollectionsPanel {...panelProps}>{children}</CollectionsPanel>;
   }
 
   const selected = collections.find((collection) => collection.name === selectedName) ?? null;
 
   return (
     <>
-      <CollectionsPanel>
+      <CollectionsPanel {...panelProps}>
+        <div className="inbox-inventory">
+          <div className="subheading">
+            <h2 className="inbox-heading">Inbox</h2>
+            <span className="count-pill">{inbox.length}</span>
+          </div>
+          {inbox.length === 0 ? (
+            <p className="muted-copy">
+              {canScan
+                ? 'No unfiled skills'
+                : 'No unfiled skills. Add from Discover, or connect a folder and scan.'}
+            </p>
+          ) : (
+            <ul className="inbox-inventory-list">
+              {inbox.map((skillId) => (
+                <li key={skillId}>{skillId}</li>
+              ))}
+            </ul>
+          )}
+        </div>
         {collections.length === 0 ? (
           <p className="muted-copy">No collections yet</p>
         ) : (
@@ -339,11 +402,10 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
             ))}
           </ul>
         )}
-        <InboxList ids={inbox} collections={collections} onFiled={refresh} />
         {children}
       </CollectionsPanel>
       {selected && (
-        <CollectionDetail collection={selected} onChange={refresh} onDeleted={refresh} />
+        <CollectionDetail collection={selected} inbox={inbox} onChange={refresh} onDeleted={refresh} />
       )}
     </>
   );
