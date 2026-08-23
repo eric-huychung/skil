@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .contextkit/
+.skil/
 *.log
 .DS_Store
 .env
@@ -13,3 +14,8 @@ coverage/
 
 #notes
 note.txt
+
+# local fixtures / reference clones
+TESTING FOLDER/
+skills-manager-main/
+skills-lock.json
