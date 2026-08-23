@@ -15,7 +15,6 @@ coverage/
 #notes
 note.txt
 
-# local fixtures / reference clones
+# local fixtures
 TESTING FOLDER/
-skills-manager-main/
 skills-lock.json
