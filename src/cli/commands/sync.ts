@@ -22,7 +22,7 @@ export function runSync(engine: ICollectionEngine, configPath: string): CommandO
 export function registerSyncCommand(program: Command, engine: ICollectionEngine): void {
   program
     .command('sync')
-    .description('Sync collections from a team config file')
+    .description('Sync leftover team config into local commands')
     .option('--config <path>', 'path to the config file', DEFAULT_CONFIG_PATH)
     .action((options: { config: string }) => {
       printOutcome(runSync(engine, options.config));

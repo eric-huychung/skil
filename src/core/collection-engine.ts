@@ -21,8 +21,17 @@ export const STATE_PATH = '.contextkit/state.json';
 /** Current state schema version. See `State`'s doc comment for the v3 → v4 notes. */
 const STATE_VERSION = '4.0';
 
-/** Collection name reserved for the Inbox holding list on `State`. */
+/** Command name reserved for the Inbox holding list on `State`. */
 const INBOX_NAME = 'inbox';
+
+/** Store `/build` as `build`. UI may still display the slash. */
+function normalizeCommandName(name: string): string {
+  return name.startsWith('/') ? name.slice(1) : name;
+}
+
+function commandNotFound(name: string): Error {
+  return new Error(`Command '${name}' not found. Run 'contextkit list' to see available commands.`);
+}
 
 /** Skill trees we pull from. We never walk `commands/`. */
 const SKILL_ROOTS = ['.cursor/skills', '.claude/skills', '.windsurf/skills', '.agents/skills'] as const;
@@ -70,11 +79,12 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   create(name: string, skillIds: string[], command?: string): Result<Collection> {
+    name = normalizeCommandName(name);
     if (name === INBOX_NAME) {
-      return err(new Error(`'inbox' is not a collection. Inbox is a holding list of skill IDs — add with 'contextkit inbox add' and file them into a named collection.`));
+      return err(new Error(`'inbox' is not a command. Inbox is a holding list of skill IDs — add with 'contextkit inbox add' and file them onto a named command.`));
     }
     if (this.state.commands.some((c) => c.name === name)) {
-      return err(new Error(`Collection '${name}' already exists. Choose a different name or run 'contextkit list' to see existing collections.`));
+      return err(new Error(`Command '${name}' already exists. Choose a different name or run 'contextkit list' to see existing commands.`));
     }
 
     const collection: Collection = {
@@ -87,16 +97,17 @@ export class CollectionEngine implements ICollectionEngine {
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
       this.state.commands.pop();
-      return err(new Error(`Failed to save collection '${name}': ${persistResult.error.message}`));
+      return err(new Error(`Failed to save command '${name}': ${persistResult.error.message}`));
     }
 
     return ok(collection);
   }
 
   addSkill(name: string, skillId: string): Result<Collection> {
+    name = normalizeCommandName(name);
     const collection = this.state.commands.find((c) => c.name === name);
     if (!collection) {
-      return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
+      return err(commandNotFound(name));
     }
     if (collection.skills.includes(skillId)) {
       return ok(collection);
@@ -106,16 +117,17 @@ export class CollectionEngine implements ICollectionEngine {
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
       collection.skills.pop();
-      return err(new Error(`Failed to save collection '${name}': ${persistResult.error.message}`));
+      return err(new Error(`Failed to save command '${name}': ${persistResult.error.message}`));
     }
 
     return ok(collection);
   }
 
   removeSkill(name: string, skillId: string): Result<Collection> {
+    name = normalizeCommandName(name);
     const collection = this.state.commands.find((c) => c.name === name);
     if (!collection) {
-      return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
+      return err(commandNotFound(name));
     }
 
     const index = collection.skills.indexOf(skillId);
@@ -127,7 +139,7 @@ export class CollectionEngine implements ICollectionEngine {
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
       collection.skills.splice(index, 0, skillId);
-      return err(new Error(`Failed to save collection '${name}': ${persistResult.error.message}`));
+      return err(new Error(`Failed to save command '${name}': ${persistResult.error.message}`));
     }
 
     return ok(collection);
@@ -288,15 +300,16 @@ export class CollectionEngine implements ICollectionEngine {
     return ok(this.inbox());
   }
 
-  fileToCollection(skillId: string, collectionName: string): Result<Collection> {
-    const collection = this.state.commands.find((c) => c.name === collectionName);
+  file(skillId: string, commandName: string): Result<Collection> {
+    commandName = normalizeCommandName(commandName);
+    const collection = this.state.commands.find((c) => c.name === commandName);
     if (!collection) {
-      return err(new Error(`Collection '${collectionName}' not found. Run 'contextkit list' to see available collections.`));
+      return err(commandNotFound(commandName));
     }
 
     const inboxIndex = this.state.inbox.indexOf(skillId);
     if (inboxIndex === -1) {
-      return err(new Error(`'${skillId}' is not in Inbox. Add it first, then file it into a collection.`));
+      return err(new Error(`'${skillId}' is not in Inbox. Add it first, then file it onto a command.`));
     }
 
     const inboxSnapshot = [...this.state.inbox];
@@ -311,21 +324,22 @@ export class CollectionEngine implements ICollectionEngine {
     if (!isOk(persistResult)) {
       this.state.inbox = inboxSnapshot;
       collection.skills = skillsSnapshot;
-      return err(new Error(`Failed to save collection '${collectionName}': ${persistResult.error.message}`));
+      return err(new Error(`Failed to save command '${commandName}': ${persistResult.error.message}`));
     }
 
     return ok(collection);
   }
 
   delete(name: string): Result<void> {
+    name = normalizeCommandName(name);
     const index = this.state.commands.findIndex((c) => c.name === name);
     if (index === -1) {
-      return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
+      return err(commandNotFound(name));
     }
 
     const removed = this.state.commands[index];
     if (removed === undefined) {
-      return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
+      return err(commandNotFound(name));
     }
     this.state.commands.splice(index, 1);
     const persistResult = this.persist();

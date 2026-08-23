@@ -85,7 +85,9 @@ State lives in `.skil/state.json` (read-fallback `.contextkit/state.json` until 
 
 ### Key Product Decisions
 
-- **Inbox is not a command.** Reserved name.
+- **Inbox is not a command.** Reserved name. `create inbox` errors.
+- **Command names have no leading slash.** `create /build` stores `build`. UI may still show `/build`.
+- **CLI help/errors say command, not collection.** GUI chrome still says Collections until the Commands-chrome task.
 - **Connect scans once.** Pick folder pulls unfiled skills into Inbox. The Scan button is re-scan. Disabled until a folder is connected.
 - **Scan does not create `/cursor` or `/claude`.** That would be the folder tree again.
 - **We do not scan `commands/`.** We only write a command file on export.
@@ -96,10 +98,10 @@ State lives in `.skil/state.json` (read-fallback `.contextkit/state.json` until 
 ### CLI (target)
 
 - `skil scan` — pull; print added / gone / changed
-- `skil create <name>`
+- `skil create <name>` — `/build` stores `build`; `inbox` is reserved
 - `skil delete <name>`
 - `skil list`
-- `skil inbox` / `inbox add <skillId>` / `inbox file <skillId> <command>`
+- `skil inbox` / `inbox add <skillId>` / `inbox file <skillId> <command>` — engine method is `file`
 - `skil install <skillId> --to cursor|claude|windsurf|agents`
 - `skil export <command> --to <ide> [--replace]`
 - `skil search [query] [--trending]`

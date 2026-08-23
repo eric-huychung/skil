@@ -8,27 +8,27 @@ import type { BrowseView, Collection, ExportResult, IDE, ScanResult, Skill, Skil
  */
 export interface ICollectionEngine {
   /**
-   * Creates a new collection with the given skill IDs.
-   * Returns an error Result if a collection with `name` already exists, or
-   * if the new collection can't be saved to disk (in which case it is not
-   * kept — `create` can be safely retried).
+   * Creates a new command with the given skill IDs. A leading `/` is
+   * stripped (`/build` → `build`). Returns an error Result if a command
+   * with `name` already exists, or if the new command can't be saved to
+   * disk (in which case it is not kept — `create` can be safely retried).
    */
   create(name: string, skillIds: string[], command?: string): Result<Collection>;
 
   /**
-   * Adds a skill to an existing collection. Idempotent: adding a skill
-   * already in the collection is a no-op that still returns the current
-   * collection. Returns an error Result if the collection doesn't exist, or
-   * if the change can't be saved to disk (in which case the collection is
+   * Adds a skill to an existing command. Idempotent: adding a skill
+   * already on the command is a no-op that still returns the current
+   * command. Returns an error Result if the command doesn't exist, or
+   * if the change can't be saved to disk (in which case the command is
    * left unchanged — `addSkill` can be safely retried).
    */
   addSkill(name: string, skillId: string): Result<Collection>;
 
   /**
-   * Removes a skill from an existing collection. A no-op (not an error) if
-   * the skill isn't in the collection. Returns an error Result if the
-   * collection doesn't exist, or if the change can't be saved to disk (in
-   * which case the collection is left unchanged — `removeSkill` can be
+   * Removes a skill from an existing command. A no-op (not an error) if
+   * the skill isn't on the command. Returns an error Result if the
+   * command doesn't exist, or if the change can't be saved to disk (in
+   * which case the command is left unchanged — `removeSkill` can be
    * safely retried).
    */
   removeSkill(name: string, skillId: string): Result<Collection>;
@@ -40,7 +40,7 @@ export interface ICollectionEngine {
    */
   getCommand(name: string): Result<string>;
 
-  /** Returns all known collections. */
+  /** Returns all known commands. */
   list(): Collection[];
 
   /**
@@ -111,17 +111,17 @@ export interface ICollectionEngine {
   removeFromInbox(skillId: string): Result<string[]>;
 
   /**
-   * Moves one Inbox ID into an existing collection. One persist; rollback
-   * on write failure. Error if the collection is missing or the ID is not
-   * in Inbox — state is left unchanged. If the collection already has the
+   * Moves one Inbox ID onto an existing command. One persist; rollback
+   * on write failure. Error if the command is missing or the ID is not
+   * in Inbox — state is left unchanged. If the command already has the
    * ID, it is still dropped from Inbox. Does not call `install`.
    */
-  fileToCollection(skillId: string, collectionName: string): Result<Collection>;
+  file(skillId: string, commandName: string): Result<Collection>;
 
   /**
-   * Deletes a collection by name. Missing name is an error. Deleting the
-   * last collection is allowed. Returns an error Result if the change
-   * can't be saved (in which case collections are left unchanged).
+   * Deletes a command by name. Missing name is an error. Deleting the
+   * last command is allowed. Returns an error Result if the change
+   * can't be saved (in which case commands are left unchanged).
    */
   delete(name: string): Result<void>;
 

@@ -25,7 +25,7 @@ export function createProgram(engine: ICollectionEngine): Command {
 
   program
     .name('contextkit')
-    .description('CLI-first AI skill collection manager for Cursor, Claude, and Windsurf')
+    .description('skil: map + inbox + skill deploy. Group skills onto commands, then install or export.')
     .version(CONTEXTKIT_VERSION);
 
   registerCreateCommand(program, engine);

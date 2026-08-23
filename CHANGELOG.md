@@ -9,6 +9,7 @@ All notable changes to ContextKit are documented here. Versions follow [Semantic
 
 ### Changed
 - GUI layout now follows the example desktop shell: topbar, rail tabs (Collections / Search & Install / Sync & Config), collection list + detail, and a help dialog. Search still installs skills; collections still add/remove/export through the same engine.
+- CLI and engine product-loop copy say **command**, not collection. `fileToCollection` is now `file`. `create /build` stores the name `build`. GUI chrome still says Collections.
 
 ## [0.2.2] - 2026-08-21
 

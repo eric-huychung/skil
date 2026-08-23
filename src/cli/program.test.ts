@@ -45,5 +45,6 @@ describe('createProgram', () => {
     expect(output).toContain('delete');
     expect(output).toContain('scan');
     expect(output.toLowerCase()).not.toContain('staging');
+    expect(output.toLowerCase()).not.toContain('collection');
   });
 });

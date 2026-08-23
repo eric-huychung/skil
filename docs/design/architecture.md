@@ -93,7 +93,7 @@ interface SkilEngine {
   inbox(): string[]
   addToInbox(skillId: string): Result<string[]>
   removeFromInbox(skillId: string): Result<string[]>
-  create(name: string, skillIds?: string[]): Result<Command>
+  create(name: string, skillIds?: string[]): Result<Command>  // strips leading /
   delete(name: string): Result<void>
   list(): Command[]
   file(skillId: string, commandName: string): Result<Command>
@@ -110,8 +110,8 @@ interface SkilEngine {
 - Scan never creates commands and never moves folders.
 - Inbox = skill ids not filed on any command. Scan puts new unfiled ids there. Discover Add does too.
 - Filing updates the map only. Disk does not move.
-- `create('inbox')` is an error. Inbox is not a command.
-- Command names store without a leading slash (`build`). UI may show `/build`.
+- `create('inbox')` is an error. Inbox is not a command. `create('/inbox')` is the same error.
+- Command names store without a leading slash. `create('/build')` and `file(..., '/build')` normalize to `build`. UI may show `/build`.
 - Re-scan refreshes the catalog. The map stays. If a folder is gone, drop that id from catalog, commands, and inbox, and report it.
 - We never read the user's existing `commands/` trees to build the map.
 - Export writes **our** command file. If a file exists and is not stamped by us, refuse unless `replace: true`.
@@ -177,15 +177,15 @@ Commander routes to the engine. No catalog logic here.
 
 Target verbs:
 - `skil scan` — pull
-- `skil inbox` / `inbox add` / `inbox file`
-- `skil create <name>` — empty command
+- `skil inbox` / `inbox add` / `inbox file <skillId> <command>`
+- `skil create <name>` — empty command; `/build` stores `build`
 - `skil delete <name>`
 - `skil list`
 - `skil install <skillId> --to <ide>` — push a skill
 - `skil export <command> --to <ide> [--replace]` — push our command file
 - `skil search [query] [--trending]` — unchanged discover
 
-Until the bin rename lands, the binary may still be `contextkit`. New help text should say **command**, not collection, as soon as the type rename lands.
+Until the bin rename lands, the binary may still be `contextkit`. Help and product-loop errors say **command**, not collection. Engine method is `file` (was `fileToCollection`). `Collection` remains a type alias. GUI chrome still says Collections until Task 33.
 
 ### 6. GUI (Thin)
 
@@ -393,6 +393,7 @@ Atomic JSON write. Schema version on every persist. v3 → v4 on load, no rewrit
 - **Discover details use listing fields (resolved):** No SKILL.md proxy, no GitHub stars.
 - **Project root is adapter config (resolved):** `createEngine(projectRoot)`. GUI picker rebuilds the engine. No `chdir`.
 - **Inbox is a field on State, not a command (resolved):** Reserved name `inbox`. Discover Add does not install.
+- **CLI/engine words are command (2026-08-22, Task 32):** `fileToCollection` is `file`. `create('/build')` stores `build`. Product-loop help/errors say command. Leftover sync/export/run may still mention collection internally. GUI labels wait for Task 33.
 - **GUI scans once after pick (2026-08-22, Task 31):** Pick folder calls `scan()`. Scan on Collections is the re-scan. Disabled until a folder is connected. Inbox is inventory on that surface, not a rail tab. Gone ids come from the last scan result.
 - **GUI design system (resolved, Task 44):** oklch tokens, Geist, Phosphor, shared `FOCUS_RING`.
 

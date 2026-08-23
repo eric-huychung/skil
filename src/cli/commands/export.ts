@@ -29,8 +29,8 @@ export async function runExport(engine: ICollectionEngine, collectionsCsv: strin
 
 export function registerExportCommand(program: Command, engine: ICollectionEngine): void {
   program
-    .command('export <collections>')
-    .description('Convert every skill in the given comma-separated collections for a target IDE')
+    .command('export <names>')
+    .description('Convert every skill on the given comma-separated commands for a target IDE')
     .requiredOption('--to <ide>', 'target IDE: cursor, claude, or windsurf')
     .action(async (collectionsCsv: string, options: { to: IDE }) => {
       printOutcome(await runExport(engine, collectionsCsv, options.to));

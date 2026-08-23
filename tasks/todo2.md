@@ -740,14 +740,14 @@ One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys,
 **Description:** User-facing CLI: command not collection. `fileToCollection` → `file` (or `fileToCommand` on the engine; CLI `inbox file <id> <command>`). Errors and `--help` say command. Strip a leading `/` on create (`/build` → `build`). Keep the `Collection` type alias. Do not rename every GUI file in this task.
 
 **Acceptance criteria:**
-- [ ] `create inbox` still errors
-- [ ] `create /build` stores name `build`
-- [ ] Help/errors do not teach "collection" as the product word
-- [ ] Existing inbox file tests updated and passing
+- [x] `create inbox` still errors
+- [x] `create /build` stores name `build`
+- [x] Help/errors do not teach "collection" as the product word
+- [x] Existing inbox file tests updated and passing
 
 **Verification:**
-- [ ] Tests pass: `npm test -- inbox.test.ts create.test.ts delete.test.ts program.test.ts`
-- [ ] Build succeeds: `npm run build`
+- [x] Tests pass: `npm test -- inbox.test.ts create.test.ts delete.test.ts program.test.ts`
+- [x] Build succeeds: `npm run build`
 
 **Dependencies:** Task 29
 

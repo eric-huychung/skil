@@ -39,6 +39,16 @@ describe('CollectionEngine', () => {
       }
     });
 
+    it('strips a leading slash so /build is stored as build', () => {
+      const result = engine.create('/build', []);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.name).toBe('build');
+      }
+      expect(engine.list().map((c) => c.name)).toEqual(['build']);
+    });
+
     it('creating a duplicate collection returns an error', () => {
       engine.create('frontend', []);
 
@@ -46,7 +56,7 @@ describe('CollectionEngine', () => {
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toContain("Collection 'frontend' already exists");
+        expect(result.error.message).toContain("Command 'frontend' already exists");
       }
     });
 
@@ -153,7 +163,7 @@ describe('CollectionEngine', () => {
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toContain("Collection 'missing' not found");
+        expect(result.error.message).toContain("Command 'missing' not found");
       }
     });
 
@@ -197,7 +207,7 @@ describe('CollectionEngine', () => {
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toContain("Collection 'missing' not found");
+        expect(result.error.message).toContain("Command 'missing' not found");
       }
     });
 
@@ -657,12 +667,12 @@ describe('CollectionEngine', () => {
     });
   });
 
-  describe('fileToCollection', () => {
-    it('moves an inbox ID into an existing collection without calling install', () => {
+  describe('file', () => {
+    it('moves an inbox ID into an existing command without calling install', () => {
       engine.create('frontend', []);
       engine.addToInbox('obra/react-patterns');
 
-      const result = engine.fileToCollection('obra/react-patterns', 'frontend');
+      const result = engine.file('obra/react-patterns', 'frontend');
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -677,21 +687,32 @@ describe('CollectionEngine', () => {
       engine.create('frontend', ['obra/react-patterns']);
       engine.addToInbox('obra/react-patterns');
 
-      const result = engine.fileToCollection('obra/react-patterns', 'frontend');
+      const result = engine.file('obra/react-patterns', 'frontend');
 
       expect(isOk(result)).toBe(true);
       expect(engine.inbox()).toEqual([]);
       expect(engine.list()[0]?.skills).toEqual(['obra/react-patterns']);
     });
 
+    it('files onto /build when the stored name is build', () => {
+      engine.create('/build', []);
+      engine.addToInbox('tdd');
+
+      const result = engine.file('tdd', '/build');
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.list()[0]?.name).toBe('build');
+      expect(engine.list()[0]?.skills).toEqual(['tdd']);
+    });
+
     it('returns an error and leaves state unchanged when the collection is missing', () => {
       engine.addToInbox('obra/react-patterns');
 
-      const result = engine.fileToCollection('obra/react-patterns', 'frontend');
+      const result = engine.file('obra/react-patterns', 'frontend');
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toContain("Collection 'frontend' not found");
+        expect(result.error.message).toContain("Command 'frontend' not found");
       }
       expect(engine.inbox()).toEqual(['obra/react-patterns']);
     });
@@ -699,7 +720,7 @@ describe('CollectionEngine', () => {
     it('returns an error and leaves state unchanged when the ID is not in inbox', () => {
       engine.create('frontend', []);
 
-      const result = engine.fileToCollection('obra/react-patterns', 'frontend');
+      const result = engine.file('obra/react-patterns', 'frontend');
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
@@ -714,7 +735,7 @@ describe('CollectionEngine', () => {
       engine.addToInbox('obra/react-patterns');
       fs.setWriteError(new Error('Disk full'));
 
-      const result = engine.fileToCollection('obra/react-patterns', 'frontend');
+      const result = engine.file('obra/react-patterns', 'frontend');
 
       expect(isErr(result)).toBe(true);
       fs.setWriteError(null);
@@ -742,7 +763,7 @@ describe('CollectionEngine', () => {
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toContain("Collection 'missing' not found");
+        expect(result.error.message).toContain("Command 'missing' not found");
       }
     });
 
@@ -816,7 +837,7 @@ describe('CollectionEngine', () => {
       fs.writeFile('.cursor/skills/design/SKILL.md', '# design\n');
       engine.scan();
       engine.create('build', []);
-      engine.fileToCollection('tdd', 'build');
+      engine.file('tdd', 'build');
 
       const persisted = fs.readJSON(STATE_PATH);
       expect(isOk(persisted)).toBe(true);
