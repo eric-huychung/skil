@@ -23,6 +23,7 @@ const HARDCODED_TRENDING: Skill[] = [
  */
 export class InMemorySkillsAdapter implements ISkillsAdapter {
   private installed: Skill[] = [];
+  private installs: Array<{ skillId: string; ide: IDE }> = [];
   private installError: Error | null = null;
   private searchError: Error | null = null;
   private browseError: Error | null = null;
@@ -42,10 +43,11 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     return ok(view === 'trending' ? HARDCODED_TRENDING : HARDCODED_ALL_TIME);
   }
 
-  async install(skillId: string): Promise<Result<void>> {
+  async install(skillId: string, targetIDE: IDE): Promise<Result<void>> {
     if (this.installError) {
       return err(this.installError);
     }
+    this.installs.push({ skillId, ide: targetIDE });
     this.installed.push({ id: skillId, source: 'skills.sh', installedAt: new Date().toISOString() });
     return ok(undefined);
   }
@@ -59,6 +61,11 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
 
   getInstalled(): Skill[] {
     return [...this.installed];
+  }
+
+  /** Test helper: (skillId, ide) pairs passed to install(). */
+  getInstalls(): Array<{ skillId: string; ide: IDE }> {
+    return [...this.installs];
   }
 
   /** Test helper: makes the next install() call(s) fail with `error`. */
@@ -89,6 +96,7 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
   /** Test helper: clears all in-memory state between tests. */
   reset(): void {
     this.installed = [];
+    this.installs = [];
     this.installError = null;
     this.searchError = null;
     this.browseError = null;

@@ -201,8 +201,8 @@ export class CollectionEngine implements ICollectionEngine {
     return ok({ synced, warnings });
   }
 
-  async install(skillId: string): Promise<Result<Skill>> {
-    const result = await this.skillsAdapter.install(skillId);
+  async install(skillId: string, targetIDE: IDE): Promise<Result<Skill>> {
+    const result = await this.skillsAdapter.install(skillId, targetIDE);
     if (!isOk(result)) {
       return err(result.error);
     }

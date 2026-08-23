@@ -19,6 +19,18 @@ interface SkillsListResponse {
   data: SkillsShHit[];
 }
 
+/**
+ * vercel-labs/skills `--agent` names. `claude` is `claude-code`.
+ * `agents` has no vercel name; `universal` is the documented agent that
+ * writes `.agents/skills/`.
+ */
+const SKILLS_ADD_AGENT: Record<IDE, string> = {
+  cursor: 'cursor',
+  claude: 'claude-code',
+  windsurf: 'windsurf',
+  agents: 'universal',
+};
+
 function mapSkillsShHit(hit: SkillsShHit): Skill {
   return {
     id: hit.id,
@@ -37,7 +49,8 @@ function mapSkillsShHit(hit: SkillsShHit): Skill {
  * backend (see `src/backend/skills-proxy.ts`), which authenticates to
  * skills.sh with a Vercel OIDC token — so no API key is ever needed here.
  * `install`/`convert` still shell out locally with `cwd` set to the
- * project root; skills.sh has no HTTP endpoint for either. Tests use
+ * project root; skills.sh has no HTTP endpoint for either. `install`
+ * picks the `--agent` flag from the target IDE. Tests use
  * InMemorySkillsAdapter instead so CollectionEngine tests never hit the
  * network or spawn subprocesses.
  */
@@ -71,9 +84,11 @@ export class SkillsAdapter implements ISkillsAdapter {
     }
   }
 
-  async install(skillId: string): Promise<Result<void>> {
+  async install(skillId: string, targetIDE: IDE): Promise<Result<void>> {
     try {
-      await execa('npx', ['skills', 'add', skillId], { cwd: this.projectRoot });
+      await execa('npx', ['skills', 'add', skillId, '--agent', SKILLS_ADD_AGENT[targetIDE]], {
+        cwd: this.projectRoot,
+      });
       return ok(undefined);
     } catch (error) {
       return err(new Error(`Failed to install skill '${skillId}': ${(error as Error).message}`));

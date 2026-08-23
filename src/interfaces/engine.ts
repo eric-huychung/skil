@@ -54,13 +54,13 @@ export interface ICollectionEngine {
   sync(configPath: string): Result<SyncResult>;
 
   /**
-   * Installs a skill via the SkillsAdapter and records it in
-   * `state.installedSkills`. Returns an error Result if the underlying
-   * install command fails, or if the updated state can't be saved to disk
-   * (in which case the skill is not recorded — `install` can be safely
-   * retried).
+   * Installs a skill via the SkillsAdapter into `targetIDE` and records
+   * it in `state.installedSkills`. Returns an error Result if the
+   * underlying install command fails, or if the updated state can't be
+   * saved to disk (in which case the skill is not recorded — `install`
+   * can be safely retried).
    */
-  install(skillId: string): Promise<Result<Skill>>;
+  install(skillId: string, targetIDE: IDE): Promise<Result<Skill>>;
 
   /**
    * Searches skills.sh for skills matching `query`, via the SkillsAdapter.

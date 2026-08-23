@@ -48,7 +48,7 @@ Tasks live in `tasks/todo2.md` Phase 11.
 
 ### Phase 11: Push skills
 
-- [ ] Task 34: `SkillsAdapter.install(skillId, targetIDE)`
+- [x] Task 34: `SkillsAdapter.install(skillId, targetIDE)`
 - [ ] Task 35: Engine install records deploy + CLI `--to`
 - [ ] Task 36: GUI install
 

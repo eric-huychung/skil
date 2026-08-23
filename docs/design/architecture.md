@@ -168,7 +168,16 @@ interface SkillsAdapter {
 ```
 
 - `search` / `browse`: our Vercel backend + OIDC. No user API key. Browse is CDN-cached (`Cache-Control` on 200 only). Not a skil registry.
-- `install`: `npx skills add` with `cwd` = project root. Agent/IDE flag stays **inside** the adapter. Engine `install(skillId, targetIDE)` does not grow extra flags.
+- `install`: `npx skills add <id> --agent <name>` with `cwd` = project root. Agent/IDE flag stays **inside** the adapter. Engine `install(skillId, targetIDE)` does not grow extra flags.
+
+  | skil IDE | `--agent` (vercel-labs/skills) |
+  |----------|--------------------------------|
+  | cursor | `cursor` |
+  | claude | `claude-code` |
+  | windsurf | `windsurf` |
+  | agents | `universal` |
+
+  `agents` has no vercel name; `universal` is the documented agent that writes `.agents/skills/`. Vercel currently lists `cursor`'s project path as `.agents/skills/`, not `.cursor/skills/`. We still pass `--agent cursor`. Scan still walks `.cursor/skills/` (product contract). Confirm the write path when install is used on a real repo.
 - Listing fields (`name`, `repo`, `installs`, …) stay in-memory. Never persist them on catalog records.
 
 ### 5. CLI (Thin)
@@ -394,6 +403,7 @@ Atomic JSON write. Schema version on every persist. v3 → v4 on load, no rewrit
 - **Project root is adapter config (resolved):** `createEngine(projectRoot)`. GUI picker rebuilds the engine. No `chdir`.
 - **Inbox is a field on State, not a command (resolved):** Reserved name `inbox`. Discover Add does not install.
 - **CLI/engine words are command (2026-08-22, Task 32):** `fileToCollection` is `file`. `create('/build')` stores `build`. Product-loop help/errors say command. Leftover sync/export/run may still mention collection internally.
+- **Install agent flag lives in the adapter (2026-08-22, Task 34):** `ISkillsAdapter.install(skillId, targetIDE)`. Real adapter runs `npx skills add <id> --agent <name>` with cwd = project root. Claude is `claude-code`; our `agents` IDE uses vercel's `universal`. In-memory adapter records `(skillId, ide)`. Convert unchanged.
 - **GUI chrome says Commands (2026-08-22, Task 33):** Tab, headings, create/delete/export copy, and empty states say command. Filenames (`CollectionList.tsx`) and the `Collection` type alias stay. Discover Add is still Inbox-only.
 - **GUI scans once after pick (2026-08-22, Task 31):** Pick folder calls `scan()`. Scan on Commands is the re-scan. Disabled until a folder is connected. Inbox is inventory on that surface, not a rail tab. Gone ids come from the last scan result.
 - **GUI design system (resolved, Task 44):** oklch tokens, Geist, Phosphor, shared `FOCUS_RING`.

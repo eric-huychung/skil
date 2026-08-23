@@ -13,7 +13,7 @@ describe('runInstall', () => {
   it('installs a skill and reports success', async () => {
     const engine = buildEngine();
 
-    const outcome = await runInstall(engine, 'obra/react-patterns');
+    const outcome = await runInstall(engine, 'obra/react-patterns', 'cursor');
 
     expect(outcome.isError).toBe(false);
     expect(outcome.message).toBe("Installed skill 'obra/react-patterns'");
@@ -24,7 +24,7 @@ describe('runInstall', () => {
     skills.setInstallError(new Error('npx: command failed'));
     const engine = new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemoryConfigAdapter(), skills);
 
-    const outcome = await runInstall(engine, 'obra/react-patterns');
+    const outcome = await runInstall(engine, 'obra/react-patterns', 'cursor');
 
     expect(outcome.isError).toBe(true);
     expect(outcome.message).toContain('command failed');

@@ -461,7 +461,7 @@ describe('CollectionEngine', () => {
 
   describe('install', () => {
     it('installs a skill via the skills adapter and returns it', async () => {
-      const result = await engine.install('obra/react-patterns');
+      const result = await engine.install('obra/react-patterns', 'cursor');
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -472,7 +472,7 @@ describe('CollectionEngine', () => {
     });
 
     it('records the installed skill in state', async () => {
-      await engine.install('obra/react-patterns');
+      await engine.install('obra/react-patterns', 'cursor');
 
       const persisted = fs.readJSON<{ installedSkills: Array<{ id: string }> }>(STATE_PATH);
       expect(isOk(persisted)).toBe(true);
@@ -484,7 +484,7 @@ describe('CollectionEngine', () => {
     it('returns an error when the skills adapter fails to install', async () => {
       skills.setInstallError(new Error('npx: command failed'));
 
-      const result = await engine.install('obra/react-patterns');
+      const result = await engine.install('obra/react-patterns', 'cursor');
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
@@ -496,7 +496,7 @@ describe('CollectionEngine', () => {
       engine.create('frontend', []);
       skills.setInstallError(new Error('npx: command failed'));
 
-      await engine.install('obra/react-patterns');
+      await engine.install('obra/react-patterns', 'cursor');
 
       const persisted = fs.readJSON<{ installedSkills: unknown[] }>(STATE_PATH);
       expect(isOk(persisted)).toBe(true);
@@ -508,7 +508,7 @@ describe('CollectionEngine', () => {
     it('returns an error and does not keep the skill recorded when persisting fails', async () => {
       fs.setWriteError(new Error('Disk full'));
 
-      const result = await engine.install('obra/react-patterns');
+      const result = await engine.install('obra/react-patterns', 'cursor');
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
@@ -516,7 +516,7 @@ describe('CollectionEngine', () => {
       }
 
       fs.setWriteError(null);
-      await engine.install('obra/react-patterns');
+      await engine.install('obra/react-patterns', 'cursor');
       const persisted = fs.readJSON<{ installedSkills: Array<{ id: string }> }>(STATE_PATH);
       expect(isOk(persisted)).toBe(true);
       if (isOk(persisted)) {
@@ -573,7 +573,7 @@ describe('CollectionEngine', () => {
       skills.seedInstalled([{ id: 'obra/react-patterns', source: 'skills.sh', installedAt: '2024-01-01T00:00:00.000Z' }]);
       const loadedEngine = new CollectionEngine(fs, config, skills);
 
-      await loadedEngine.install('addyosmani/performance-review');
+      await loadedEngine.install('addyosmani/performance-review', 'cursor');
 
       const persisted = fs.readJSON<{ installedSkills: Array<{ id: string }> }>(STATE_PATH);
       expect(isOk(persisted)).toBe(true);

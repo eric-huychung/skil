@@ -71,8 +71,11 @@ export interface ISkillsAdapter {
   /** Fetches the skills.sh leaderboard for `view` (all-time or trending). */
   browse(view: BrowseView): Promise<Result<Skill[]>>;
 
-  /** Installs a skill by ID via `npx skills add`. */
-  install(skillId: string): Promise<Result<void>>;
+  /**
+   * Installs a skill by ID via `npx skills add`. The agent/IDE flag is
+   * chosen inside the adapter from `targetIDE` — callers do not pass flags.
+   */
+  install(skillId: string, targetIDE: IDE): Promise<Result<void>>;
 
   /** Converts a skill to a target IDE's format via `skillsmith`. */
   convert(skillId: string, targetIDE: IDE): Promise<Result<void>>;

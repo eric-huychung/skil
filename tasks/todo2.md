@@ -794,14 +794,14 @@ One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys,
 **Description:** `ISkillsAdapter.install` takes a target IDE. Real adapter: `npx skills add` with `cwd` = project root and the agent flag **inside** the adapter. In-memory adapter records `(skillId, ide)` so engine tests can assert the target. `convert` unchanged (leftover).
 
 **Acceptance criteria:**
-- [ ] `install('obra/x', 'cursor')` invokes execa with cwd = root and a cursor agent flag
-- [ ] Claude / windsurf / agents pass a different flag (or documented equivalent)
-- [ ] Failure returns `Result` err, same style as today
-- [ ] Call sites that still use one-arg `install` are updated
+- [x] `install('obra/x', 'cursor')` invokes execa with cwd = root and a cursor agent flag
+- [x] Claude / windsurf / agents pass a different flag (or documented equivalent)
+- [x] Failure returns `Result` err, same style as today
+- [x] Call sites that still use one-arg `install` are updated
 
 **Verification:**
-- [ ] Tests pass: `npm test -- skills-adapter.test.ts`
-- [ ] `npm run typecheck` passes
+- [x] Tests pass: `npm test -- skills-adapter.test.ts`
+- [x] `npm run typecheck` passes
 
 **Dependencies:** Task 15
 
