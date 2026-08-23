@@ -64,7 +64,8 @@ export interface ScanResult {
 }
 
 /**
- * Persisted engine state, stored at `.contextkit/state.json`.
+ * Persisted engine state, stored at `.skil/state.json`.
+ * Load falls back to `.contextkit/state.json` if the new file is missing.
  *
  * Schema v4: `commands` (was `collections`), `skills` catalog, `inbox`.
  * Load v3: `collections` → `commands`, missing `skills` → `[]`.

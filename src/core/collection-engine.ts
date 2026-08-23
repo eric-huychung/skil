@@ -16,7 +16,10 @@ import type {
 import { err, isOk, ok, type Result } from './result.js';
 
 /** Path to the persisted engine state, relative to the project root. */
-export const STATE_PATH = '.contextkit/state.json';
+export const STATE_PATH = '.skil/state.json';
+
+/** Pre-rename state file. Loaded only when `.skil/state.json` is missing. */
+export const LEGACY_STATE_PATH = '.contextkit/state.json';
 
 /** Current state schema version. See `State`'s doc comment for the v3 → v4 notes. */
 const STATE_VERSION = '4.0';
@@ -77,6 +80,16 @@ function normalizeState(raw: PersistedState): State {
   };
 }
 
+/** Prefer `.skil/state.json`. Fall back to the old path. Do not copy on load. */
+function loadState(fs: IFileSystemAdapter): State {
+  const current = fs.readJSON<PersistedState>(STATE_PATH);
+  if (isOk(current)) {
+    return normalizeState(current.value);
+  }
+  const legacy = fs.readJSON<PersistedState>(LEGACY_STATE_PATH);
+  return isOk(legacy) ? normalizeState(legacy.value) : emptyState();
+}
+
 /**
  * CollectionEngine is ContextKit's deep module: see ICollectionEngine for the
  * public contract. This class owns state management, validation, and
@@ -90,8 +103,7 @@ export class CollectionEngine implements ICollectionEngine {
     private readonly config: IConfigAdapter,
     private readonly skillsAdapter: ISkillsAdapter
   ) {
-    const loaded = this.fs.readJSON<PersistedState>(STATE_PATH);
-    this.state = isOk(loaded) ? normalizeState(loaded.value) : emptyState();
+    this.state = loadState(this.fs);
     this.mergeExternallyInstalledSkills();
   }
 

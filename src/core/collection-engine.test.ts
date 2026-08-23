@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isErr, isOk } from './result.js';
-import { CollectionEngine, STATE_PATH } from './collection-engine.js';
+import { CollectionEngine, LEGACY_STATE_PATH, STATE_PATH } from './collection-engine.js';
 import { InMemoryConfigAdapter } from '../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../adapters/in-memory-skills.js';
@@ -239,6 +239,17 @@ describe('CollectionEngine', () => {
   });
 
   describe('persistence', () => {
+    it('writes a new project to .skil/state.json', () => {
+      engine.create('frontend', ['react-patterns']);
+
+      const persisted = fs.readJSON<{ commands: Array<{ name: string }> }>('.skil/state.json');
+
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.commands.map((c) => c.name)).toEqual(['frontend']);
+      }
+    });
+
     it('writes state to the state file after creating a collection', () => {
       engine.create('frontend', ['react-patterns']);
 
@@ -357,6 +368,53 @@ describe('CollectionEngine', () => {
   describe('loading existing state', () => {
     it('starts with an empty list when no state file exists yet', () => {
       expect(engine.list()).toEqual([]);
+    });
+
+    it('loads .contextkit/state.json when .skil/state.json is missing', () => {
+      fs.writeJSON(LEGACY_STATE_PATH, {
+        commands: [{ name: 'frontend', skills: ['react-patterns'], createdAt: '2024-01-01T00:00:00.000Z' }],
+        skills: [],
+        inbox: [],
+        version: '4.0',
+      });
+
+      const loadedEngine = new CollectionEngine(fs, config, skills);
+
+      expect(loadedEngine.list()).toEqual([
+        { name: 'frontend', skills: ['react-patterns'], createdAt: '2024-01-01T00:00:00.000Z' },
+      ]);
+      expect(isErr(fs.readJSON(STATE_PATH))).toBe(true);
+    });
+
+    it('writes .skil/state.json on the next persist after a legacy load', () => {
+      fs.writeJSON(LEGACY_STATE_PATH, {
+        commands: [{ name: 'frontend', skills: [], createdAt: '2024-01-01T00:00:00.000Z' }],
+        version: '4.0',
+      });
+      const loadedEngine = new CollectionEngine(fs, config, skills);
+
+      loadedEngine.create('backend', []);
+
+      const persisted = fs.readJSON<{ commands: Array<{ name: string }> }>(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.commands.map((c) => c.name)).toEqual(['frontend', 'backend']);
+      }
+    });
+
+    it('prefers .skil/state.json when both files exist', () => {
+      fs.writeJSON(STATE_PATH, {
+        commands: [{ name: 'new-map', skills: [], createdAt: '2024-01-02T00:00:00.000Z' }],
+        version: '4.0',
+      });
+      fs.writeJSON(LEGACY_STATE_PATH, {
+        commands: [{ name: 'old-map', skills: [], createdAt: '2024-01-01T00:00:00.000Z' }],
+        version: '4.0',
+      });
+
+      const loadedEngine = new CollectionEngine(fs, config, skills);
+
+      expect(loadedEngine.list().map((c) => c.name)).toEqual(['new-map']);
     });
 
     it('loads collections from an existing state file on construction', () => {
