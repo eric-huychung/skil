@@ -84,7 +84,7 @@ export interface ICollectionEngine {
 
   /**
    * Leftover skillsmith convert-all. Product export is `exportCommand`.
-   * CLI/GUI still call this until the export-our-file task lands.
+   * CLI and GUI call `exportCommand`.
    */
   export(collectionNames: string[], targetIDE: IDE): Promise<Result<ExportResult>>;
 

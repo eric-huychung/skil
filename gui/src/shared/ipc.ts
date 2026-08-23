@@ -12,7 +12,7 @@ export const IPC_CHANNELS = {
   listCollections: 'contextkit:list-collections',
   createCollection: 'contextkit:create-collection',
   removeSkillFromCollection: 'contextkit:remove-skill-from-collection',
-  exportCollections: 'contextkit:export-collections',
+  exportCommand: 'contextkit:export-command',
   searchSkills: 'contextkit:search-skills',
   browseSkills: 'contextkit:browse-skills',
   listInbox: 'contextkit:list-inbox',
@@ -35,7 +35,8 @@ export interface ContextKitBridge {
   listCollections(): Promise<Collection[]>;
   createCollection(name: string, skillIds: string[]): Promise<Result<Collection>>;
   removeSkillFromCollection(name: string, skillId: string): Promise<Result<Collection>>;
-  exportCollections(names: string[], targetIDE: IDE): Promise<Result<ExportResult>>;
+  /** Push our stamped command file. Does not install skills. */
+  exportCommand(name: string, targetIDE: IDE, opts?: { replace?: boolean }): Promise<Result<ExportResult>>;
   searchSkills(query: string): Promise<Result<Skill[]>>;
   browseSkills(view: BrowseView): Promise<Result<Skill[]>>;
   listInbox(): Promise<string[]>;

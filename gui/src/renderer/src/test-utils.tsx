@@ -57,7 +57,7 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
     listCollections: async () => engine.list(),
     createCollection: async (name, skillIds) => engine.create(name, skillIds),
     removeSkillFromCollection: async (name, skillId) => engine.removeSkill(name, skillId),
-    exportCollections: async (names, targetIDE) => engine.export(names, targetIDE),
+    exportCommand: async (name, targetIDE, opts) => engine.exportCommand(name, targetIDE, opts),
     searchSkills: async (query) => engine.search(query),
     browseSkills: async (view) => engine.browse(view),
     listInbox: async () => engine.inbox(),

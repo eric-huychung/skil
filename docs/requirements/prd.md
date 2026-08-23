@@ -118,6 +118,7 @@ Until the bin rename, the executable may still be `contextkit`. The product name
 - Inbox on Commands is the unfiled list (scan + Discover). Not a rail tab
 - Scan is disabled (with copy) until a folder is connected. Pick folder scans once; the Scan button is re-scan
 - Install on Commands: pick IDE (cursor / claude / windsurf / agents), call `engine.install(skillId, ide)`. Works from Inbox or a filed skill. Error is a visible alert, not `sr-only`. Disabled until a folder is connected
+- Export on Commands: pick IDE, call `engine.exportCommand(name, ide)`. Writes our stamped command file. Does not install skills. Unstamped existing file shows the error and a Replace confirm (`replace: true`). Disabled until a folder is connected
 - Discover Add still does not install and does not grow an Install control
 - Gone ids from the last scan show as a status banner
 - No typed skill-id fields in the GUI (CLI can still take ids)

@@ -900,14 +900,14 @@ One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys,
 **Description:** `export <command> --to <ide> [--replace]`. GUI: explicit Export on a command, IDE pick, replace confirm if the engine says the file is unstamped. One vertical slice (CLI + GUI) because the contract is the same method.
 
 **Acceptance criteria:**
-- [ ] CLI writes the stamped file; `--replace` maps to `replace: true`
-- [ ] GUI Export does not install skills
-- [ ] Unstamped conflict is shown; user can opt in to replace
-- [ ] Help: this is push of our template, not skillsmith convert
+- [x] CLI writes the stamped file; `--replace` maps to `replace: true`
+- [x] GUI Export does not install skills
+- [x] Unstamped conflict is shown; user can opt in to replace
+- [x] Help: this is push of our template, not skillsmith convert
 
 **Verification:**
-- [ ] Tests pass: `npm test -- export.test.ts` and `npm --workspace gui test`
-- [ ] Typecheck passes (root + gui)
+- [x] Tests pass: `npm test -- export.test.ts` and `npm --workspace gui test`
+- [x] Typecheck passes (root + gui)
 - [ ] Manual: export `/build` to cursor; confirm their old unstamped file is left alone
 
 **Dependencies:** Task 37
@@ -922,9 +922,9 @@ One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys,
 ---
 
 ## Checkpoint: After Tasks 37–38 (push templates)
-- [ ] Our command file has `skills:` + `generated_by: skil`
-- [ ] Unstamped `/build.md` survives without `--replace`
-- [ ] Install and export are separate pushes
+- [x] Our command file has `skills:` + `generated_by: skil`
+- [x] Unstamped `/build.md` survives without `--replace`
+- [x] Install and export are separate pushes
 
 ---
 

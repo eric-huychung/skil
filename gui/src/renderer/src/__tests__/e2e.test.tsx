@@ -2,11 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
-import { createInMemoryEngine, installTestBridge, renderWithProviders } from '../test-utils';
+import {
+  createInMemoryWorkspace,
+  DEFAULT_TEST_PROJECT_ROOT,
+  installTestBridge,
+  renderWithProviders,
+} from '../test-utils';
+import { isOk } from '../../../../../src/core/result.js';
 
 describe('GUI workflow (real engine)', () => {
   it('drives Discover Add → create → file → export through rendered components', async () => {
-    const engine = installTestBridge(createInMemoryEngine());
+    const { engine, fs } = createInMemoryWorkspace();
+    installTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
 
     renderWithProviders(<App />);
 
@@ -39,6 +46,12 @@ describe('GUI workflow (real engine)', () => {
     await userEvent.click(within(detail).getByRole('button', { name: 'Export frontend' }));
 
     await waitFor(() => expect(within(detail).getByText('Exported to windsurf')).toBeInTheDocument());
+    const written = fs.readFile('.windsurf/workflows/frontend.md');
+    expect(isOk(written)).toBe(true);
+    if (isOk(written)) {
+      expect(written.value).toContain('generated_by: skil');
+    }
+    expect(engine.skills()).toEqual([]);
     expect(engine.list()).toHaveLength(1);
   });
 });

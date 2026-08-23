@@ -40,8 +40,8 @@ ipcMain.handle(IPC_CHANNELS.createCollection, (_event, name: string, skillIds: s
 ipcMain.handle(IPC_CHANNELS.removeSkillFromCollection, (_event, name: string, skillId: string) =>
   currentEngine().removeSkill(name, skillId)
 );
-ipcMain.handle(IPC_CHANNELS.exportCollections, (_event, names: string[], targetIDE: IDE) =>
-  currentEngine().export(names, targetIDE)
+ipcMain.handle(IPC_CHANNELS.exportCommand, (_event, name: string, targetIDE: IDE, opts?: { replace?: boolean }) =>
+  currentEngine().exportCommand(name, targetIDE, opts)
 );
 ipcMain.handle(IPC_CHANNELS.searchSkills, (_event, query: string) => discovery.search(query));
 ipcMain.handle(IPC_CHANNELS.browseSkills, (_event, view: BrowseView) => discovery.browse(view));
