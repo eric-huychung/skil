@@ -10,14 +10,14 @@ describe('GUI workflow (real engine)', () => {
 
     renderWithProviders(<App />);
 
-    await waitFor(() => expect(screen.getByText('No collections yet')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('No commands yet')).toBeInTheDocument());
     expect(engine.list()).toHaveLength(0);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Create New Collection' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create New Command' }));
     await userEvent.type(screen.getByLabelText('Name'), 'frontend');
-    await userEvent.click(screen.getByRole('button', { name: 'Create collection' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create command' }));
 
-    expect(await screen.findByRole('listitem', { name: 'Collection frontend' })).toBeInTheDocument();
+    expect(await screen.findByRole('listitem', { name: 'Command frontend' })).toBeInTheDocument();
     expect(engine.list()).toHaveLength(1);
     expect(engine.list()[0]).toMatchObject({ name: 'frontend', skills: [] });
 
@@ -26,8 +26,8 @@ describe('GUI workflow (real engine)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add obra/react-patterns' }));
     await waitFor(() => expect(engine.inbox()).toEqual(['obra/react-patterns']));
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Collections' }));
-    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
+    await userEvent.click(screen.getByRole('tab', { name: 'Commands' }));
+    const detail = await screen.findByRole('region', { name: 'Command frontend details' });
     await userEvent.click(within(detail).getByRole('button', { name: 'Add obra/react-patterns to frontend' }));
 
     await waitFor(() => expect(engine.list()[0]?.skills).toEqual(['obra/react-patterns']));

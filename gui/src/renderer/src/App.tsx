@@ -12,7 +12,7 @@ type WorkspaceTab = 'config' | 'search' | 'collections';
 const TABS: { id: WorkspaceTab; label: string; icon: typeof Folder }[] = [
   { id: 'config', label: 'Sync', icon: GearSix },
   { id: 'search', label: 'Discover', icon: MagnifyingGlass },
-  { id: 'collections', label: 'Collections', icon: Folder },
+  { id: 'collections', label: 'Commands', icon: Folder },
 ];
 
 function folderName(root: string): string {
@@ -57,7 +57,7 @@ function ConfigPanel({ root, onPick }: { root: string | null; onPick: () => void
           )}
           <p className="muted-copy">
             Connect a folder to read and write that project&apos;s .contextkit state. Skip this if you just want to
-            sketch collections or browse skills.
+            sketch commands or browse skills.
           </p>
           <button
             type="button"
@@ -198,7 +198,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
         <p className="eyebrow">Support</p>
         <h2 id="help-title">How can we help?</h2>
         <p className="muted-copy">
-          Sync, export, and search all run through the same CollectionEngine the CLI uses. Config sync in the GUI is
+          Sync, export, and search all run through the same engine the CLI uses. Config sync in the GUI is
           still in development.
         </p>
         <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={onClose}>

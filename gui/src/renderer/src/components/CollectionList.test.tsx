@@ -13,17 +13,17 @@ import { err, ok } from '../../../../../src/core/result.js';
 import type { ExportResult } from '../../../../../src/types/index.js';
 
 describe('CollectionList', () => {
-  it('shows the empty state when there are no collections', async () => {
+  it('shows the empty state when there are no commands', async () => {
     const bridge = createTestBridge(createInMemoryEngine());
 
     renderWithProviders(<CollectionList />, { bridge });
 
-    await waitFor(() => expect(screen.getByText('No collections yet')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('No commands yet')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Scan (connect a folder first)' })).toBeDisabled();
     expect(screen.getByText('Connect a project folder to scan')).toBeInTheDocument();
   });
 
-  it('renders one card per collection and shows the selected collection skills in the detail panel', async () => {
+  it('renders one card per command and shows the selected command skills in the detail panel', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', ['obra/react-patterns']);
     engine.create('backend', ['addyosmani/api-design']);
@@ -31,32 +31,32 @@ describe('CollectionList', () => {
 
     renderWithProviders(<CollectionList />, { bridge });
 
-    await waitFor(() => expect(screen.getAllByRole('listitem', { name: /^Collection / })).toHaveLength(2));
-    const detail = screen.getByRole('region', { name: 'Collection frontend details' });
+    await waitFor(() => expect(screen.getAllByRole('listitem', { name: /^Command / })).toHaveLength(2));
+    const detail = screen.getByRole('region', { name: 'Command frontend details' });
     expect(within(detail).getByText('obra/react-patterns')).toBeInTheDocument();
     expect(within(detail).queryByText('addyosmani/api-design')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('listitem', { name: 'Collection backend' }));
+    await userEvent.click(screen.getByRole('listitem', { name: 'Command backend' }));
 
-    const backendDetail = screen.getByRole('region', { name: 'Collection backend details' });
+    const backendDetail = screen.getByRole('region', { name: 'Command backend details' });
     expect(within(backendDetail).getByText('addyosmani/api-design')).toBeInTheDocument();
     expect(within(backendDetail).queryByText('obra/react-patterns')).not.toBeInTheDocument();
   });
 
-  it('shows Inbox as unfiled inventory, not as a collection card', async () => {
+  it('shows Inbox as unfiled inventory, not as a command card', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', []);
     engine.addToInbox('obra/react-patterns');
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
-    const heading = await screen.findByRole('heading', { name: 'Collections' });
+    const heading = await screen.findByRole('heading', { name: 'Commands' });
     const panel = heading.closest('section');
-    if (!panel) throw new Error('expected collections panel');
+    if (!panel) throw new Error('expected commands panel');
 
     expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
     expect(within(panel as HTMLElement).getByText('obra/react-patterns')).toBeInTheDocument();
-    expect(screen.queryByRole('listitem', { name: 'Collection Inbox' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('listitem', { name: 'Command Inbox' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('File into')).not.toBeInTheDocument();
   });
 
@@ -68,9 +68,9 @@ describe('CollectionList', () => {
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
-    await userEvent.click(await screen.findByRole('listitem', { name: 'Collection backend' }));
+    await userEvent.click(await screen.findByRole('listitem', { name: 'Command backend' }));
 
-    const detail = screen.getByRole('region', { name: 'Collection backend details' });
+    const detail = screen.getByRole('region', { name: 'Command backend details' });
     await userEvent.click(within(detail).getByRole('button', { name: 'Add obra/react-patterns to backend' }));
 
     await waitFor(() =>
@@ -83,8 +83,8 @@ describe('CollectionList', () => {
     expect(within(detail).getByRole('button', { name: 'Added obra/react-patterns' })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('listitem', { name: 'Collection frontend' }));
-    const frontendDetail = screen.getByRole('region', { name: 'Collection frontend details' });
+    await userEvent.click(screen.getByRole('listitem', { name: 'Command frontend' }));
+    const frontendDetail = screen.getByRole('region', { name: 'Command frontend details' });
     await userEvent.click(within(frontendDetail).getByRole('button', { name: 'Add obra/react-patterns to frontend' }));
 
     await waitFor(() =>
@@ -102,7 +102,7 @@ describe('CollectionList', () => {
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
-    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
+    const detail = await screen.findByRole('region', { name: 'Command frontend details' });
     const toggle = within(detail).getByRole('button', { name: 'From Inbox, 1 skill' });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -125,7 +125,7 @@ describe('CollectionList', () => {
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
-    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
+    const detail = await screen.findByRole('region', { name: 'Command frontend details' });
     await waitFor(() => expect(within(detail).getByText('obra/react-patterns')).toBeInTheDocument());
 
     await userEvent.click(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' }));
@@ -140,7 +140,7 @@ describe('CollectionList', () => {
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
-    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
+    const detail = await screen.findByRole('region', { name: 'Command frontend details' });
 
     await userEvent.selectOptions(within(detail).getByLabelText('Export frontend to'), 'claude');
     await userEvent.click(within(detail).getByRole('button', { name: 'Export frontend' }));
@@ -155,7 +155,7 @@ describe('CollectionList', () => {
     const bridge = { ...createTestBridge(engine), exportCollections: async () => ok(failureResult) };
 
     renderWithProviders(<CollectionList />, { bridge });
-    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
+    const detail = await screen.findByRole('region', { name: 'Command frontend details' });
 
     await userEvent.click(within(detail).getByRole('button', { name: 'Export frontend' }));
 
@@ -168,7 +168,7 @@ describe('CollectionList', () => {
     const bridge = { ...createTestBridge(engine), exportCollections: async () => err(new Error('network down')) };
 
     renderWithProviders(<CollectionList />, { bridge });
-    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
+    const detail = await screen.findByRole('region', { name: 'Command frontend details' });
 
     await userEvent.click(within(detail).getByRole('button', { name: 'Export frontend' }));
 
@@ -181,13 +181,13 @@ describe('CollectionList', () => {
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
-    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
+    const detail = await screen.findByRole('region', { name: 'Command frontend details' });
 
     await userEvent.click(within(detail).getByRole('button', { name: 'Delete frontend' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Delete collection' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete command' }));
 
     await waitFor(() => expect(engine.list()).toEqual([]));
-    expect(screen.getByText('No collections yet')).toBeInTheDocument();
+    expect(screen.getByText('No commands yet')).toBeInTheDocument();
   });
 
   it('surfaces gone ids after Scan when a skill folder is removed', async () => {
@@ -216,12 +216,12 @@ describe('CollectionList', () => {
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
-    const detail = await screen.findByRole('region', { name: 'Collection frontend details' });
+    const detail = await screen.findByRole('region', { name: 'Command frontend details' });
 
     await userEvent.click(within(detail).getByRole('button', { name: 'Delete frontend' }));
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(engine.list()).toHaveLength(1);
-    expect(screen.getByRole('listitem', { name: 'Collection frontend' })).toBeInTheDocument();
+    expect(screen.getByRole('listitem', { name: 'Command frontend' })).toBeInTheDocument();
   });
 });

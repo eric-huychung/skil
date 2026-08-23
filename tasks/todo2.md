@@ -765,13 +765,13 @@ One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys,
 **Description:** Tab and copy say Commands. Create modal is still name-only (`/build` ok). Inbox file target is a command. Do not rename `CollectionList.tsx` unless you have room; labels matter more than the filename.
 
 **Acceptance criteria:**
-- [ ] No user-visible "Collections" as the product word
-- [ ] Create `/build`, file from Inbox, delete still work
-- [ ] Discover Add still Inbox-only
+- [x] No user-visible "Collections" as the product word
+- [x] Create `/build`, file from Inbox, delete still work
+- [x] Discover Add still Inbox-only
 
 **Verification:**
-- [ ] Tests pass: `npm --workspace gui test`
-- [ ] `npm --workspace gui run typecheck` passes
+- [x] Tests pass: `npm --workspace gui test`
+- [x] `npm --workspace gui run typecheck` passes
 
 **Dependencies:** Task 32
 
@@ -785,8 +785,8 @@ One engine. Disk is SoT for `SKILL.md`. We are SoT for catalog, hashes, deploys,
 ---
 
 ## Checkpoint: After Tasks 32–33 (organize)
-- [ ] `/build` + file `tdd`; folders do not move
-- [ ] Inbox = unfiled only
+- [x] `/build` + file `tdd`; folders do not move
+- [x] Inbox = unfiled only
 
 ---
 

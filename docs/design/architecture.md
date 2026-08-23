@@ -185,7 +185,7 @@ Target verbs:
 - `skil export <command> --to <ide> [--replace]` — push our command file
 - `skil search [query] [--trending]` — unchanged discover
 
-Until the bin rename lands, the binary may still be `contextkit`. Help and product-loop errors say **command**, not collection. Engine method is `file` (was `fileToCollection`). `Collection` remains a type alias. GUI chrome still says Collections until Task 33.
+Until the bin rename lands, the binary may still be `contextkit`. Help and product-loop errors say **command**, not collection. Engine method is `file` (was `fileToCollection`). `Collection` remains a type alias. GUI chrome says Commands.
 
 ### 6. GUI (Thin)
 
@@ -198,7 +198,7 @@ Same engine. No business logic in React.
 - **Discover** — skills.sh browse/search, Add → Inbox (does not install)
 - **Sync** — pick / change folder only. Not a live merge.
 
-After pick, the GUI calls `scan()` once. The Collections surface shows Inbox as unfiled inventory (scanned locals + Discover adds) — not a rail tab. Scan is disabled with a clear message when no folder is connected. Re-scan is the Scan button. Show gone ids from the last scan result (`role="status"`). Do not auto-create commands. Discover Add is unchanged (still no install).
+After pick, the GUI calls `scan()` once. The Commands surface shows Inbox as unfiled inventory (scanned locals + Discover adds) — not a rail tab. Scan is disabled with a clear message when no folder is connected. Re-scan is the Scan button. Show gone ids from the last scan result (`role="status"`). Do not auto-create commands. Discover Add is unchanged (still no install).
 
 ## User Flow
 
@@ -393,8 +393,9 @@ Atomic JSON write. Schema version on every persist. v3 → v4 on load, no rewrit
 - **Discover details use listing fields (resolved):** No SKILL.md proxy, no GitHub stars.
 - **Project root is adapter config (resolved):** `createEngine(projectRoot)`. GUI picker rebuilds the engine. No `chdir`.
 - **Inbox is a field on State, not a command (resolved):** Reserved name `inbox`. Discover Add does not install.
-- **CLI/engine words are command (2026-08-22, Task 32):** `fileToCollection` is `file`. `create('/build')` stores `build`. Product-loop help/errors say command. Leftover sync/export/run may still mention collection internally. GUI labels wait for Task 33.
-- **GUI scans once after pick (2026-08-22, Task 31):** Pick folder calls `scan()`. Scan on Collections is the re-scan. Disabled until a folder is connected. Inbox is inventory on that surface, not a rail tab. Gone ids come from the last scan result.
+- **CLI/engine words are command (2026-08-22, Task 32):** `fileToCollection` is `file`. `create('/build')` stores `build`. Product-loop help/errors say command. Leftover sync/export/run may still mention collection internally.
+- **GUI chrome says Commands (2026-08-22, Task 33):** Tab, headings, create/delete/export copy, and empty states say command. Filenames (`CollectionList.tsx`) and the `Collection` type alias stay. Discover Add is still Inbox-only.
+- **GUI scans once after pick (2026-08-22, Task 31):** Pick folder calls `scan()`. Scan on Commands is the re-scan. Disabled until a folder is connected. Inbox is inventory on that surface, not a rail tab. Gone ids come from the last scan result.
 - **GUI design system (resolved, Task 44):** oklch tokens, Geist, Phosphor, shared `FOCUS_RING`.
 
 ## Success Criteria

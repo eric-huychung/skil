@@ -87,7 +87,7 @@ State lives in `.skil/state.json` (read-fallback `.contextkit/state.json` until 
 
 - **Inbox is not a command.** Reserved name. `create inbox` errors.
 - **Command names have no leading slash.** `create /build` stores `build`. UI may still show `/build`.
-- **CLI help/errors say command, not collection.** GUI chrome still says Collections until the Commands-chrome task.
+- **CLI help/errors and GUI chrome say command, not collection.**
 - **Connect scans once.** Pick folder pulls unfiled skills into Inbox. The Scan button is re-scan. Disabled until a folder is connected.
 - **Scan does not create `/cursor` or `/claude`.** That would be the folder tree again.
 - **We do not scan `commands/`.** We only write a command file on export.
@@ -114,7 +114,7 @@ Until the bin rename, the executable may still be `contextkit`. The product name
 - Commands tab: Inbox, create command, file, delete, install, export, re-scan
 - Discover: All time / Trending, typed search, Add → Inbox, details from listing fields
 - Discover does not require a folder; scan / install / export do
-- Inbox on Collections is the unfiled list (scan + Discover). Not a rail tab
+- Inbox on Commands is the unfiled list (scan + Discover). Not a rail tab
 - Scan is disabled (with copy) until a folder is connected. Pick folder scans once; the Scan button is re-scan
 - Gone ids from the last scan show as a status banner
 - No typed skill-id fields in the GUI (CLI can still take ids)

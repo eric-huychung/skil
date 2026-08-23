@@ -79,10 +79,10 @@ function CollectionDetail({
   }
 
   return (
-    <section className="detail-panel panel-section" aria-label={`Collection ${collection.name} details`}>
+    <section className="detail-panel panel-section" aria-label={`Command ${collection.name} details`}>
       <div className="detail-header">
         <div>
-          <p className="eyebrow">Collection / {collection.name}</p>
+          <p className="eyebrow">Command / {collection.name}</p>
           <h2>{collection.name}</h2>
           <p className="muted-copy">
             {collection.skills.length === 1 ? '1 skill' : `${collection.skills.length} skills`}
@@ -170,7 +170,7 @@ function CollectionDetail({
           <span>Included skills</span>
           <span className="count-pill">{collection.skills.length}</span>
         </div>
-        {collection.skills.length === 0 && <p className="muted-copy">No skills in this collection yet</p>}
+        {collection.skills.length === 0 && <p className="muted-copy">No skills in this command yet</p>}
         {collection.skills.map((skillId) => (
           <div className="included-skill" key={skillId}>
             <span className="checkmark" aria-hidden="true">
@@ -197,7 +197,7 @@ function CollectionDetail({
         className={`primary-button export-button ${FOCUS_RING}`}
       >
         <ArrowDown size={16} weight="regular" />
-        {isExporting ? 'Exporting…' : 'Export Collection'}
+        {isExporting ? 'Exporting…' : 'Export Command'}
       </button>
       {!isExporting && exportState?.status === 'success' && (
         <p className="muted-copy">{`Exported to ${exportState.ide}`}</p>
@@ -217,7 +217,7 @@ function CollectionDetail({
             aria-labelledby="delete-collection-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <p className="eyebrow">Collections</p>
+            <p className="eyebrow">Commands</p>
             <h2 id="delete-collection-title">Delete {collection.name}?</h2>
             <p className="muted-copy">This cannot be undone.</p>
             <div className="modal-actions">
@@ -225,7 +225,7 @@ function CollectionDetail({
                 Cancel
               </button>
               <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={() => void handleDelete()}>
-                Delete collection
+                Delete command
               </button>
             </div>
           </div>
@@ -266,7 +266,7 @@ function CollectionsPanel({
       <div className="section-heading">
         <div>
           <p className="eyebrow">Workspace</p>
-          <h1>Collections</h1>
+          <h1>Commands</h1>
         </div>
         <button
           type="button"
@@ -376,13 +376,13 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
           )}
         </div>
         {collections.length === 0 ? (
-          <p className="muted-copy">No collections yet</p>
+          <p className="muted-copy">No commands yet</p>
         ) : (
           <ul className="collection-list">
             {collections.map((collection) => (
               <li
                 key={collection.name}
-                aria-label={`Collection ${collection.name}`}
+                aria-label={`Command ${collection.name}`}
                 aria-current={collection.name === selectedName ? 'true' : undefined}
                 className={`collection-card ${collection.name === selectedName ? 'selected' : ''}`}
                 tabIndex={0}

@@ -23,28 +23,29 @@ async function clickPickFolder() {
 }
 
 describe('App', () => {
-  it('mounts on Collections with the empty collections UI, not a pick-folder wall', async () => {
+  it('mounts on Commands with the empty commands UI, not a pick-folder wall', async () => {
     installTestBridge(createInMemoryEngine());
 
     renderWithProviders(<App />);
 
     expect(screen.getByText('ContextKit')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Collections' })).toHaveAttribute('aria-selected', 'true');
-    expect(await screen.findByText('No collections yet')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Commands' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByText('No commands yet')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Scan (connect a folder first)' })).toBeDisabled();
     expect(screen.getByText('Connect a project folder to scan')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create New Collection' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create New Command' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Pick a project folder' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Collections/)).not.toBeInTheDocument();
   });
 
-  it('reflects collections created through the engine without connecting a folder first', async () => {
+  it('reflects commands created through the engine without connecting a folder first', async () => {
     const engine = installTestBridge(createInMemoryEngine());
     engine.create('frontend', ['obra/react-patterns']);
 
     renderWithProviders(<App />);
 
-    expect(await screen.findByRole('listitem', { name: 'Collection frontend' })).toBeInTheDocument();
+    expect(await screen.findByRole('listitem', { name: 'Command frontend' })).toBeInTheDocument();
   });
 
   it('always shows Discover search without connecting a folder', async () => {
@@ -66,7 +67,7 @@ describe('App', () => {
     renderWithProviders(<App />);
 
     expect(screen.queryByRole('tab', { name: 'Inbox' })).not.toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'Collections' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Commands' })).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Add obra/react-patterns to frontend' })
     ).toBeInTheDocument();
@@ -110,11 +111,11 @@ describe('App', () => {
 
     renderWithProviders(<App />);
 
-    expect(await screen.findByText('No collections yet')).toBeInTheDocument();
+    expect(await screen.findByText('No commands yet')).toBeInTheDocument();
     expect(screen.queryByText('tdd')).not.toBeInTheDocument();
 
     await clickPickFolder();
-    await userEvent.click(screen.getByRole('tab', { name: 'Collections' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Commands' }));
 
     expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
     expect(screen.getByText('tdd')).toBeInTheDocument();
