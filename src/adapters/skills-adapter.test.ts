@@ -66,27 +66,57 @@ describe('SkillsAdapter', () => {
   });
 
   describe('install', () => {
-    it('installs a skill by running npx skills add in the project root', async () => {
-      vi.mocked(execa).mockResolvedValue({} as never);
-
-      const adapter = new SkillsAdapter();
-      const result = await adapter.install('obra/react-patterns');
-
-      expect(isOk(result)).toBe(true);
-      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/react-patterns'], {
-        cwd: process.cwd(),
-      });
-    });
-
-    it('runs npx skills add with cwd set to a given project root', async () => {
+    it('installs a skill for cursor with cwd = project root and the cursor agent flag', async () => {
       vi.mocked(execa).mockResolvedValue({} as never);
 
       const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
-      const result = await adapter.install('obra/react-patterns');
+      const result = await adapter.install('obra/x', 'cursor');
 
       expect(isOk(result)).toBe(true);
-      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/react-patterns'], {
+      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', 'cursor', '-y'], {
         cwd: '/tmp/proj',
+      });
+    });
+
+    it('rewrites owner/repo/skill ids to owner/repo@skill so npx can find nested skills', async () => {
+      vi.mocked(execa).mockResolvedValue({} as never);
+
+      const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
+      const result = await adapter.install('anthropics/skills/frontend-design', 'claude');
+
+      expect(isOk(result)).toBe(true);
+      expect(execa).toHaveBeenCalledWith(
+        'npx',
+        ['skills', 'add', 'anthropics/skills@frontend-design', '--agent', 'claude-code', '-y'],
+        { cwd: '/tmp/proj' }
+      );
+    });
+
+    it('installs with cwd override when dest is passed', async () => {
+      vi.mocked(execa).mockResolvedValue({} as never);
+
+      const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
+      const result = await adapter.install('obra/x', 'cursor', { cwd: '/tmp/other-project' });
+
+      expect(isOk(result)).toBe(true);
+      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', 'cursor', '-y'], {
+        cwd: '/tmp/other-project',
+      });
+    });
+
+    it.each([
+      ['claude', 'claude-code'],
+      ['windsurf', 'windsurf'],
+      ['agents', 'universal'],
+    ] as const)('installs for %s with --agent %s', async (ide, agent) => {
+      vi.mocked(execa).mockResolvedValue({} as never);
+
+      const adapter = new SkillsAdapter();
+      const result = await adapter.install('obra/x', ide);
+
+      expect(isOk(result)).toBe(true);
+      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', agent, '-y'], {
+        cwd: process.cwd(),
       });
     });
 
@@ -94,7 +124,7 @@ describe('SkillsAdapter', () => {
       vi.mocked(execa).mockRejectedValue(new Error('npx: command failed with exit code 1'));
 
       const adapter = new SkillsAdapter();
-      const result = await adapter.install('obra/react-patterns');
+      const result = await adapter.install('obra/react-patterns', 'cursor');
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {

@@ -9,13 +9,13 @@ export function runDelete(engine: ICollectionEngine, name: string): CommandOutco
     return { message: result.error.message, isError: true };
   }
 
-  return { message: `Deleted collection '${name}'`, isError: false };
+  return { message: `Deleted command '${name}'`, isError: false };
 }
 
 export function registerDeleteCommand(program: Command, engine: ICollectionEngine): void {
   program
     .command('delete <name>')
-    .description('Delete a collection')
+    .description('Delete a command')
     .action((name: string) => {
       printOutcome(runDelete(engine, name));
     });

@@ -1,0 +1,103 @@
+/*
+ * Semantic color tokens. Brand primitives live in brand.css.
+ * Light and dark both use the same dark purple from brand.css.
+ * Change values here to restyle landing + GUI together.
+ */
+
+:root {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.19 0.03 var(--brand-hue));
+  --card: oklch(0.99 0.002 var(--brand-hue));
+  --card-foreground: oklch(0.19 0.03 var(--brand-hue));
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.19 0.03 var(--brand-hue));
+  --primary: oklch(0.32 0.045 var(--brand-hue));
+  --primary-foreground: oklch(0.99 0.002 var(--brand-hue));
+  --secondary: oklch(0.96 0.004 var(--brand-hue));
+  --secondary-foreground: oklch(0.32 0.045 var(--brand-hue));
+  --muted: oklch(0.96 0.004 var(--brand-hue));
+  --muted-foreground: oklch(0.48 0.02 var(--brand-hue));
+  --accent: oklch(0.94 0.008 var(--brand-hue));
+  --accent-foreground: oklch(0.32 0.045 var(--brand-hue));
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: #ffffff;
+  --border: oklch(0.9 0.006 var(--brand-hue));
+  --input: oklch(0.9 0.006 var(--brand-hue));
+  --ring: oklch(0.32 0.045 var(--brand-hue) / 40%);
+  --radius: 0.9rem;
+  --radius-hover: 0.375rem;
+
+  --glass-bg: 0 0 0 / 0.03;
+  --glass-bg-strong: 0 0 0 / 0.05;
+  --glass-border: 0 0 0 / 0.08;
+  --glass-highlight: 255 255 255 / 0.6;
+  --brand: var(--color-brand);
+  --brand-foreground: var(--color-brand-foreground);
+  --accent-blue: var(--brand);
+  --accent-blue-foreground: var(--brand-foreground);
+  --glow: var(--color-brand-rgb) / 0.18;
+  --success: #10b981;
+  --emerald: var(--success);
+
+  /* Kiro-style word hover: dark purple-grey chip, squared corners */
+  --hover: oklch(0.24 0.03 var(--brand-hue));
+  --hover-foreground: oklch(0.96 0.002 var(--brand-hue));
+
+  --surface: var(--background);
+  --surface-raised: rgb(var(--glass-bg-strong));
+  --surface-soft: rgb(var(--glass-bg));
+  --ink: var(--foreground);
+  --muted-ink: var(--muted-foreground);
+  --line: rgb(var(--glass-border));
+  --line-strong: color-mix(in srgb, var(--foreground) 18%, transparent);
+  --highlight: var(--brand);
+
+  --font-sans: 'Geist', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.09 0 0);
+  --foreground: oklch(0.96 0.002 var(--brand-hue));
+  --card: oklch(0.12 0.004 var(--brand-hue));
+  --card-foreground: oklch(0.96 0.002 var(--brand-hue));
+  --popover: oklch(0.12 0.004 var(--brand-hue));
+  --popover-foreground: oklch(0.96 0.002 var(--brand-hue));
+  --primary: oklch(0.32 0.045 var(--brand-hue));
+  --primary-foreground: oklch(0.99 0.002 var(--brand-hue));
+  --secondary: oklch(0.16 0.006 var(--brand-hue));
+  --secondary-foreground: oklch(0.96 0.002 var(--brand-hue));
+  --muted: oklch(0.16 0.006 var(--brand-hue));
+  --muted-foreground: oklch(0.63 0.015 var(--brand-hue));
+  --accent: oklch(0.19 0.01 var(--brand-hue));
+  --accent-foreground: oklch(0.96 0.002 var(--brand-hue));
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: #ffffff;
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.32 0.045 var(--brand-hue) / 50%);
+
+  --glass-bg: 255 255 255 / 0.04;
+  --glass-bg-strong: 255 255 255 / 0.07;
+  --glass-border: 255 255 255 / 0.1;
+  --glass-highlight: 255 255 255 / 0.14;
+  --brand: var(--color-brand);
+  --brand-foreground: var(--color-brand-foreground);
+  --accent-blue: var(--brand);
+  --accent-blue-foreground: var(--brand-foreground);
+  --glow: var(--color-brand-rgb) / 0.28;
+
+  --hover: oklch(0.24 0.03 var(--brand-hue));
+  --hover-foreground: oklch(0.96 0.002 var(--brand-hue));
+
+  --surface: var(--background);
+  --surface-raised: rgb(var(--glass-bg-strong));
+  --surface-soft: rgb(var(--glass-bg));
+  --ink: var(--foreground);
+  --muted-ink: var(--muted-foreground);
+  --line: rgb(var(--glass-border));
+  --line-strong: color-mix(in srgb, var(--foreground) 18%, transparent);
+  --highlight: var(--brand);
+}

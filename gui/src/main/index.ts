@@ -22,16 +22,25 @@ function currentEngine(): ICollectionEngine {
   return engine;
 }
 
-ipcMain.handle(IPC_CHANNELS.getProjectRoot, () => projectRoot);
-ipcMain.handle(IPC_CHANNELS.pickProjectFolder, async () => {
+async function pickDirectory(): Promise<string | null> {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   if (result.canceled || result.filePaths.length === 0) {
     return null;
   }
-  projectRoot = result.filePaths[0];
+  return result.filePaths[0];
+}
+
+ipcMain.handle(IPC_CHANNELS.getProjectRoot, () => projectRoot);
+ipcMain.handle(IPC_CHANNELS.pickProjectFolder, async () => {
+  const picked = await pickDirectory();
+  if (picked === null) {
+    return null;
+  }
+  projectRoot = picked;
   engine = createEngine(projectRoot);
   return projectRoot;
 });
+ipcMain.handle(IPC_CHANNELS.pickDestinationFolder, () => pickDirectory());
 
 ipcMain.handle(IPC_CHANNELS.listCollections, () => currentEngine().list());
 ipcMain.handle(IPC_CHANNELS.createCollection, (_event, name: string, skillIds: string[]) =>
@@ -40,17 +49,24 @@ ipcMain.handle(IPC_CHANNELS.createCollection, (_event, name: string, skillIds: s
 ipcMain.handle(IPC_CHANNELS.removeSkillFromCollection, (_event, name: string, skillId: string) =>
   currentEngine().removeSkill(name, skillId)
 );
-ipcMain.handle(IPC_CHANNELS.exportCollections, (_event, names: string[], targetIDE: IDE) =>
-  currentEngine().export(names, targetIDE)
+ipcMain.handle(
+  IPC_CHANNELS.exportCommand,
+  (_event, name: string, targetIDE: IDE, opts?: { replace?: boolean; dest?: string }) =>
+    currentEngine().exportCommand(name, targetIDE, opts)
 );
 ipcMain.handle(IPC_CHANNELS.searchSkills, (_event, query: string) => discovery.search(query));
 ipcMain.handle(IPC_CHANNELS.browseSkills, (_event, view: BrowseView) => discovery.browse(view));
 ipcMain.handle(IPC_CHANNELS.listInbox, () => currentEngine().inbox());
+ipcMain.handle(IPC_CHANNELS.listSkills, () => (projectRoot ? currentEngine().skills() : []));
 ipcMain.handle(IPC_CHANNELS.addToInbox, (_event, skillId: string) => currentEngine().addToInbox(skillId));
-ipcMain.handle(IPC_CHANNELS.fileToCollection, (_event, skillId: string, collectionName: string) =>
-  currentEngine().fileToCollection(skillId, collectionName)
+ipcMain.handle(IPC_CHANNELS.addSkill, (_event, name: string, skillId: string) =>
+  currentEngine().addSkill(name, skillId)
 );
 ipcMain.handle(IPC_CHANNELS.deleteCollection, (_event, name: string) => currentEngine().delete(name));
+ipcMain.handle(IPC_CHANNELS.scan, () => currentEngine().scan());
+ipcMain.handle(IPC_CHANNELS.install, (_event, skillId: string, targetIDE: IDE, opts?: { dest?: string }) =>
+  currentEngine().install(skillId, targetIDE, opts)
+);
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -59,6 +75,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 640,
     show: false,
+    title: 'skil',
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
     webPreferences: {

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .contextkit/
+.skil/
 *.log
 .DS_Store
 .env
@@ -10,7 +11,17 @@ dist/
 .vercel
 coverage/
 *.tsbuildinfo
+web/.next/
+web/out/
 
 #notes
 note.txt
 tasks/
+
+# local fixtures
+TESTING FOLDER/
+skills-lock.json
+tasks/
+
+# ui examples
+ui-example/

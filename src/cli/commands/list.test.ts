@@ -16,7 +16,7 @@ describe('runList', () => {
     const outcome = runList(engine);
 
     expect(outcome.isError).toBe(false);
-    expect(outcome.message).toBe('No collections yet');
+    expect(outcome.message).toBe('No commands yet');
   });
 
   it('lists collection names and skill counts', () => {

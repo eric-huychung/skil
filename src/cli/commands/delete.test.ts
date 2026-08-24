@@ -10,23 +10,24 @@ function buildEngine(): CollectionEngine {
 }
 
 describe('runDelete', () => {
-  it('deletes a collection by name', () => {
+  it('deletes a command by name', () => {
     const engine = buildEngine();
     engine.create('frontend', ['obra/react-patterns']);
 
     const outcome = runDelete(engine, 'frontend');
 
     expect(outcome.isError).toBe(false);
-    expect(outcome.message).toContain('frontend');
+    expect(outcome.message).toBe("Deleted command 'frontend'");
     expect(engine.list()).toEqual([]);
   });
 
-  it('reports an error for a missing collection', () => {
+  it('reports an error for a missing command', () => {
     const engine = buildEngine();
 
     const outcome = runDelete(engine, 'missing');
 
     expect(outcome.isError).toBe(true);
-    expect(outcome.message).toContain("Collection 'missing' not found");
+    expect(outcome.message).toContain("Command 'missing' not found");
+    expect(outcome.message.toLowerCase()).not.toContain('collection');
   });
 });

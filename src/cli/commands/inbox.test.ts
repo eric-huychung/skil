@@ -57,7 +57,7 @@ describe('runInboxAdd', () => {
 });
 
 describe('runInboxFile', () => {
-  it('files an Inbox ID into a named collection', () => {
+  it('files an Inbox ID into a named command', () => {
     const engine = buildEngine();
     engine.create('frontend', []);
     engine.addToInbox('obra/react-patterns');
@@ -71,13 +71,14 @@ describe('runInboxFile', () => {
     expect(engine.list()[0]?.skills).toEqual(['obra/react-patterns']);
   });
 
-  it('reports an error when the collection is missing', () => {
+  it('reports an error when the command is missing', () => {
     const engine = buildEngine();
     engine.addToInbox('obra/react-patterns');
 
     const outcome = runInboxFile(engine, 'obra/react-patterns', 'frontend');
 
     expect(outcome.isError).toBe(true);
-    expect(outcome.message).toContain("Collection 'frontend' not found");
+    expect(outcome.message).toContain("Command 'frontend' not found");
+    expect(outcome.message.toLowerCase()).not.toContain('collection');
   });
 });

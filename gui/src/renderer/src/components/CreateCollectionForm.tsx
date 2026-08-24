@@ -59,7 +59,7 @@ export default function CreateCollectionForm({ onCreated }: { onCreated?: (colle
         onClick={() => setOpen(true)}
       >
         <Plus size={15} weight="regular" aria-hidden="true" />
-        Create New Collection
+        Create New Command
       </button>
 
       {open && (
@@ -73,7 +73,7 @@ export default function CreateCollectionForm({ onCreated }: { onCreated?: (colle
             onKeyDown={handleDialogKeyDown}
           >
             <p className="eyebrow">Workspace</p>
-            <h2 id="create-collection-title">Create collection</h2>
+            <h2 id="create-collection-title">Create command</h2>
             <form onSubmit={handleSubmit} className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">
                 <label htmlFor="collection-name" className="text-sm font-medium">
@@ -99,7 +99,7 @@ export default function CreateCollectionForm({ onCreated }: { onCreated?: (colle
                   Cancel
                 </button>
                 <button type="submit" className={`primary-button ${FOCUS_RING}`}>
-                  Create collection
+                  Create command
                 </button>
               </div>
             </form>

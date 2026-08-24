@@ -10,13 +10,13 @@ function buildEngine(): CollectionEngine {
 }
 
 describe('runCreate', () => {
-  it('creates a collection and reports the skill count', () => {
+  it('creates a command and reports the skill count', () => {
     const engine = buildEngine();
 
     const outcome = runCreate(engine, 'frontend', ['obra/react-patterns']);
 
     expect(outcome.isError).toBe(false);
-    expect(outcome.message).toBe("Created collection 'frontend' with 1 skill");
+    expect(outcome.message).toBe("Created command 'frontend' with 1 skill");
     expect(engine.list().map((c) => c.name)).toEqual(['frontend']);
   });
 
@@ -25,17 +25,39 @@ describe('runCreate', () => {
 
     const outcome = runCreate(engine, 'empty', []);
 
-    expect(outcome.message).toBe("Created collection 'empty' with 0 skills");
+    expect(outcome.message).toBe("Created command 'empty' with 0 skills");
   });
 
-  it('reports an error for a duplicate collection name', () => {
+  it('reports an error for a duplicate command name', () => {
     const engine = buildEngine();
     engine.create('frontend', []);
 
     const outcome = runCreate(engine, 'frontend', []);
 
     expect(outcome.isError).toBe(true);
-    expect(outcome.message).toContain("Collection 'frontend' already exists");
+    expect(outcome.message).toContain("Command 'frontend' already exists");
+    expect(outcome.message.toLowerCase()).not.toContain('collection');
+  });
+
+  it('strips a leading slash so /build is stored as build', () => {
+    const engine = buildEngine();
+
+    const outcome = runCreate(engine, '/build', []);
+
+    expect(outcome.isError).toBe(false);
+    expect(outcome.message).toContain("command 'build'");
+    expect(engine.list().map((c) => c.name)).toEqual(['build']);
+  });
+
+  it('rejects creating a command named inbox', () => {
+    const engine = buildEngine();
+
+    const outcome = runCreate(engine, 'inbox', []);
+
+    expect(outcome.isError).toBe(true);
+    expect(outcome.message.toLowerCase()).toMatch(/inbox/);
+    expect(outcome.message.toLowerCase()).not.toContain('collection');
+    expect(engine.list()).toEqual([]);
   });
 
   it('stores a command template when provided', () => {

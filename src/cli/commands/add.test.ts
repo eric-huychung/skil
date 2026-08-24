@@ -27,6 +27,6 @@ describe('runAdd', () => {
     const outcome = runAdd(engine, 'missing', 'obra/react-patterns');
 
     expect(outcome.isError).toBe(true);
-    expect(outcome.message).toContain("Collection 'missing' not found");
+    expect(outcome.message).toContain("Command 'missing' not found");
   });
 });

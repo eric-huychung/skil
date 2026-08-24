@@ -19,6 +19,31 @@ interface SkillsListResponse {
   data: SkillsShHit[];
 }
 
+/**
+ * vercel-labs/skills `--agent` names. `claude` is `claude-code`.
+ * `agents` has no vercel name; `universal` is the documented agent that
+ * writes `.agents/skills/`.
+ */
+const SKILLS_ADD_AGENT: Record<IDE, string> = {
+  cursor: 'cursor',
+  claude: 'claude-code',
+  windsurf: 'windsurf',
+  agents: 'universal',
+};
+
+/**
+ * skills.sh ids are often `owner/repo/skill`. `npx skills add owner/repo/skill`
+ * treats the third segment as a repo-root folder and reports "No skills found"
+ * when the skill lives under `skills/`. The CLI's `owner/repo@skill` form works.
+ */
+function toSkillsAddSource(skillId: string): string {
+  const parts = skillId.split('/').filter(Boolean);
+  if (parts.length >= 3) {
+    return `${parts[0]}/${parts[1]}@${parts[parts.length - 1]}`;
+  }
+  return skillId;
+}
+
 function mapSkillsShHit(hit: SkillsShHit): Skill {
   return {
     id: hit.id,
@@ -37,7 +62,8 @@ function mapSkillsShHit(hit: SkillsShHit): Skill {
  * backend (see `src/backend/skills-proxy.ts`), which authenticates to
  * skills.sh with a Vercel OIDC token — so no API key is ever needed here.
  * `install`/`convert` still shell out locally with `cwd` set to the
- * project root; skills.sh has no HTTP endpoint for either. Tests use
+ * project root; skills.sh has no HTTP endpoint for either. `install`
+ * picks the `--agent` flag from the target IDE. Tests use
  * InMemorySkillsAdapter instead so CollectionEngine tests never hit the
  * network or spawn subprocesses.
  */
@@ -71,12 +97,21 @@ export class SkillsAdapter implements ISkillsAdapter {
     }
   }
 
-  async install(skillId: string): Promise<Result<void>> {
+  async install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }): Promise<Result<void>> {
     try {
-      await execa('npx', ['skills', 'add', skillId], { cwd: this.projectRoot });
+      await execa(
+        'npx',
+        ['skills', 'add', toSkillsAddSource(skillId), '--agent', SKILLS_ADD_AGENT[targetIDE], '-y'],
+        { cwd: opts?.cwd ?? this.projectRoot }
+      );
       return ok(undefined);
     } catch (error) {
-      return err(new Error(`Failed to install skill '${skillId}': ${(error as Error).message}`));
+      const message = error instanceof Error ? error.message : String(error);
+      const stderr =
+        typeof error === 'object' && error && 'stderr' in error ? String((error as { stderr: unknown }).stderr).trim() : '';
+      return err(
+        new Error(`Failed to install skill '${skillId}': ${message}${stderr ? `\n${stderr}` : ''}`)
+      );
     }
   }
 

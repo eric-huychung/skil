@@ -13,10 +13,22 @@ import { BridgeProvider } from './bridge-context';
  * Builds a CollectionEngine backed by the same in-memory adapters the
  * CLI/engine tests use, rather than hand-rolled component mocks. Component
  * tests exercise the real business logic; only the file system, config, and
- * skills.sh boundaries are faked.
+ * skills.sh boundaries are faked. Return `fs` when a test needs to seed
+ * SKILL.md files for scan.
  */
+export function createInMemoryWorkspace(): {
+  engine: ICollectionEngine;
+  fs: InMemoryFileSystemAdapter;
+} {
+  const fs = new InMemoryFileSystemAdapter();
+  return {
+    fs,
+    engine: new CollectionEngine(fs, new InMemoryConfigAdapter(), new InMemorySkillsAdapter()),
+  };
+}
+
 export function createInMemoryEngine(): ICollectionEngine {
-  return new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+  return createInMemoryWorkspace().engine;
 }
 
 /** Default path a test Pick/Change click binds when `nextPick` is omitted. */
@@ -30,6 +42,11 @@ export type TestBridgeOptions = {
    * Omitted → bind `DEFAULT_TEST_PROJECT_ROOT`. `null` → user canceled.
    */
   nextPick?: string | null;
+  /**
+   * What the next dest-only folder pick returns (install/export without a bind).
+   * Omitted → `/tmp/test-project`. `null` → user canceled.
+   */
+  nextDestination?: string | null;
 };
 
 /**
@@ -45,12 +62,13 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
     listCollections: async () => engine.list(),
     createCollection: async (name, skillIds) => engine.create(name, skillIds),
     removeSkillFromCollection: async (name, skillId) => engine.removeSkill(name, skillId),
-    exportCollections: async (names, targetIDE) => engine.export(names, targetIDE),
+    exportCommand: async (name, targetIDE, opts) => engine.exportCommand(name, targetIDE, opts),
     searchSkills: async (query) => engine.search(query),
     browseSkills: async (view) => engine.browse(view),
     listInbox: async () => engine.inbox(),
+    listSkills: async () => engine.skills(),
     addToInbox: async (skillId) => engine.addToInbox(skillId),
-    fileToCollection: async (skillId, collectionName) => engine.fileToCollection(skillId, collectionName),
+    addSkill: async (name, skillId) => engine.addSkill(name, skillId),
     deleteCollection: async (name) => engine.delete(name),
     getProjectRoot: async () => projectRoot,
     pickProjectFolder: async () => {
@@ -58,6 +76,12 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
       projectRoot = options.nextPick ?? DEFAULT_TEST_PROJECT_ROOT;
       return projectRoot;
     },
+    pickDestinationFolder: async () => {
+      if (options.nextDestination === null) return null;
+      return options.nextDestination ?? DEFAULT_TEST_PROJECT_ROOT;
+    },
+    scan: async () => engine.scan(),
+    install: async (skillId, targetIDE, opts) => engine.install(skillId, targetIDE, opts),
   };
 }
 

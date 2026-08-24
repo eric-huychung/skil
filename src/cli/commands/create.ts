@@ -19,7 +19,7 @@ export function runCreate(engine: ICollectionEngine, name: string, skillIds: str
 
   const count = result.value.skills.length;
   return {
-    message: `Created collection '${name}' with ${count} skill${count === 1 ? '' : 's'}`,
+    message: `Created command '${result.value.name}' with ${count} skill${count === 1 ? '' : 's'}`,
     isError: false,
   };
 }
@@ -27,7 +27,7 @@ export function runCreate(engine: ICollectionEngine, name: string, skillIds: str
 export function registerCreateCommand(program: Command, engine: ICollectionEngine): void {
   program
     .command('create <name>')
-    .description('Create a new skill collection')
+    .description('Create a new command (leading / is stripped: /build → build)')
     .option('--skills <ids>', 'comma-separated skill IDs', '')
     .option('--command <cmd>', 'shell command template, runnable later via "contextkit run"')
     .action((name: string, options: { skills: string; command?: string }) => {

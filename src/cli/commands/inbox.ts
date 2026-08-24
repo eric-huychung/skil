@@ -25,13 +25,13 @@ export function runInboxAdd(engine: ICollectionEngine, skillId: string): Command
   return { message: `Added '${skillId}' to Inbox`, isError: false };
 }
 
-export function runInboxFile(engine: ICollectionEngine, skillId: string, collection: string): CommandOutcome {
-  const result = engine.fileToCollection(skillId, collection);
+export function runInboxFile(engine: ICollectionEngine, skillId: string, command: string): CommandOutcome {
+  const result = engine.file(skillId, command);
   if (!isOk(result)) {
     return { message: result.error.message, isError: true };
   }
 
-  return { message: `Filed '${skillId}' into '${collection}'`, isError: false };
+  return { message: `Filed '${skillId}' onto '${result.value.name}'`, isError: false };
 }
 
 export function registerInboxCommand(program: Command, engine: ICollectionEngine): void {
@@ -50,9 +50,9 @@ export function registerInboxCommand(program: Command, engine: ICollectionEngine
     });
 
   inbox
-    .command('file <skillId> <collection>')
-    .description('Move an Inbox ID into an existing collection')
-    .action((skillId: string, collection: string) => {
-      printOutcome(runInboxFile(engine, skillId, collection));
+    .command('file <skillId> <command>')
+    .description('Move an Inbox ID onto an existing command')
+    .action((skillId: string, command: string) => {
+      printOutcome(runInboxFile(engine, skillId, command));
     });
 }

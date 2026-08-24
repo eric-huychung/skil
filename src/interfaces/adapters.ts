@@ -2,11 +2,11 @@ import type { Result } from '../core/result.js';
 import type { BrowseView, Config, IDE, Skill } from '../types/index.js';
 
 /**
- * Wraps state-file I/O (read/write JSON atomically).
+ * Wraps project-local I/O: JSON state, SKILL.md discovery, and utf-8 files.
  *
  * This is the primary test seam for isolating CollectionEngine from the
- * real file system. Tests mock this interface; only the real implementation
- * (RealFileSystemAdapter) touches disk.
+ * real file system. Tests use InMemoryFileSystemAdapter; only
+ * RealFileSystemAdapter touches disk.
  *
  * Previously also owned symlink creation/removal and IDE detection for
  * activate/deactivate; those methods were removed along with that feature
@@ -24,6 +24,32 @@ export interface IFileSystemAdapter {
    * Returns an error Result if the write fails.
    */
   writeJSON<T>(path: string, data: T): Result<void>;
+
+  /**
+   * Walks `root` and returns folders that contain a file named `SKILL.md`.
+   * Paths are relative to the adapter root. Missing root → ok([]).
+   * A file at `root` is an error. A parent is a skill only if it has its own SKILL.md.
+   */
+  findSkillFolders(root: string): Result<string[]>;
+
+  /**
+   * Reads a file as utf-8 text. Relative paths resolve under the adapter root;
+   * absolute paths stay absolute.
+   */
+  readFile(path: string): Result<string>;
+
+  /**
+   * Writes utf-8 text to `path`, creating parent directories as needed.
+   * Relative paths resolve under the adapter root; absolute paths stay absolute.
+   */
+  writeFile(path: string, data: string): Result<void>;
+
+  /**
+   * Copies every file under `from` into `to`, creating parent dirs.
+   * Missing source or a file-as-source is an error. Destination files
+   * are overwritten. Engine callers skip when dest already has SKILL.md.
+   */
+  copyDir(from: string, to: string): Result<void>;
 }
 
 /**
@@ -52,8 +78,12 @@ export interface ISkillsAdapter {
   /** Fetches the skills.sh leaderboard for `view` (all-time or trending). */
   browse(view: BrowseView): Promise<Result<Skill[]>>;
 
-  /** Installs a skill by ID via `npx skills add`. */
-  install(skillId: string): Promise<Result<void>>;
+  /**
+   * Installs a skill by ID via `npx skills add`. The agent/IDE flag is
+   * chosen inside the adapter from `targetIDE` — callers do not pass flags.
+   * `cwd` overrides the adapter's project root for this call only.
+   */
+  install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }): Promise<Result<void>>;
 
   /** Converts a skill to a target IDE's format via `skillsmith`. */
   convert(skillId: string, targetIDE: IDE): Promise<Result<void>>;

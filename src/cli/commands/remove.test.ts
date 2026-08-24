@@ -27,6 +27,6 @@ describe('runRemove', () => {
     const outcome = runRemove(engine, 'missing', 'obra/react-patterns');
 
     expect(outcome.isError).toBe(true);
-    expect(outcome.message).toContain("Collection 'missing' not found");
+    expect(outcome.message).toContain("Command 'missing' not found");
   });
 });

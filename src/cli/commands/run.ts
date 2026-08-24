@@ -32,8 +32,8 @@ export async function runRun(engine: ICollectionEngine, name: string, executor: 
 
 export function registerRunCommand(program: Command, engine: ICollectionEngine, executor: CommandExecutor = shellExecutor): void {
   program
-    .command('run <collection>')
-    .description("Run a collection's stored command template")
+    .command('run <name>')
+    .description("Run a command's leftover stored shell template")
     .action(async (name: string) => {
       printOutcome(await runRun(engine, name, executor));
     });

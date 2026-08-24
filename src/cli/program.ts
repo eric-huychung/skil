@@ -13,18 +13,19 @@ import { registerRunCommand } from './commands/run.js';
 import { registerExportCommand } from './commands/export.js';
 import { registerInboxCommand } from './commands/inbox.js';
 import { registerDeleteCommand } from './commands/delete.js';
+import { registerScanCommand } from './commands/scan.js';
 
 /**
- * Builds the contextkit CLI program. Commands are thin: they parse args,
+ * Builds the skil CLI program. Commands are thin: they parse args,
  * call the injected engine, and format the result. All business logic
- * lives in the engine.
+ * lives in the engine. The `contextkit` bin is an alias of the same entry.
  */
 export function createProgram(engine: ICollectionEngine): Command {
   const program = new Command();
 
   program
-    .name('contextkit')
-    .description('CLI-first AI skill collection manager for Cursor, Claude, and Windsurf')
+    .name('skil')
+    .description('skil: map + inbox + skill deploy. Group skills onto commands, then install or export.')
     .version(CONTEXTKIT_VERSION);
 
   registerCreateCommand(program, engine);
@@ -39,6 +40,7 @@ export function createProgram(engine: ICollectionEngine): Command {
   registerExportCommand(program, engine);
   registerInboxCommand(program, engine);
   registerDeleteCommand(program, engine);
+  registerScanCommand(program, engine);
 
   return program;
 }

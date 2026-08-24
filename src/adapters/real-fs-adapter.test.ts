@@ -131,4 +131,145 @@ describe('RealFileSystemAdapter', () => {
       }
     });
   });
+
+  describe('findSkillFolders', () => {
+    beforeEach(() => {
+      adapter = new RealFileSystemAdapter(tmpDir);
+    });
+
+    it('finds a nested skill folder and does not treat the parent as a skill', () => {
+      mkdirSync(join(tmpDir, 'a', 'b'), { recursive: true });
+      writeFileSync(join(tmpDir, 'a', 'b', 'SKILL.md'), '# nested');
+
+      const result = adapter.findSkillFolders('.');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual(['a/b']);
+      }
+    });
+
+    it('treats a parent as a skill only when it has its own SKILL.md', () => {
+      mkdirSync(join(tmpDir, 'a', 'b'), { recursive: true });
+      writeFileSync(join(tmpDir, 'a', 'SKILL.md'), '# parent');
+      writeFileSync(join(tmpDir, 'a', 'b', 'SKILL.md'), '# nested');
+
+      const result = adapter.findSkillFolders('.');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual(['a', 'a/b']);
+      }
+    });
+
+    it('returns an empty list when the root is missing', () => {
+      const result = adapter.findSkillFolders('.cursor/skills');
+
+      expect(result).toEqual({ ok: true, value: [] });
+    });
+
+    it('returns an error when the root is a file', () => {
+      const filePath = join(tmpDir, 'not-a-dir');
+      writeFileSync(filePath, 'nope');
+
+      const result = adapter.findSkillFolders('not-a-dir');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('not-a-dir');
+      }
+    });
+
+    it('returns paths relative to the adapter root when walking an IDE skills dir', () => {
+      mkdirSync(join(tmpDir, '.cursor', 'skills', 'tdd'), { recursive: true });
+      writeFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'SKILL.md'), '# tdd');
+
+      const result = adapter.findSkillFolders('.cursor/skills');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual(['.cursor/skills/tdd']);
+      }
+    });
+
+    it('walks .claude, .windsurf, and .agents skill trees the same way as .cursor', () => {
+      for (const tree of ['.claude', '.windsurf', '.agents'] as const) {
+        mkdirSync(join(tmpDir, tree, 'skills', 'ui'), { recursive: true });
+        writeFileSync(join(tmpDir, tree, 'skills', 'ui', 'SKILL.md'), `# ${tree}`);
+      }
+
+      adapter = new RealFileSystemAdapter(tmpDir);
+
+      expect(adapter.findSkillFolders('.claude/skills')).toEqual({
+        ok: true,
+        value: ['.claude/skills/ui'],
+      });
+      expect(adapter.findSkillFolders('.windsurf/skills')).toEqual({
+        ok: true,
+        value: ['.windsurf/skills/ui'],
+      });
+      expect(adapter.findSkillFolders('.agents/skills')).toEqual({
+        ok: true,
+        value: ['.agents/skills/ui'],
+      });
+    });
+  });
+
+  describe('readFile / writeFile', () => {
+    beforeEach(() => {
+      adapter = new RealFileSystemAdapter(tmpDir);
+    });
+
+    it('writes and reads a relative path under the adapter root', () => {
+      const writeResult = adapter.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      const readResult = adapter.readFile('.cursor/skills/tdd/SKILL.md');
+
+      expect(isOk(writeResult)).toBe(true);
+      expect(readResult).toEqual({ ok: true, value: '# tdd\n' });
+      expect(readFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'SKILL.md'), 'utf-8')).toBe('# tdd\n');
+    });
+
+    it('does not prefix an absolute path with the root', () => {
+      const outside = mkdtempSync(join(tmpdir(), 'contextkit-outside-'));
+      try {
+        const absolutePath = join(outside, 'SKILL.md');
+        adapter.writeFile(absolutePath, '# outside\n');
+
+        expect(adapter.readFile(absolutePath)).toEqual({ ok: true, value: '# outside\n' });
+        expect(readdirSync(tmpDir)).toEqual([]);
+      } finally {
+        rmSync(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('returns an error when the file does not exist', () => {
+      const result = adapter.readFile('.cursor/skills/tdd/SKILL.md');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('SKILL.md');
+      }
+    });
+  });
+
+  describe('copyDir', () => {
+    beforeEach(() => {
+      adapter = new RealFileSystemAdapter(tmpDir);
+    });
+
+    it('copies the folder tree under the adapter root', () => {
+      mkdirSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'references'), { recursive: true });
+      writeFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'SKILL.md'), '# tdd\n');
+      writeFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'references', 'notes.md'), '# notes\n');
+
+      const result = adapter.copyDir('.cursor/skills/tdd', '.claude/skills/tdd');
+
+      expect(isOk(result)).toBe(true);
+      expect(readFileSync(join(tmpDir, '.claude', 'skills', 'tdd', 'SKILL.md'), 'utf-8')).toBe('# tdd\n');
+      expect(readFileSync(join(tmpDir, '.claude', 'skills', 'tdd', 'references', 'notes.md'), 'utf-8')).toBe(
+        '# notes\n'
+      );
+      expect(readFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'SKILL.md'), 'utf-8')).toBe('# tdd\n');
+    });
+  });
 });

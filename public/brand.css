@@ -1,0 +1,17 @@
+/*
+ * Brand primitives. Change this file to rebrand.
+ * The Next.js landing (`web/`) and the desktop GUI both import it.
+ * Dark mode uses the same dark purple as light — do not lighten it.
+ */
+
+:root {
+  --brand-hue: 292.2;
+  --color-brand: #8b5cf6;
+  --color-brand-foreground: #ffffff;
+  --color-brand-rgb: 139 92 246;
+}
+
+.dark {
+  --color-brand: #8b5cf6;
+  --color-brand-rgb: 139 92 246;
+}

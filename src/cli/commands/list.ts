@@ -6,7 +6,7 @@ import { printOutcome, type CommandOutcome } from '../output.js';
 export function runList(engine: ICollectionEngine): CommandOutcome {
   const collections = engine.list();
   if (collections.length === 0) {
-    return { message: 'No collections yet', isError: false, isInfo: true };
+    return { message: 'No commands yet', isError: false, isInfo: true };
   }
 
   const table = new Table({ head: ['Name', 'Skills', 'Command'] });
@@ -20,7 +20,7 @@ export function runList(engine: ICollectionEngine): CommandOutcome {
 export function registerListCommand(program: Command, engine: ICollectionEngine): void {
   program
     .command('list')
-    .description('List all skill collections')
+    .description('List all commands')
     .action(() => {
       printOutcome(runList(engine));
     });

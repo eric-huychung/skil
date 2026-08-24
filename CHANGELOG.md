@@ -4,11 +4,32 @@ All notable changes to ContextKit are documented here. Versions follow [Semantic
 
 ## [Unreleased]
 
+### Fixed
+- GUI Export with no connected folder asks for a destination every time. It no longer reuses the first pick. Replace still uses the dest from that same export.
+
 ### Added
+- Engine `exportCommand` writes our stamped command file (`generated_by: skil`) into the target IDE dir. Unstamped existing files are left alone unless `replace: true`. Windsurf writes `.windsurf/workflows/`.
 - Discover: click a skill name to open a details dialog (route, repo, GitHub, skills.sh page, installs) from skills.sh listing fields already on the browse/search payload
+- `skil` CLI bin (keeps `contextkit` as an alias)
 
 ### Changed
-- GUI layout now follows the example desktop shell: topbar, rail tabs (Collections / Search & Install / Sync & Config), collection list + detail, and a help dialog. Search still installs skills; collections still add/remove/export through the same engine.
+- `npx skills add` now sends `owner/repo@skill` for 3-part skills.sh ids (`anthropics/skills/frontend-design`) and `-y` so Electron installs are non-interactive.
+- Commands detail drops per-skill Install (Inbox still has it). Sync rail shows a red/green folder-status dot.
+- GUI: no connected repo still lets you install/export — dest folder picker, IDE stays selectable. Scan click explains it needs a connected project. Export is a labeled white button with the download icon. Included skills sit above From Inbox.
+- `exportCommand` / `install` accept optional `dest` so a push can write somewhere other than the bound workspace.
+- `exportCommand` also deploys filed skills to the target IDE: copy a local folder if that IDE is missing it, leave an existing dest folder alone, `install` Discover-only ids. Command-file stamp/replace rules are unchanged.
+- GUI Export matches Inbox install: loading / success / failure is a modal (error details collapsed). Export sits as an icon under delete. Target IDE is above From Inbox. The Inbox picker filters as you type and pages at 10.
+- GUI Inbox matches Discover: search, 25-per-page list, Scan as an icon. Install is a download icon that opens an IDE menu; progress and result are a modal (error details collapsed).
+- GUI Inbox is its own rail tab above Commands. Scan and unfiled install live there. Commands keeps the list plus the From Inbox file picker.
+- README documents the skil loop: scan → Inbox → file → install and/or export our stamped command file. `contextkit` is listed as a bin alias, not the product name.
+- Engine state persists at `.skil/state.json`. Old `.contextkit/state.json` still loads; the next persist writes the new path.
+- API origin override is `SKIL_API_URL`, then `CONTEXTKIT_API_URL`.
+- GUI window title and brand say skil.
+- CLI `export <command> --to <ide> [--replace]` and GUI Export write our stamped command file via `exportCommand` and deploy filed skills the target IDE is missing. Not skillsmith convert. Unstamped files need `--replace` or a GUI Replace confirm.
+- `install` takes a target IDE. The skills adapter runs `npx skills add` with `--agent` (cursor → `cursor`, claude → `claude-code`, windsurf → `windsurf`, agents → `universal`). The engine upserts catalog `deployedTo`; leftover `installedSkills` is not the catalog. CLI `--to` is required and rejects an unknown IDE before the engine.
+- GUI Commands: pick an IDE and Install a known skill (Inbox or filed). Calls the engine; errors are a visible alert. Disabled until a folder is connected. Discover Add still does not download.
+- GUI layout now follows the example desktop shell: topbar, rail tabs (Commands / Discover / Sync), command list + detail, and a help dialog.
+- CLI, engine, and GUI product-loop copy say **command**, not collection. `fileToCollection` is now `file`. `create /build` stores the name `build`.
 
 ## [0.2.2] - 2026-08-21
 

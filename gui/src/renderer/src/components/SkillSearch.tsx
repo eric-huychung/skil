@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, ArrowSquareOut, ArrowsClockwise, CaretLeft, CaretRight, Check, Plus } from '@phosphor-icons/react';
+import { ArrowRight, ArrowSquareOut, ArrowsClockwise, CaretLeft, CaretRight, Check, MagnifyingGlass, Plus } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import type { BrowseView, Skill } from '../../../shared/ipc';
@@ -181,8 +181,12 @@ export default function SkillSearch() {
     <section className="library-panel panel-section">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Discover</p>
-          <h1>Find Skills</h1>
+          <p className="eyebrow">Workspace</p>
+          <h1>Discover</h1>
+          <p className="workspace-lede">
+            Browse skills.sh by all-time and trending use. Add anything useful to Inbox — install is a later
+            step.
+          </p>
         </div>
         <div className="library-heading-actions">
           {results !== null && <span className="library-count">{results.length} available</span>}
@@ -200,6 +204,7 @@ export default function SkillSearch() {
 
       <form onSubmit={handleSearch}>
         <label className="search-box" htmlFor="skill-search-query">
+          <MagnifyingGlass size={16} weight="regular" aria-hidden="true" />
           <span className="sr-only">Search skills</span>
           <input
             id="skill-search-query"

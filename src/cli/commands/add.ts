@@ -14,8 +14,8 @@ export function runAdd(engine: ICollectionEngine, name: string, skillId: string)
 
 export function registerAddCommand(program: Command, engine: ICollectionEngine): void {
   program
-    .command('add <collection> <skillId>')
-    .description('Add a skill to an existing collection')
+    .command('add <command> <skillId>')
+    .description('Add a skill to an existing command')
     .action((name: string, skillId: string) => {
       printOutcome(runAdd(engine, name, skillId));
     });

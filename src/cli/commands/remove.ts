@@ -14,8 +14,8 @@ export function runRemove(engine: ICollectionEngine, name: string, skillId: stri
 
 export function registerRemoveCommand(program: Command, engine: ICollectionEngine): void {
   program
-    .command('remove <collection> <skillId>')
-    .description('Remove a skill from an existing collection')
+    .command('remove <command> <skillId>')
+    .description('Remove a skill from an existing command')
     .action((name: string, skillId: string) => {
       printOutcome(runRemove(engine, name, skillId));
     });

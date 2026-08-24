@@ -42,6 +42,7 @@ describe('SkillSearch', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Added obra/react-patterns' })).toBeInTheDocument());
     expect(engine.inbox()).toEqual(['obra/react-patterns']);
+    expect(engine.skills()).toEqual([]);
   });
 
   it('shows a visible error when adding to Inbox fails', async () => {

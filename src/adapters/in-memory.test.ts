@@ -34,6 +34,70 @@ describe('InMemoryFileSystemAdapter', () => {
 
     expect(isErr(fs.readJSON('/state.json'))).toBe(true);
   });
+
+  it('seeds a skill file that findSkillFolders can discover', () => {
+    const writeResult = fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    const found = fs.findSkillFolders('.cursor/skills');
+    const readResult = fs.readFile('.cursor/skills/tdd/SKILL.md');
+
+    expect(isOk(writeResult)).toBe(true);
+    expect(found).toEqual({ ok: true, value: ['.cursor/skills/tdd'] });
+    expect(readResult).toEqual({ ok: true, value: '# tdd\n' });
+  });
+
+  it('finds a nested skill folder and does not treat the parent as a skill', () => {
+    fs.writeFile('a/b/SKILL.md', '# nested');
+
+    expect(fs.findSkillFolders('.')).toEqual({ ok: true, value: ['a/b'] });
+  });
+
+  it('returns an empty list when the root is missing', () => {
+    expect(fs.findSkillFolders('.cursor/skills')).toEqual({ ok: true, value: [] });
+  });
+
+  it('returns an error when the root is a file', () => {
+    fs.writeFile('not-a-dir', 'nope');
+
+    const result = fs.findSkillFolders('not-a-dir');
+
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.message).toContain('not-a-dir');
+    }
+  });
+
+  it('reset() clears seeded skill files', () => {
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd');
+
+    fs.reset();
+
+    expect(isErr(fs.readFile('.cursor/skills/tdd/SKILL.md'))).toBe(true);
+    expect(fs.findSkillFolders('.cursor/skills')).toEqual({ ok: true, value: [] });
+  });
+
+  it('copyDir copies the folder tree and leaves the source files in place', () => {
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    fs.writeFile('.cursor/skills/tdd/references/notes.md', '# notes\n');
+
+    const result = fs.copyDir('.cursor/skills/tdd', '.claude/skills/tdd');
+
+    expect(isOk(result)).toBe(true);
+    expect(fs.readFile('.claude/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
+    expect(fs.readFile('.claude/skills/tdd/references/notes.md')).toEqual({
+      ok: true,
+      value: '# notes\n',
+    });
+    expect(fs.readFile('.cursor/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
+  });
+
+  it('copyDir errors when the source folder is missing', () => {
+    const result = fs.copyDir('.cursor/skills/tdd', '.claude/skills/tdd');
+
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.message).toMatch(/not found/);
+    }
+  });
 });
 
 describe('InMemoryConfigAdapter', () => {
@@ -102,10 +166,20 @@ describe('InMemorySkillsAdapter', () => {
   });
 
   it('install() records the skill as installed', async () => {
-    await skills.install('obra/react-patterns');
+    await skills.install('obra/react-patterns', 'cursor');
 
     const installed = skills.getInstalled();
     expect(installed.some((s) => s.id === 'obra/react-patterns')).toBe(true);
+  });
+
+  it('install() records the skillId and target IDE', async () => {
+    await skills.install('obra/x', 'cursor');
+    await skills.install('obra/x', 'claude');
+
+    expect(skills.getInstalls()).toEqual([
+      { skillId: 'obra/x', ide: 'cursor' },
+      { skillId: 'obra/x', ide: 'claude' },
+    ]);
   });
 
   it('getInstalled() starts empty', () => {
@@ -119,10 +193,11 @@ describe('InMemorySkillsAdapter', () => {
   });
 
   it('reset() clears installed skills', async () => {
-    await skills.install('obra/react-patterns');
+    await skills.install('obra/react-patterns', 'cursor');
 
     skills.reset();
 
     expect(skills.getInstalled()).toEqual([]);
+    expect(skills.getInstalls()).toEqual([]);
   });
 });

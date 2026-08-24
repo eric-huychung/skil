@@ -1,5 +1,5 @@
 import type { Result } from '../core/result.js';
-import type { BrowseView, Collection, ExportResult, IDE, Skill, SyncResult } from '../types/index.js';
+import type { BrowseView, Collection, ExportResult, IDE, ScanResult, Skill, SkillRecord, SyncResult } from '../types/index.js';
 
 /**
  * CollectionEngine is ContextKit's deep module: a small interface backed by
@@ -8,27 +8,27 @@ import type { BrowseView, Collection, ExportResult, IDE, Skill, SyncResult } fro
  */
 export interface ICollectionEngine {
   /**
-   * Creates a new collection with the given skill IDs.
-   * Returns an error Result if a collection with `name` already exists, or
-   * if the new collection can't be saved to disk (in which case it is not
-   * kept — `create` can be safely retried).
+   * Creates a new command with the given skill IDs. A leading `/` is
+   * stripped (`/build` → `build`). Returns an error Result if a command
+   * with `name` already exists, or if the new command can't be saved to
+   * disk (in which case it is not kept — `create` can be safely retried).
    */
   create(name: string, skillIds: string[], command?: string): Result<Collection>;
 
   /**
-   * Adds a skill to an existing collection. Idempotent: adding a skill
-   * already in the collection is a no-op that still returns the current
-   * collection. Returns an error Result if the collection doesn't exist, or
-   * if the change can't be saved to disk (in which case the collection is
+   * Adds a skill to an existing command. Idempotent: adding a skill
+   * already on the command is a no-op that still returns the current
+   * command. Returns an error Result if the command doesn't exist, or
+   * if the change can't be saved to disk (in which case the command is
    * left unchanged — `addSkill` can be safely retried).
    */
   addSkill(name: string, skillId: string): Result<Collection>;
 
   /**
-   * Removes a skill from an existing collection. A no-op (not an error) if
-   * the skill isn't in the collection. Returns an error Result if the
-   * collection doesn't exist, or if the change can't be saved to disk (in
-   * which case the collection is left unchanged — `removeSkill` can be
+   * Removes a skill from an existing command. A no-op (not an error) if
+   * the skill isn't on the command. Returns an error Result if the
+   * command doesn't exist, or if the change can't be saved to disk (in
+   * which case the command is left unchanged — `removeSkill` can be
    * safely retried).
    */
   removeSkill(name: string, skillId: string): Result<Collection>;
@@ -40,7 +40,7 @@ export interface ICollectionEngine {
    */
   getCommand(name: string): Result<string>;
 
-  /** Returns all known collections. */
+  /** Returns all known commands. */
   list(): Collection[];
 
   /**
@@ -54,13 +54,15 @@ export interface ICollectionEngine {
   sync(configPath: string): Result<SyncResult>;
 
   /**
-   * Installs a skill via the SkillsAdapter and records it in
-   * `state.installedSkills`. Returns an error Result if the underlying
-   * install command fails, or if the updated state can't be saved to disk
-   * (in which case the skill is not recorded — `install` can be safely
-   * retried).
+   * Installs a skill via the SkillsAdapter into `targetIDE`, then upserts
+   * the catalog `SkillRecord` (`source`, `paths`, `deployedTo`). Does not
+   * write command files and does not require the id to be filed. `dest`
+   * writes into that folder without rebinding the workspace. Returns an
+   * error Result if the adapter fails, or if the updated state can't
+   * be saved (in which case no deploy is recorded — `install` can be
+   * safely retried).
    */
-  install(skillId: string): Promise<Result<Skill>>;
+  install(skillId: string, targetIDE: IDE, opts?: { dest?: string }): Promise<Result<SkillRecord>>;
 
   /**
    * Searches skills.sh for skills matching `query`, via the SkillsAdapter.
@@ -82,13 +84,29 @@ export interface ICollectionEngine {
   convert(skillId: string, targetIDE: IDE): Promise<Result<void>>;
 
   /**
-   * Converts every skill in each named collection to `targetIDE`'s format.
-   * Never fails the whole call for one bad collection or skill: a
-   * non-existent collection, or a skill that fails to convert, is recorded
-   * in `failures` and the rest continue. Only returns an error Result for
-   * something outside any single collection/skill's control.
+   * Leftover skillsmith convert-all. Product export is `exportCommand`.
+   * CLI and GUI call `exportCommand`.
    */
   export(collectionNames: string[], targetIDE: IDE): Promise<Result<ExportResult>>;
+
+  /**
+   * Writes our stamped command file for `name` into `targetIDE`'s
+   * commands dir, then ensures each filed skill exists in that IDE's
+   * skills dir. Local folders already on disk are copied (never
+   * overwritten if dest has SKILL.md). Discover-only ids go through
+   * `install`. Does not scan `commands/` and does not call `convert`.
+   * If the target command file exists and lacks `generated_by: skil`,
+   * returns an error unless `replace` is true — no skill deploy in
+   * that case. Missing command name is an error. Other IDE files are
+   * left alone. Skill deploy failures are listed on `failures`; the
+   * command file is still written. `dest` writes into that folder
+   * without rebinding the workspace.
+   */
+  exportCommand(
+    name: string,
+    targetIDE: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>>;
 
   /**
    * Returns the Inbox holding list of skill IDs. Never downloads. Missing
@@ -111,17 +129,28 @@ export interface ICollectionEngine {
   removeFromInbox(skillId: string): Result<string[]>;
 
   /**
-   * Moves one Inbox ID into an existing collection. One persist; rollback
-   * on write failure. Error if the collection is missing or the ID is not
-   * in Inbox — state is left unchanged. If the collection already has the
+   * Moves one Inbox ID onto an existing command. One persist; rollback
+   * on write failure. Error if the command is missing or the ID is not
+   * in Inbox — state is left unchanged. If the command already has the
    * ID, it is still dropped from Inbox. Does not call `install`.
    */
-  fileToCollection(skillId: string, collectionName: string): Result<Collection>;
+  file(skillId: string, commandName: string): Result<Collection>;
 
   /**
-   * Deletes a collection by name. Missing name is an error. Deleting the
-   * last collection is allowed. Returns an error Result if the change
-   * can't be saved (in which case collections are left unchanged).
+   * Deletes a command by name. Missing name is an error. Deleting the
+   * last command is allowed. Returns an error Result if the change
+   * can't be saved (in which case commands are left unchanged).
    */
   delete(name: string): Result<void>;
+
+  /**
+   * Pull: walk IDE skill trees, hash SKILL.md, reconcile the catalog.
+   * New unfiled ids go to Inbox. Filed ids stay filed. Gone folders drop
+   * the id from catalog, commands, and inbox. Does not create commands
+   * and does not call install.
+   */
+  scan(): Result<ScanResult>;
+
+  /** Catalog rows we are SoT for. */
+  skills(): SkillRecord[];
 }

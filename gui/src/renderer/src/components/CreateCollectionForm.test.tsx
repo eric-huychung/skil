@@ -11,17 +11,17 @@ describe('CreateCollectionForm', () => {
     renderWithProviders(<CreateCollectionForm />, { bridge });
 
     expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create New Collection' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create New Command' })).toBeInTheDocument();
   });
 
-  it('creates an empty collection from a name-only modal', async () => {
+  it('creates an empty command from a name-only modal', async () => {
     const engine = createInMemoryEngine();
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CreateCollectionForm />, { bridge });
-    await userEvent.click(screen.getByRole('button', { name: 'Create New Collection' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create New Command' }));
     await userEvent.type(screen.getByLabelText('Name'), 'frontend');
-    await userEvent.click(screen.getByRole('button', { name: 'Create collection' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create command' }));
 
     await waitFor(() => expect(engine.list()).toHaveLength(1));
     expect(engine.list()[0]).toMatchObject({ name: 'frontend', skills: [] });
@@ -32,7 +32,7 @@ describe('CreateCollectionForm', () => {
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CreateCollectionForm />, { bridge });
-    await userEvent.click(screen.getByRole('button', { name: 'Create New Collection' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create New Command' }));
     await userEvent.type(screen.getByLabelText('Name'), 'frontend');
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
@@ -40,15 +40,15 @@ describe('CreateCollectionForm', () => {
     expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
   });
 
-  it('shows a validation error when the collection name already exists', async () => {
+  it('shows a validation error when the command name already exists', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', []);
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CreateCollectionForm />, { bridge });
-    await userEvent.click(screen.getByRole('button', { name: 'Create New Collection' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create New Command' }));
     await userEvent.type(screen.getByLabelText('Name'), 'frontend');
-    await userEvent.click(screen.getByRole('button', { name: 'Create collection' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create command' }));
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/already exists/));
     expect(engine.list()).toHaveLength(1);
@@ -60,10 +60,23 @@ describe('CreateCollectionForm', () => {
     const onCreated = vi.fn();
 
     renderWithProviders(<CreateCollectionForm onCreated={onCreated} />, { bridge });
-    await userEvent.click(screen.getByRole('button', { name: 'Create New Collection' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create New Command' }));
     await userEvent.type(screen.getByLabelText('Name'), 'frontend');
-    await userEvent.click(screen.getByRole('button', { name: 'Create collection' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create command' }));
 
     await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+  });
+
+  it('stores /build as build from the name-only modal', async () => {
+    const engine = createInMemoryEngine();
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CreateCollectionForm />, { bridge });
+    await userEvent.click(screen.getByRole('button', { name: 'Create New Command' }));
+    await userEvent.type(screen.getByLabelText('Name'), '/build');
+    await userEvent.click(screen.getByRole('button', { name: 'Create command' }));
+
+    await waitFor(() => expect(engine.list()).toHaveLength(1));
+    expect(engine.list()[0]).toMatchObject({ name: 'build', skills: [] });
   });
 });
