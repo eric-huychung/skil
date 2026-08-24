@@ -527,10 +527,6 @@
   opacity: 1;
 }
 
-.export-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--brand) 88%, black);
-}
-
 .outline-button:hover:not(:disabled),
 .add-icon-button:hover:not(:disabled),
 .filter:hover:not(:disabled),
@@ -591,24 +587,6 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-}
-
-.export-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 16px;
-  border-radius: 999px;
-  background: var(--accent-blue);
-  color: var(--accent-blue-foreground);
-  border: 0;
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.export-button:disabled {
-  opacity: 0.6;
 }
 
 .target-row {

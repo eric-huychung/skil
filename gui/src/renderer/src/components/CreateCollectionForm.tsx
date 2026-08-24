@@ -3,9 +3,11 @@ import { Plus } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import type { Collection } from '../../../shared/ipc';
+import { useCommandFormat } from './format-context';
 
 export default function CreateCollectionForm({ onCreated }: { onCreated?: (collection: Collection) => void }) {
   const bridge = useBridge();
+  const ide = useCommandFormat();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
@@ -34,7 +36,7 @@ export default function CreateCollectionForm({ onCreated }: { onCreated?: (colle
     event.preventDefault();
     setNameError(null);
 
-    const result = await bridge.createCollection(name, []);
+    const result = await bridge.createCollection(name, [], ide);
     if (!result.ok) {
       setNameError(result.error.message);
       return;

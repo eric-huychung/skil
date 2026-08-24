@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { IFileSystemAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
@@ -105,6 +105,45 @@ export class RealFileSystemAdapter implements IFileSystemAdapter {
       return ok(undefined);
     } catch (error) {
       return err(new Error(`Failed to copy '${from}' to '${to}': ${(error as Error).message}`));
+    }
+  }
+
+  listFiles(dir: string): Result<string[]> {
+    const resolved = this.resolvePath(dir);
+    let stats;
+    try {
+      stats = statSync(resolved);
+    } catch {
+      return ok([]);
+    }
+    if (!stats.isDirectory()) {
+      return err(new Error(`Failed to list '${dir}': not a directory`));
+    }
+
+    try {
+      const entries = readdirSync(resolved, { withFileTypes: true });
+      return ok(
+        entries
+          .filter((entry) => entry.isFile())
+          .map((entry) => this.toAdapterRelative(join(resolved, entry.name)))
+          .sort()
+      );
+    } catch (error) {
+      return err(new Error(`Failed to list '${dir}': ${(error as Error).message}`));
+    }
+  }
+
+  removeFile(path: string): Result<void> {
+    const resolved = this.resolvePath(path);
+    try {
+      unlinkSync(resolved);
+      return ok(undefined);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') {
+        return ok(undefined);
+      }
+      return err(new Error(`Failed to delete '${path}': ${(error as Error).message}`));
     }
   }
 

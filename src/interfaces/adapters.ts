@@ -50,6 +50,19 @@ export interface IFileSystemAdapter {
    * are overwritten. Engine callers skip when dest already has SKILL.md.
    */
   copyDir(from: string, to: string): Result<void>;
+
+  /**
+   * Lists file paths (not directories) directly under `dir`. Paths are
+   * relative to the adapter root. Missing dir → ok([]). A file at `dir`
+   * is an error.
+   */
+  listFiles(dir: string): Result<string[]>;
+
+  /**
+   * Deletes a file. Missing path is ok (idempotent). Relative paths
+   * resolve under the adapter root.
+   */
+  removeFile(path: string): Result<void>;
 }
 
 /**

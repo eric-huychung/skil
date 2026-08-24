@@ -272,4 +272,26 @@ describe('RealFileSystemAdapter', () => {
       expect(readFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'SKILL.md'), 'utf-8')).toBe('# tdd\n');
     });
   });
+
+  describe('listFiles', () => {
+    beforeEach(() => {
+      adapter = new RealFileSystemAdapter(tmpDir);
+    });
+
+    it('lists files directly under a rooted directory', () => {
+      mkdirSync(join(tmpDir, '.cursor', 'commands'), { recursive: true });
+      writeFileSync(join(tmpDir, '.cursor', 'commands', 'build.md'), '# build\n');
+      mkdirSync(join(tmpDir, '.cursor', 'commands', 'nested'), { recursive: true });
+      writeFileSync(join(tmpDir, '.cursor', 'commands', 'nested', 'skip.md'), '# skip\n');
+
+      expect(adapter.listFiles('.cursor/commands')).toEqual({
+        ok: true,
+        value: ['.cursor/commands/build.md'],
+      });
+    });
+
+    it('returns an empty list when the directory is missing', () => {
+      expect(adapter.listFiles('.claude/commands')).toEqual({ ok: true, value: [] });
+    });
+  });
 });

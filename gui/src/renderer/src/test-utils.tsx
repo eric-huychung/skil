@@ -59,17 +59,20 @@ export type TestBridgeOptions = {
 export function createTestBridge(engine: ICollectionEngine, options: TestBridgeOptions = {}): ContextKitBridge {
   let projectRoot: string | null = options.projectRoot ?? null;
   return {
-    listCollections: async () => engine.list(),
-    createCollection: async (name, skillIds) => engine.create(name, skillIds),
-    removeSkillFromCollection: async (name, skillId) => engine.removeSkill(name, skillId),
+    listCollections: async (ide) => engine.list(ide),
+    createCollection: async (name, skillIds, ide) => engine.create(name, skillIds, undefined, ide),
+    removeSkillFromCollection: async (name, skillId, ide) => engine.removeSkill(name, skillId, ide),
     exportCommand: async (name, targetIDE, opts) => engine.exportCommand(name, targetIDE, opts),
+    exportAll: async (targetIDE, opts) => engine.exportAll(targetIDE, opts),
+    copyTo: async (name, fromIde, toIde, opts) => engine.copyTo(name, fromIde, toIde, opts),
+    copyAll: async (fromIde, toIde, opts) => engine.copyAll(fromIde, toIde, opts),
     searchSkills: async (query) => engine.search(query),
     browseSkills: async (view) => engine.browse(view),
     listInbox: async () => engine.inbox(),
     listSkills: async () => engine.skills(),
     addToInbox: async (skillId) => engine.addToInbox(skillId),
-    addSkill: async (name, skillId) => engine.addSkill(name, skillId),
-    deleteCollection: async (name) => engine.delete(name),
+    addSkill: async (name, skillId, ide) => engine.addSkill(name, skillId, ide),
+    deleteCollection: async (name, ide) => engine.delete(name, ide),
     getProjectRoot: async () => projectRoot,
     pickProjectFolder: async () => {
       if (options.nextPick === null) return null;

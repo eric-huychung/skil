@@ -5,7 +5,7 @@ import { InMemoryFileSystemAdapter } from '../../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../../adapters/in-memory-skills.js';
 import { isOk } from '../../core/result.js';
 import { createProgram } from '../program.js';
-import { runExport } from './export.js';
+import { runExport, runExportAll } from './export.js';
 
 function buildEngine(): {
   engine: CollectionEngine;
@@ -26,21 +26,19 @@ describe('runExport', () => {
     engine.scan();
     engine.create('build', ['tdd', 'design']);
 
-    const outcome = await runExport(engine, 'build', 'claude');
+    const outcome = await runExport(engine, 'build', 'cursor');
 
     expect(outcome.isError).toBe(false);
     expect(outcome.message).toContain('build');
-    expect(outcome.message).toContain('claude');
+    expect(outcome.message).toContain('cursor');
 
-    const written = fs.readFile('.claude/commands/build.md');
+    const written = fs.readFile('.cursor/commands/build.md');
     expect(isOk(written)).toBe(true);
     if (isOk(written)) {
       expect(written.value).toContain('generated_by: skil');
       expect(written.value).toContain('- tdd');
       expect(written.value).toContain('- design');
     }
-    expect(fs.readFile('.claude/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
-    expect(fs.readFile('.claude/skills/design/SKILL.md')).toEqual({ ok: true, value: '# design\n' });
     expect(skills.getConvertCallCount()).toBe(0);
     expect(skills.getInstalls()).toEqual([]);
   });
@@ -81,10 +79,27 @@ describe('runExport', () => {
   });
 });
 
+describe('runExportAll', () => {
+  it('writes stamped files for every command', async () => {
+    const { engine, fs } = buildEngine();
+    engine.create('build', []);
+    engine.create('testing', []);
+
+    const outcome = await runExportAll(engine, 'cursor');
+
+    expect(outcome.isError).toBe(false);
+    expect(outcome.message).toMatch(/all commands/i);
+    expect(outcome.message).toContain('cursor');
+    expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+    expect(isOk(fs.readFile('.cursor/commands/testing.md'))).toBe(true);
+  });
+});
+
 describe('registerExportCommand', () => {
   it('requires --to and does not write a command file without it', () => {
     const { engine, fs } = buildEngine();
     engine.create('build', ['tdd']);
+    fs.removeFile('.cursor/commands/build.md');
     const program = createProgram(engine);
     program.exitOverride();
 
@@ -95,6 +110,7 @@ describe('registerExportCommand', () => {
   it('rejects an unknown IDE before the engine', () => {
     const { engine, fs } = buildEngine();
     engine.create('build', ['tdd']);
+    fs.removeFile('.cursor/commands/build.md');
     const program = createProgram(engine);
     program.exitOverride();
 
@@ -117,5 +133,18 @@ describe('registerExportCommand', () => {
       expect(written.value).toContain('generated_by: skil');
       expect(written.value).not.toContain('their old /build');
     }
+  });
+
+  it('exports every command when no command name is given', async () => {
+    const { engine, fs } = buildEngine();
+    engine.create('build', []);
+    engine.create('testing', []);
+    const program = createProgram(engine);
+    program.exitOverride();
+
+    await program.parseAsync(['export', '--to', 'cursor'], { from: 'user' });
+
+    expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+    expect(isOk(fs.readFile('.cursor/commands/testing.md'))).toBe(true);
   });
 });

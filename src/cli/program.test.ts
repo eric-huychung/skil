@@ -48,8 +48,18 @@ describe('createProgram', () => {
     expect(output).toContain('inbox');
     expect(output).toContain('delete');
     expect(output).toContain('scan');
+    expect(output).toContain('copy');
     expect(output.toLowerCase()).not.toContain('staging');
     expect(output.toLowerCase()).not.toContain('collection');
+  });
+
+  it('rejects an unknown --ide before creating a command', () => {
+    const engine = buildEngine();
+    const program = createProgram(engine);
+    program.exitOverride();
+
+    expect(() => program.parse(['create', 'build', '--ide', 'nope'], { from: 'user' })).toThrow();
+    expect(engine.list()).toEqual([]);
   });
 
   it('exposes skil as the primary bin and keeps contextkit as an alias', () => {

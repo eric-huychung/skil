@@ -35,6 +35,25 @@ describe('InMemoryFileSystemAdapter', () => {
     expect(isErr(fs.readJSON('/state.json'))).toBe(true);
   });
 
+  it('lists files directly under a directory', () => {
+    fs.writeFile('.cursor/commands/build.md', '# build');
+    fs.writeFile('.cursor/commands/nested/skip.md', '# skip');
+
+    expect(fs.listFiles('.cursor/commands')).toEqual({ ok: true, value: ['.cursor/commands/build.md'] });
+  });
+
+  it('listFiles returns an empty list when the directory is missing', () => {
+    expect(fs.listFiles('.claude/commands')).toEqual({ ok: true, value: [] });
+  });
+
+  it('listFiles errors when the path is a file', () => {
+    fs.writeFile('not-a-dir', 'nope');
+
+    const result = fs.listFiles('not-a-dir');
+
+    expect(isErr(result)).toBe(true);
+  });
+
   it('seeds a skill file that findSkillFolders can discover', () => {
     const writeResult = fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
     const found = fs.findSkillFolders('.cursor/skills');

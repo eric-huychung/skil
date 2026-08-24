@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isErr, isOk } from './result.js';
-import { CollectionEngine, LEGACY_STATE_PATH, STATE_PATH } from './collection-engine.js';
+import { CollectionEngine, STATE_PATH } from './collection-engine.js';
 import { InMemoryConfigAdapter } from '../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../adapters/in-memory-skills.js';
@@ -370,44 +370,25 @@ describe('CollectionEngine', () => {
       expect(engine.list()).toEqual([]);
     });
 
-    it('loads .contextkit/state.json when .skil/state.json is missing', () => {
-      fs.writeJSON(LEGACY_STATE_PATH, {
+    it('throws when only leftover .contextkit/state.json exists', () => {
+      fs.writeJSON('.contextkit/state.json', {
         commands: [{ name: 'frontend', skills: ['react-patterns'], createdAt: '2024-01-01T00:00:00.000Z' }],
         skills: [],
         inbox: [],
         version: '4.0',
       });
 
-      const loadedEngine = new CollectionEngine(fs, config, skills);
-
-      expect(loadedEngine.list()).toEqual([
-        { name: 'frontend', skills: ['react-patterns'], createdAt: '2024-01-01T00:00:00.000Z' },
-      ]);
-      expect(isErr(fs.readJSON(STATE_PATH))).toBe(true);
+      expect(() => new CollectionEngine(fs, config, skills)).toThrow(
+        'Found leftover .contextkit/state.json. Move it to .skil/state.json and retry.'
+      );
     });
 
-    it('writes .skil/state.json on the next persist after a legacy load', () => {
-      fs.writeJSON(LEGACY_STATE_PATH, {
-        commands: [{ name: 'frontend', skills: [], createdAt: '2024-01-01T00:00:00.000Z' }],
-        version: '4.0',
-      });
-      const loadedEngine = new CollectionEngine(fs, config, skills);
-
-      loadedEngine.create('backend', []);
-
-      const persisted = fs.readJSON<{ commands: Array<{ name: string }> }>(STATE_PATH);
-      expect(isOk(persisted)).toBe(true);
-      if (isOk(persisted)) {
-        expect(persisted.value.commands.map((c) => c.name)).toEqual(['frontend', 'backend']);
-      }
-    });
-
-    it('prefers .skil/state.json when both files exist', () => {
+    it('loads .skil/state.json and ignores leftover .contextkit/state.json', () => {
       fs.writeJSON(STATE_PATH, {
         commands: [{ name: 'new-map', skills: [], createdAt: '2024-01-02T00:00:00.000Z' }],
         version: '4.0',
       });
-      fs.writeJSON(LEGACY_STATE_PATH, {
+      fs.writeJSON('.contextkit/state.json', {
         commands: [{ name: 'old-map', skills: [], createdAt: '2024-01-01T00:00:00.000Z' }],
         version: '4.0',
       });
@@ -502,7 +483,8 @@ describe('CollectionEngine', () => {
         expect(written.value).toContain('generated_by: skil');
         expect(written.value).toContain('- obra/react-patterns');
       }
-      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(isOk(fs.readFile('/tmp/other-project/.cursor/commands/build.md'))).toBe(true);
+      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
       expect(engine.list()).toEqual([expect.objectContaining({ name: 'build' })]);
     });
 
@@ -560,7 +542,7 @@ describe('CollectionEngine', () => {
       if (isErr(missing)) {
         expect(missing.error.message).toContain("Command 'missing' not found");
       }
-      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
 
       const exported = await engine.exportCommand('/build', 'cursor');
       expect(isOk(exported)).toBe(true);
@@ -574,15 +556,15 @@ describe('CollectionEngine', () => {
     it('writes Claude, Windsurf, and agents files to their IDE paths', async () => {
       engine.create('build', []);
 
-      expect(await engine.exportCommand('build', 'claude')).toEqual({
+      expect(await engine.copyTo('build', 'cursor', 'claude')).toEqual({
         ok: true,
         value: { succeeded: ['.claude/commands/build.md'], failures: [] },
       });
-      expect(await engine.exportCommand('build', 'windsurf')).toEqual({
+      expect(await engine.copyTo('build', 'cursor', 'windsurf')).toEqual({
         ok: true,
         value: { succeeded: ['.windsurf/workflows/build.md'], failures: [] },
       });
-      expect(await engine.exportCommand('build', 'agents')).toEqual({
+      expect(await engine.copyTo('build', 'cursor', 'agents')).toEqual({
         ok: true,
         value: { succeeded: ['.agents/commands/build.md'], failures: [] },
       });
@@ -598,7 +580,7 @@ describe('CollectionEngine', () => {
       engine.scan();
       engine.create('build', ['tdd']);
 
-      const result = await engine.exportCommand('build', 'claude');
+      const result = await engine.copyTo('build', 'cursor', 'claude');
 
       expect(isOk(result)).toBe(true);
       expect(fs.readFile('.claude/commands/build.md')).toMatchObject({ ok: true });
@@ -621,7 +603,7 @@ describe('CollectionEngine', () => {
       engine.scan();
       engine.create('build', ['tdd']);
 
-      const result = await engine.exportCommand('build', 'claude');
+      const result = await engine.copyTo('build', 'cursor', 'claude');
 
       expect(isOk(result)).toBe(true);
       expect(fs.readFile('.claude/skills/tdd/SKILL.md')).toEqual({
@@ -638,7 +620,7 @@ describe('CollectionEngine', () => {
     it('installs Discover-only skills that have no local folder', async () => {
       engine.create('build', ['obra/react-patterns']);
 
-      const result = await engine.exportCommand('build', 'claude');
+      const result = await engine.copyTo('build', 'cursor', 'claude');
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -647,6 +629,102 @@ describe('CollectionEngine', () => {
         expect(result.value.failures).toEqual([]);
       }
       expect(skills.getInstalls()).toEqual([{ skillId: 'obra/react-patterns', ide: 'claude' }]);
+    });
+  });
+
+  describe('exportAll', () => {
+    it('writes a stamped command file for every command in the workspace', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      fs.writeFile('.cursor/skills/design/SKILL.md', '# design\n');
+      engine.scan();
+      engine.create('build', ['tdd']);
+      engine.create('testing', ['design']);
+
+      const result = await engine.exportAll('cursor');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.succeeded).toEqual(['.cursor/commands/build.md', '.cursor/commands/testing.md']);
+        expect(result.value.failures).toEqual([]);
+      }
+
+      const build = fs.readFile('.cursor/commands/build.md');
+      const testing = fs.readFile('.cursor/commands/testing.md');
+      expect(isOk(build)).toBe(true);
+      expect(isOk(testing)).toBe(true);
+      if (isOk(build)) {
+        expect(build.value).toContain('generated_by: skil');
+        expect(build.value).toContain('- tdd');
+      }
+      if (isOk(testing)) {
+        expect(testing.value).toContain('generated_by: skil');
+        expect(testing.value).toContain('- design');
+      }
+    });
+
+    it('refuses an unstamped file and does not write other command files', async () => {
+      engine.create('build', ['tdd']);
+      engine.create('testing', ['design']);
+      fs.writeFile('.cursor/commands/testing.md', '# their old /testing\n');
+
+      const refused = await engine.exportAll('cursor');
+
+      expect(isErr(refused)).toBe(true);
+      if (isErr(refused)) {
+        expect(refused.error.message).toMatch(/not generated by skil|replace/i);
+      }
+      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(fs.readFile('.cursor/commands/testing.md')).toEqual({
+        ok: true,
+        value: '# their old /testing\n',
+      });
+    });
+
+    it('overwrites every unstamped file when replace is set', async () => {
+      engine.create('build', ['tdd']);
+      engine.create('testing', ['design']);
+      fs.writeFile('.cursor/commands/testing.md', '# their old /testing\n');
+
+      const replaced = await engine.exportAll('cursor', { replace: true });
+
+      expect(isOk(replaced)).toBe(true);
+      const build = fs.readFile('.cursor/commands/build.md');
+      const testing = fs.readFile('.cursor/commands/testing.md');
+      expect(isOk(build)).toBe(true);
+      expect(isOk(testing)).toBe(true);
+      if (isOk(testing)) {
+        expect(testing.value).toContain('generated_by: skil');
+        expect(testing.value).not.toContain('their old /testing');
+      }
+    });
+
+    it('fails when there are no commands', async () => {
+      const result = await engine.exportAll('cursor');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toMatch(/no commands/i);
+      }
+      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+    });
+
+    it('writes every command file under dest without moving workspace state', async () => {
+      engine.create('build', []);
+      engine.create('testing', []);
+
+      const result = await engine.exportAll('cursor', { dest: '/tmp/other-project' });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.succeeded).toEqual([
+          '/tmp/other-project/.cursor/commands/build.md',
+          '/tmp/other-project/.cursor/commands/testing.md',
+        ]);
+      }
+      expect(isOk(fs.readFile('/tmp/other-project/.cursor/commands/build.md'))).toBe(true);
+      expect(isOk(fs.readFile('/tmp/other-project/.cursor/commands/testing.md'))).toBe(true);
+      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(engine.list().map((c) => c.name)).toEqual(['build', 'testing']);
     });
   });
 
@@ -1148,7 +1226,7 @@ describe('CollectionEngine', () => {
 
       const result = engine.scan();
 
-      expect(result).toEqual({ ok: true, value: { added: [], gone: [], changed: [] } });
+      expect(result).toEqual({ ok: true, value: { added: [], gone: [], changed: [], commandPulls: [] } });
       expect(engine.skills()).toEqual([]);
       expect(engine.list()).toEqual([]);
       expect(skills.getInstalled()).toEqual([]);
@@ -1183,6 +1261,186 @@ describe('CollectionEngine', () => {
         { name: 'build', skills: ['tdd'], createdAt: '2024-01-01T00:00:00.000Z' },
       ]);
       expect(loaded.skills()).toEqual([]);
+    });
+
+    it('treats same-hash path change as a rename, not gone plus added', () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      engine.scan();
+      engine.create('build', []);
+      engine.addToInbox('tdd');
+      engine.file('tdd', 'build');
+
+      fs.removeFile('.cursor/skills/tdd/SKILL.md');
+      fs.writeFile('.cursor/skills/testing/SKILL.md', '# tdd\n');
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.added).toEqual([]);
+        expect(result.value.gone).toEqual([]);
+      }
+      expect(engine.list()[0]?.skills).toEqual(['testing']);
+      expect(engine.skills().map((record) => record.id)).toEqual(['testing']);
+    });
+
+    it('lets a stamped Claude command file win for Claude only', () => {
+      engine.create('build', ['tdd']);
+      engine.create('build', ['tdd'], undefined, 'claude');
+      fs.writeFile(
+        '.claude/commands/build.md',
+        `---
+name: /build
+skills:
+  - tdd
+  - design
+generated_by: skil
+generated_at: 2026-08-24T00:00:00.000Z
+---
+
+1. Use the skills listed in frontmatter when they apply.
+2. Do not invent extra required steps.
+`
+      );
+
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.commandPulls).toEqual([{ ide: 'claude', name: 'build' }]);
+      }
+      expect(engine.list('claude').find((command) => command.name === 'build')?.skills).toEqual(['tdd', 'design']);
+      expect(engine.list('cursor').find((command) => command.name === 'build')?.skills).toEqual(['tdd']);
+    });
+  });
+
+  describe('per-IDE membership', () => {
+    it('files onto Cursor /build without changing Claude /build', () => {
+      engine.create('build', []);
+      engine.create('build', ['design'], undefined, 'claude');
+      engine.addToInbox('tdd');
+
+      const result = engine.file('tdd', 'build', 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.list('cursor').find((command) => command.name === 'build')?.skills).toEqual(['tdd']);
+      expect(engine.list('claude').find((command) => command.name === 'build')?.skills).toEqual(['design']);
+    });
+
+    it('loads v4 skills[] as Cursor membership', () => {
+      fs.writeJSON(STATE_PATH, {
+        commands: [{ name: 'build', skills: ['tdd'], createdAt: '2024-01-01T00:00:00.000Z' }],
+        skills: [],
+        inbox: [],
+        version: '4.0',
+      });
+      const loaded = new CollectionEngine(fs, config, skills);
+
+      expect(loaded.list('cursor')).toEqual([
+        { name: 'build', skills: ['tdd'], createdAt: '2024-01-01T00:00:00.000Z' },
+      ]);
+      expect(loaded.list('claude')).toEqual([]);
+    });
+
+    it('create on Claude adds membership when Cursor already has the name', () => {
+      engine.create('build', ['tdd']);
+
+      const result = engine.create('build', ['design'], undefined, 'claude');
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.list('cursor')[0]?.skills).toEqual(['tdd']);
+      expect(engine.list('claude')[0]?.skills).toEqual(['design']);
+    });
+
+    it('delete drops Cursor membership and leaves Claude', () => {
+      engine.create('build', ['tdd']);
+      engine.create('build', ['design'], undefined, 'claude');
+
+      const result = engine.delete('build', 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.list('cursor')).toEqual([]);
+      expect(engine.list('claude')[0]?.skills).toEqual(['design']);
+    });
+  });
+
+  describe('copyTo', () => {
+    it('copies Cursor membership to Claude without rewriting the Cursor stamp', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      engine.scan();
+      engine.create('build', ['tdd']);
+      const cursorStamp = fs.readFile('.cursor/commands/build.md');
+      expect(isOk(cursorStamp)).toBe(true);
+
+      const result = await engine.copyTo('build', 'cursor', 'claude');
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.list('claude')[0]?.skills).toEqual(['tdd']);
+      expect(engine.list('cursor')[0]?.skills).toEqual(['tdd']);
+      const claudeFile = fs.readFile('.claude/commands/build.md');
+      expect(isOk(claudeFile)).toBe(true);
+      if (isOk(claudeFile)) {
+        expect(claudeFile.value).toContain('generated_by: skil');
+        expect(claudeFile.value).toContain('tdd');
+      }
+      const after = fs.readFile('.cursor/commands/build.md');
+      expect(after).toEqual(cursorStamp);
+    });
+
+    it('refuses an unstamped dest file unless replace is true', async () => {
+      engine.create('build', ['tdd']);
+      fs.writeFile('.claude/commands/build.md', '# leftover\n');
+
+      const refused = await engine.copyTo('build', 'cursor', 'claude');
+
+      expect(isErr(refused)).toBe(true);
+      expect(engine.list('claude')).toEqual([]);
+      expect(fs.readFile('.claude/commands/build.md')).toEqual({ ok: true, value: '# leftover\n' });
+
+      const replaced = await engine.copyTo('build', 'cursor', 'claude', { replace: true });
+      expect(isOk(replaced)).toBe(true);
+      expect(engine.list('claude')[0]?.skills).toEqual(['tdd']);
+    });
+  });
+
+  describe('write-through', () => {
+    it('files on Cursor rewrite Cursor stamps and do not write Claude', () => {
+      engine.create('build', []);
+      engine.addToInbox('tdd');
+      engine.file('tdd', 'build', 'cursor');
+
+      const cursorFile = fs.readFile('.cursor/commands/build.md');
+      expect(isOk(cursorFile)).toBe(true);
+      if (isOk(cursorFile)) {
+        expect(cursorFile.value).toContain('tdd');
+        expect(cursorFile.value).toContain('generated_by: skil');
+      }
+      expect(isErr(fs.readFile('.claude/commands/build.md'))).toBe(true);
+    });
+
+    it('delete Cursor /build removes our Cursor stamp and leaves Claude', () => {
+      engine.create('build', ['tdd']);
+      engine.create('build', ['design'], undefined, 'claude');
+      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(isOk(fs.readFile('.claude/commands/build.md'))).toBe(true);
+
+      engine.delete('build', 'cursor');
+
+      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      const claudeFile = fs.readFile('.claude/commands/build.md');
+      expect(isOk(claudeFile)).toBe(true);
+      if (isOk(claudeFile)) {
+        expect(claudeFile.value).toContain('design');
+      }
+    });
+
+    it('leaves an unstamped Cursor command file alone', () => {
+      fs.writeFile('.cursor/commands/build.md', '# leftover\n');
+      engine.create('build', ['tdd']);
+      engine.addToInbox('design');
+      engine.file('design', 'build', 'cursor');
+
+      expect(fs.readFile('.cursor/commands/build.md')).toEqual({ ok: true, value: '# leftover\n' });
+      expect(engine.list('cursor')[0]?.skills).toEqual(['tdd', 'design']);
     });
   });
 });

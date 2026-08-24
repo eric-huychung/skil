@@ -68,4 +68,15 @@ describe('runCreate', () => {
     expect(outcome.isError).toBe(false);
     expect(engine.list()[0]?.command).toBe('npm run dev');
   });
+
+  it('creates a command on Claude without replacing Cursor', () => {
+    const engine = buildEngine();
+    engine.create('build', ['tdd']);
+
+    const outcome = runCreate(engine, 'build', ['design'], undefined, 'claude');
+
+    expect(outcome.isError).toBe(false);
+    expect(engine.list('cursor')[0]?.skills).toEqual(['tdd']);
+    expect(engine.list('claude')[0]?.skills).toEqual(['design']);
+  });
 });

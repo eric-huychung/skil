@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { CaretDown, CaretLeft, CaretRight, Check, CircleNotch, DownloadSimple, Plus, Trash, X } from '@phosphor-icons/react';
+import { CaretDown, CaretLeft, CaretRight, Check, CircleNotch, Copy, FloppyDisk, Plus, Trash, X } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import { groupCommandsByStage } from '../lib/sdlc';
 import type { Collection, IDE } from '../../../shared/ipc';
 import { targetPhrase } from './InstallSkill';
-import { FormatSelect } from './FormatSelect';
+import { FormatSelect, FORMAT_LABELS } from './FormatSelect';
 import { StatusDialog } from './StatusDialog';
+import { IDE_OPTIONS } from './InstallSkill';
+import { CommandFormatContext } from './format-context';
+
+function otherIde(ide: IDE): IDE {
+  return IDE_OPTIONS.find((option) => option !== ide) ?? 'claude';
+}
 
 const INBOX_PAGE_SIZE = 10;
 
@@ -27,26 +33,23 @@ function isUnstampedConflict(message: string): boolean {
 function CollectionDetail({
   collection,
   inbox,
+  ide,
   onChange,
   onDeleted,
 }: {
   collection: Collection;
   inbox: string[];
+  ide: IDE;
   onChange: () => void;
   onDeleted: () => void;
 }) {
   const bridge = useBridge();
   const [error, setError] = useState<string | null>(null);
-  const [exportIde, setExportIde] = useState<IDE>('cursor');
-  const [exportOutcome, setExportOutcome] = useState<ExportOutcome | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmReplace, setConfirmReplace] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(true);
   const [inboxQuery, setInboxQuery] = useState('');
   const [inboxPage, setInboxPage] = useState(0);
-  const [exportDest, setExportDest] = useState<string | undefined>();
   const inboxPickerId = `inbox-picker-${collection.name}`;
-  const isExporting = exportOutcome?.status === 'loading';
 
   const inboxMatches = useMemo(
     () => inbox.filter((skillId) => matchesQuery(skillId, inboxQuery)),
@@ -58,7 +61,7 @@ function CollectionDetail({
 
   async function handleAddFromInbox(skillId: string) {
     setError(null);
-    const result = await bridge.addSkill(collection.name, skillId);
+    const result = await bridge.addSkill(collection.name, skillId, ide);
     if (!result.ok) {
       setError(result.error.message);
       return;
@@ -68,7 +71,7 @@ function CollectionDetail({
 
   async function handleRemoveSkill(skillId: string) {
     setError(null);
-    const result = await bridge.removeSkillFromCollection(collection.name, skillId);
+    const result = await bridge.removeSkillFromCollection(collection.name, skillId, ide);
     if (!result.ok) {
       setError(result.error.message);
       return;
@@ -76,60 +79,9 @@ function CollectionDetail({
     onChange();
   }
 
-  async function handleExport(replace?: boolean) {
-    setError(null);
-    const root = await bridge.getProjectRoot();
-    let dest: string | undefined;
-    if (!root) {
-      dest = replace ? exportDest : undefined;
-      if (dest === undefined) {
-        const picked = await bridge.pickDestinationFolder();
-        if (picked === null) return;
-        dest = picked;
-        setExportDest(picked);
-      }
-    }
-    const target = dest ?? root ?? undefined;
-    if (replace) setConfirmReplace(false);
-    setExportOutcome({ status: 'loading', ide: exportIde, dest: target });
-    const result = await bridge.exportCommand(collection.name, exportIde, {
-      ...(replace ? { replace: true } : {}),
-      ...(dest ? { dest } : {}),
-    });
-
-    if (!result.ok) {
-      if (isUnstampedConflict(result.error.message)) {
-        setExportOutcome(null);
-        setConfirmReplace(true);
-        return;
-      }
-      setExportDest(undefined);
-      setExportOutcome({ status: 'error', ide: exportIde, dest: target, message: result.error.message });
-      return;
-    }
-    setExportDest(undefined);
-    setConfirmReplace(false);
-    if (result.value.failures.length > 0) {
-      setExportOutcome({
-        status: 'error',
-        ide: exportIde,
-        dest: target,
-        summary: `Exported the command file, but some skills did not deploy to ${targetPhrase(exportIde, target)}`,
-        message: result.value.failures.join('\n'),
-      });
-      return;
-    }
-    setExportOutcome({
-      status: 'success',
-      ide: exportIde,
-      dest: target,
-      path: result.value.succeeded[0],
-    });
-  }
-
   async function handleDelete() {
     setError(null);
-    const result = await bridge.deleteCollection(collection.name);
+    const result = await bridge.deleteCollection(collection.name, ide);
     if (!result.ok) {
       setError(result.error.message);
       setConfirmDelete(false);
@@ -158,21 +110,6 @@ function CollectionDetail({
           >
             <Trash size={16} weight="regular" aria-hidden="true" />
           </button>
-          <button
-            type="button"
-            onClick={() => void handleExport()}
-            disabled={isExporting}
-            aria-label={`Export ${collection.name}`}
-            aria-busy={isExporting || undefined}
-            className={`export-button ${FOCUS_RING}`}
-          >
-            <span>Export</span>
-            {isExporting ? (
-              <CircleNotch size={16} weight="regular" className="spin" aria-hidden="true" />
-            ) : (
-              <DownloadSimple size={16} weight="regular" aria-hidden="true" />
-            )}
-          </button>
         </div>
       </div>
 
@@ -181,17 +118,6 @@ function CollectionDetail({
           {error}
         </p>
       )}
-
-      <div className="target-row">
-        <span>Format</span>
-        <FormatSelect
-          id={`export-ide-${collection.name}`}
-          label={`Export ${collection.name} to`}
-          value={exportIde}
-          disabled={isExporting}
-          onChange={setExportIde}
-        />
-      </div>
 
       <div className="active-skills">
         <div className="subheading">
@@ -299,67 +225,6 @@ function CollectionDetail({
         </div>
       )}
 
-      {exportOutcome && (
-        <StatusDialog
-          eyebrow="Export"
-          title={
-            exportOutcome.status === 'loading'
-              ? 'Exporting…'
-              : exportOutcome.status === 'success'
-                ? 'Exported'
-                : 'Export failed'
-          }
-          kind={exportOutcome.status}
-          errorDetail={exportOutcome.status === 'error' ? exportOutcome.message : undefined}
-          closeLabel="Close export status"
-          onClose={() => setExportOutcome(null)}
-        >
-          {exportOutcome.status === 'loading' && (
-            <p role="status" className="muted-copy">
-              Exporting {collection.name} to {targetPhrase(exportOutcome.ide, exportOutcome.dest)}
-            </p>
-          )}
-          {exportOutcome.status === 'success' && (
-            <>
-              <p className="status-copy-success">{`Exported ${collection.name} to ${targetPhrase(exportOutcome.ide, exportOutcome.dest)}`}</p>
-              {exportOutcome.path && <p className="status-path">{exportOutcome.path}</p>}
-            </>
-          )}
-          {exportOutcome.status === 'error' && (
-            <p role="alert" className="muted-copy text-destructive">
-              {exportOutcome.summary ??
-                `Could not export ${collection.name} to ${targetPhrase(exportOutcome.ide, exportOutcome.dest)}`}
-            </p>
-          )}
-        </StatusDialog>
-      )}
-
-      {confirmReplace && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setConfirmReplace(false)}>
-          <div
-            className="help-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="replace-export-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <p className="eyebrow">Export</p>
-            <h2 id="replace-export-title">Replace existing file?</h2>
-            <p className="muted-copy">
-              This file exists and was not generated by skil. Replace it with our command template?
-            </p>
-            <div className="modal-actions">
-              <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={() => setConfirmReplace(false)}>
-                Cancel
-              </button>
-              <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={() => void handleExport(true)}>
-                Replace
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {confirmDelete && (
         <div className="modal-backdrop" role="presentation" onClick={() => setConfirmDelete(false)}>
           <div
@@ -394,7 +259,33 @@ function selectCollection(event: KeyboardEvent<HTMLLIElement>, name: string, onS
   }
 }
 
-function CollectionsPanel({ children }: { children: ReactNode }) {
+function CollectionsPanel({
+  children,
+  formatIde,
+  onFormatIdeChange,
+  copyDest,
+  onCopyDestChange,
+  onSave,
+  onCopy,
+  onCopyAll,
+  isBusy,
+  canSave,
+  canCopy,
+  selectedName,
+}: {
+  children: ReactNode;
+  formatIde: IDE;
+  onFormatIdeChange: (ide: IDE) => void;
+  copyDest: IDE;
+  onCopyDestChange: (ide: IDE) => void;
+  onSave: () => void;
+  onCopy: () => void;
+  onCopyAll: () => void;
+  isBusy: boolean;
+  canSave: boolean;
+  canCopy: boolean;
+  selectedName: string | null;
+}) {
   return (
     <section className="collections-panel panel-section">
       <div className="section-heading">
@@ -403,6 +294,56 @@ function CollectionsPanel({ children }: { children: ReactNode }) {
           <h1>Commands</h1>
           <p className="workspace-lede">Named SDLC knobs. File inbox skills onto them, then export.</p>
         </div>
+        <div className="library-heading-actions">
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={!canSave || isBusy}
+            aria-label="Save"
+            title="Save"
+            aria-busy={isBusy || undefined}
+            className={`icon-button ${FOCUS_RING}`}
+          >
+            {isBusy ? (
+              <CircleNotch size={16} weight="regular" className="spin" aria-hidden="true" />
+            ) : (
+              <FloppyDisk size={16} weight="regular" aria-hidden="true" />
+            )}
+          </button>
+        </div>
+      </div>
+      <div className="target-row">
+        <span>Format</span>
+        <FormatSelect id="format-ide" label="Format" value={formatIde} disabled={isBusy} onChange={onFormatIdeChange} />
+      </div>
+      <div className="target-row">
+        <span>Copy to</span>
+        <FormatSelect
+          id="copy-dest-ide"
+          label="Copy to"
+          value={copyDest}
+          disabled={isBusy}
+          onChange={onCopyDestChange}
+        />
+        <button
+          type="button"
+          onClick={onCopy}
+          disabled={!canCopy || isBusy}
+          aria-label={`Copy ${selectedName ?? 'command'} to ${FORMAT_LABELS[copyDest]}`}
+          className={`outline-button ${FOCUS_RING}`}
+        >
+          <Copy size={14} weight="regular" aria-hidden="true" />
+          Copy
+        </button>
+        <button
+          type="button"
+          onClick={onCopyAll}
+          disabled={!canSave || isBusy}
+          aria-label={`Copy all to ${FORMAT_LABELS[copyDest]}`}
+          className={`outline-button ${FOCUS_RING}`}
+        >
+          Copy all
+        </button>
       </div>
       {children}
     </section>
@@ -414,74 +355,322 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
   const [collections, setCollections] = useState<Collection[] | null>(null);
   const [inbox, setInbox] = useState<string[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [formatIde, setFormatIde] = useState<IDE>('cursor');
+  const [copyDest, setCopyDest] = useState<IDE>('claude');
+  const [exportOutcome, setExportOutcome] = useState<ExportOutcome | null>(null);
+  const [copyOutcome, setCopyOutcome] = useState<ExportOutcome | null>(null);
+  const [confirmReplace, setConfirmReplace] = useState(false);
+  const [confirmCopyReplace, setConfirmCopyReplace] = useState(false);
+  const [pendingCopyAll, setPendingCopyAll] = useState(false);
+  const [exportDest, setExportDest] = useState<string | undefined>();
+  const isBusy = exportOutcome?.status === 'loading' || copyOutcome?.status === 'loading';
 
   const refresh = useCallback(async () => {
-    const [next, nextInbox] = await Promise.all([bridge.listCollections(), bridge.listInbox()]);
+    const [next, nextInbox] = await Promise.all([bridge.listCollections(formatIde), bridge.listInbox()]);
     setCollections(next);
     setInbox(nextInbox);
     setSelectedName((current) => {
       if (current && next.some((collection) => collection.name === current)) return current;
       return next[0]?.name ?? null;
     });
-  }, [bridge]);
+  }, [bridge, formatIde]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  if (collections === null) {
-    return <CollectionsPanel>{children}</CollectionsPanel>;
+  async function handleExport(replace?: boolean) {
+    setConfirmReplace(false);
+    const root = await bridge.getProjectRoot();
+    let dest: string | undefined;
+    if (!root) {
+      dest = replace ? exportDest : undefined;
+      if (dest === undefined) {
+        const picked = await bridge.pickDestinationFolder();
+        if (picked === null) return;
+        dest = picked;
+        setExportDest(picked);
+      }
+    }
+    const target = dest ?? root ?? undefined;
+    setExportOutcome({ status: 'loading', ide: formatIde, dest: target });
+    const result = await bridge.exportAll(formatIde, {
+      ...(replace ? { replace: true } : {}),
+      ...(dest ? { dest } : {}),
+    });
+
+    if (!result.ok) {
+      if (isUnstampedConflict(result.error.message)) {
+        setExportOutcome(null);
+        setConfirmReplace(true);
+        return;
+      }
+      setExportDest(undefined);
+      setExportOutcome({ status: 'error', ide: formatIde, dest: target, message: result.error.message });
+      return;
+    }
+    setExportDest(undefined);
+    setConfirmReplace(false);
+    if (result.value.failures.length > 0) {
+      setExportOutcome({
+        status: 'error',
+        ide: formatIde,
+        dest: target,
+        summary: `Exported the command files, but some skills did not deploy to ${targetPhrase(formatIde, target)}`,
+        message: result.value.failures.join('\n'),
+      });
+      return;
+    }
+    setExportOutcome({
+      status: 'success',
+      ide: formatIde,
+      dest: target,
+      path: result.value.succeeded[0],
+    });
   }
 
-  const selected = collections.find((collection) => collection.name === selectedName) ?? null;
+  async function handleCopy(all: boolean, replace?: boolean) {
+    setConfirmCopyReplace(false);
+    const root = await bridge.getProjectRoot();
+    let dest: string | undefined;
+    if (!root) {
+      const picked = await bridge.pickDestinationFolder();
+      if (picked === null) return;
+      dest = picked;
+    }
+    const target = dest ?? root ?? undefined;
+    setCopyOutcome({ status: 'loading', ide: copyDest, dest: target });
+    const opts = {
+      ...(replace ? { replace: true } : {}),
+      ...(dest ? { dest } : {}),
+    };
+    const result = all
+      ? await bridge.copyAll(formatIde, copyDest, opts)
+      : selectedName
+        ? await bridge.copyTo(selectedName, formatIde, copyDest, opts)
+        : { ok: false as const, error: new Error('Select a command to copy') };
+
+    if (!result.ok) {
+      if (isUnstampedConflict(result.error.message)) {
+        setCopyOutcome(null);
+        setPendingCopyAll(all);
+        setConfirmCopyReplace(true);
+        return;
+      }
+      setCopyOutcome({ status: 'error', ide: copyDest, dest: target, message: result.error.message });
+      return;
+    }
+    if (result.value.failures.length > 0) {
+      setCopyOutcome({
+        status: 'error',
+        ide: copyDest,
+        dest: target,
+        summary: `Copied, but some skills did not deploy to ${targetPhrase(copyDest, target)}`,
+        message: result.value.failures.join('\n'),
+      });
+      return;
+    }
+    setCopyOutcome({
+      status: 'success',
+      ide: copyDest,
+      dest: target,
+      path: result.value.succeeded[0],
+    });
+    await refresh();
+  }
+
+  function handleFormatChange(ide: IDE) {
+    setFormatIde(ide);
+    setCopyDest((current) => (current === ide ? otherIde(ide) : current));
+  }
+
+  const panel = (
+    <CollectionsPanel
+      formatIde={formatIde}
+      onFormatIdeChange={handleFormatChange}
+      copyDest={copyDest}
+      onCopyDestChange={setCopyDest}
+      onSave={() => void handleExport()}
+      onCopy={() => void handleCopy(false)}
+      onCopyAll={() => void handleCopy(true)}
+      isBusy={isBusy}
+      canSave={(collections?.length ?? 0) > 0}
+      canCopy={selectedName !== null}
+      selectedName={selectedName}
+    >
+      {collections === null ? null : collections.length === 0 ? (
+        <p className="muted-copy">No commands yet</p>
+      ) : (
+        <div className="command-stages">
+          {groupCommandsByStage(collections).map((stage) => (
+            <div className="command-stage" key={stage.key}>
+              {stage.label && <p className="stage-label">{stage.label}</p>}
+              <ul className="collection-list">
+                {stage.commands.map((collection) => (
+                  <li
+                    key={collection.name}
+                    aria-label={`Command ${collection.name}`}
+                    aria-current={collection.name === selectedName ? 'true' : undefined}
+                    className={`collection-card ${collection.name === selectedName ? 'selected' : ''}`}
+                    tabIndex={0}
+                    onClick={() => setSelectedName(collection.name)}
+                    onKeyDown={(event) => selectCollection(event, collection.name, setSelectedName)}
+                  >
+                    <div className="card-title">
+                      <span>/{collection.name}</span>
+                    </div>
+                    <div className="skill-count">
+                      <span>
+                        {collection.skills.length} {collection.skills.length === 1 ? 'skill' : 'skills'}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+      {children}
+    </CollectionsPanel>
+  );
+
+  const selected = collections?.find((collection) => collection.name === selectedName) ?? null;
 
   return (
-    <>
-      <CollectionsPanel>
-        {collections.length === 0 ? (
-          <p className="muted-copy">No commands yet</p>
-        ) : (
-          <div className="command-stages">
-            {groupCommandsByStage(collections).map((stage) => (
-              <div className="command-stage" key={stage.key}>
-                {stage.label && <p className="stage-label">{stage.label}</p>}
-                <ul className="collection-list">
-                  {stage.commands.map((collection) => (
-                    <li
-                      key={collection.name}
-                      aria-label={`Command ${collection.name}`}
-                      aria-current={collection.name === selectedName ? 'true' : undefined}
-                      className={`collection-card ${collection.name === selectedName ? 'selected' : ''}`}
-                      tabIndex={0}
-                      onClick={() => setSelectedName(collection.name)}
-                      onKeyDown={(event) => selectCollection(event, collection.name, setSelectedName)}
-                    >
-                      <div className="card-title">
-                        <span>/{collection.name}</span>
-                      </div>
-                      <div className="skill-count">
-                        <span>
-                          {collection.skills.length} {collection.skills.length === 1 ? 'skill' : 'skills'}
-                        </span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        )}
-        {children}
-      </CollectionsPanel>
+    <CommandFormatContext.Provider value={formatIde}>
+      {panel}
       {selected && (
         <CollectionDetail
-          key={selected.name}
+          key={`${formatIde}:${selected.name}`}
           collection={selected}
           inbox={inbox}
+          ide={formatIde}
           onChange={refresh}
           onDeleted={refresh}
         />
       )}
-    </>
+      {exportOutcome && (
+        <StatusDialog
+          eyebrow="Export"
+          title={
+            exportOutcome.status === 'loading'
+              ? 'Exporting…'
+              : exportOutcome.status === 'success'
+                ? 'Exported'
+                : 'Export failed'
+          }
+          kind={exportOutcome.status}
+          errorDetail={exportOutcome.status === 'error' ? exportOutcome.message : undefined}
+          closeLabel="Close export status"
+          onClose={() => setExportOutcome(null)}
+        >
+          {exportOutcome.status === 'loading' && (
+            <p role="status" className="muted-copy">
+              Exporting all commands to {targetPhrase(exportOutcome.ide, exportOutcome.dest)}
+            </p>
+          )}
+          {exportOutcome.status === 'success' && (
+            <>
+              <p className="status-copy-success">{`Exported all commands to ${targetPhrase(exportOutcome.ide, exportOutcome.dest)}`}</p>
+              {exportOutcome.path && <p className="status-path">{exportOutcome.path}</p>}
+            </>
+          )}
+          {exportOutcome.status === 'error' && (
+            <p role="alert" className="muted-copy text-destructive">
+              {exportOutcome.summary ??
+                `Could not export commands to ${targetPhrase(exportOutcome.ide, exportOutcome.dest)}`}
+            </p>
+          )}
+        </StatusDialog>
+      )}
+      {copyOutcome && (
+        <StatusDialog
+          eyebrow="Copy"
+          title={
+            copyOutcome.status === 'loading'
+              ? 'Copying…'
+              : copyOutcome.status === 'success'
+                ? 'Copied'
+                : 'Copy failed'
+          }
+          kind={copyOutcome.status}
+          errorDetail={copyOutcome.status === 'error' ? copyOutcome.message : undefined}
+          closeLabel="Close copy status"
+          onClose={() => setCopyOutcome(null)}
+        >
+          {copyOutcome.status === 'loading' && (
+            <p role="status" className="muted-copy">
+              Copying to {targetPhrase(copyOutcome.ide, copyOutcome.dest)}
+            </p>
+          )}
+          {copyOutcome.status === 'success' && (
+            <>
+              <p className="status-copy-success">{`Copied to ${targetPhrase(copyOutcome.ide, copyOutcome.dest)}`}</p>
+              {copyOutcome.path && <p className="status-path">{copyOutcome.path}</p>}
+            </>
+          )}
+          {copyOutcome.status === 'error' && (
+            <p role="alert" className="muted-copy text-destructive">
+              {copyOutcome.summary ?? `Could not copy to ${targetPhrase(copyOutcome.ide, copyOutcome.dest)}`}
+            </p>
+          )}
+        </StatusDialog>
+      )}
+      {confirmReplace && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setConfirmReplace(false)}>
+          <div
+            className="help-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="replace-export-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">Export</p>
+            <h2 id="replace-export-title">Replace existing file?</h2>
+            <p className="muted-copy">
+              A command file exists and was not generated by skil. Replace it with our command template?
+            </p>
+            <div className="modal-actions">
+              <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={() => setConfirmReplace(false)}>
+                Cancel
+              </button>
+              <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={() => void handleExport(true)}>
+                Replace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmCopyReplace && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setConfirmCopyReplace(false)}>
+          <div
+            className="help-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="replace-copy-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">Copy</p>
+            <h2 id="replace-copy-title">Replace existing file?</h2>
+            <p className="muted-copy">
+              A command file exists and was not generated by skil. Replace it with our command template?
+            </p>
+            <div className="modal-actions">
+              <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={() => setConfirmCopyReplace(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`primary-button ${FOCUS_RING}`}
+                onClick={() => void handleCopy(pendingCopyAll, true)}
+              >
+                Replace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </CommandFormatContext.Provider>
   );
 }

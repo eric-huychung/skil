@@ -42,12 +42,12 @@ describe('GUI workflow (real engine)', () => {
     expect(engine.inbox()).toEqual(['obra/react-patterns']);
     expect(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' })).toBeInTheDocument();
 
-    await userEvent.click(within(detail).getByLabelText('Export frontend to'));
+    await userEvent.click(screen.getByLabelText('Copy to'));
     await userEvent.click(await screen.findByRole('option', { name: 'Windsurf' }));
-    await userEvent.click(within(detail).getByRole('button', { name: 'Export frontend' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Copy frontend to Windsurf' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Exported' })).toHaveTextContent(
-      'Exported frontend to Windsurf in test-project'
+    expect(await screen.findByRole('dialog', { name: 'Copied' })).toHaveTextContent(
+      'Copied to Windsurf in test-project'
     );
     const written = fs.readFile('.windsurf/workflows/frontend.md');
     expect(isOk(written)).toBe(true);

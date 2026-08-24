@@ -14,6 +14,7 @@ import { registerExportCommand } from './commands/export.js';
 import { registerInboxCommand } from './commands/inbox.js';
 import { registerDeleteCommand } from './commands/delete.js';
 import { registerScanCommand } from './commands/scan.js';
+import { registerCopyCommand } from './commands/copy.js';
 
 /**
  * Builds the skil CLI program. Commands are thin: they parse args,
@@ -41,6 +42,7 @@ export function createProgram(engine: ICollectionEngine): Command {
   registerInboxCommand(program, engine);
   registerDeleteCommand(program, engine);
   registerScanCommand(program, engine);
+  registerCopyCommand(program, engine);
 
   return program;
 }

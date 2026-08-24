@@ -27,10 +27,23 @@ export interface Skill {
   url?: string;
 }
 
-/** A named group of skill ids (SDLC knob: `/build`). Display as `/name`. */
+/** Persisted command: membership is per IDE. Not returned to callers. */
+export interface CommandRecord {
+  name: string;
+  /** Skill ids filed on this command for each IDE. Missing key = absent on that IDE. */
+  membership: Partial<Record<IDE, string[]>>;
+  createdAt: string;
+  /**
+   * Leftover shell template for `contextkit run`. Absent on commands
+   * created without it — always check before use.
+   */
+  command?: string;
+}
+
+/** View DTO from `list(ide)` — `skills` is that IDE's membership. Display as `/name`. */
 export interface Command {
   name: string;
-  /** Catalog ids filed on this command. */
+  /** Catalog ids filed on this command for the requested IDE. */
   skills: string[];
   /** ISO 8601 timestamp of when the command was created. */
   createdAt: string;
@@ -61,24 +74,28 @@ export interface ScanResult {
   added: string[];
   gone: string[];
   changed: string[];
+  /** Stamped command file won for that IDE (disk ≠ map). */
+  commandPulls: Array<{ ide: IDE; name: string }>;
 }
 
 /**
  * Persisted engine state, stored at `.skil/state.json`.
- * Load falls back to `.contextkit/state.json` if the new file is missing.
+ * Missing file → empty state. Leftover `.contextkit/state.json` with no
+ * `.skil/` file is an error — no fallback.
  *
- * Schema v4: `commands` (was `collections`), `skills` catalog, `inbox`.
- * Load v3: `collections` → `commands`, missing `skills` → `[]`.
- * `installedSkills` is leftover (not the catalog). Missing `inbox` → `[]`.
- * v1 `activeCollection` is still ignored. No rewrite on read.
+ * Schema v5: `commands[].membership` by IDE. Load v4 `commands[].skills`
+ * as `membership.cursor`. Load v3 `collections` → `commands` first, then
+ * the same. Missing `skills` catalog → `[]`. `installedSkills` is leftover
+ * (not the catalog). Missing `inbox` → `[]`. v1 `activeCollection` is
+ * still ignored. No rewrite on read.
  */
 export interface State {
-  commands: Command[];
+  commands: CommandRecord[];
   skills: SkillRecord[];
   /**
-   * Unfiled skill ids (scanned locals + Discover adds). Not a command —
-   * reserved name `inbox` cannot be created. Missing on pre-v3 files;
-   * treat as `[]`.
+   * Staging pool of skill ids (scanned locals + Discover adds). Filing onto
+   * a command does not remove the id. Not a command — reserved name `inbox`
+   * cannot be created. Missing on pre-v3 files; treat as `[]`.
    */
   inbox: string[];
   /** Schema version, for future migrations. */

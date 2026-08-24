@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
+import { load as loadYaml } from 'js-yaml';
 import type { ICollectionEngine } from '../interfaces/engine.js';
 import type { IFileSystemAdapter, IConfigAdapter, ISkillsAdapter } from '../interfaces/adapters.js';
 import type {
   BrowseView,
   Collection,
   Command,
+  CommandRecord,
   ExportResult,
   IDE,
   ScanResult,
@@ -18,11 +20,14 @@ import { err, isOk, ok, type Result } from './result.js';
 /** Path to the persisted engine state, relative to the project root. */
 export const STATE_PATH = '.skil/state.json';
 
-/** Pre-rename state file. Loaded only when `.skil/state.json` is missing. */
-export const LEGACY_STATE_PATH = '.contextkit/state.json';
+const LEFTOVER_STATE_PATH = '.contextkit/state.json';
 
-/** Current state schema version. See `State`'s doc comment for the v3 → v4 notes. */
-const STATE_VERSION = '4.0';
+/** Current state schema version. See `State`'s doc comment for the v4 → v5 notes. */
+const STATE_VERSION = '5.0';
+
+const DEFAULT_IDE: IDE = 'cursor';
+
+const ALL_IDES: IDE[] = ['cursor', 'claude', 'windsurf', 'agents'];
 
 /** Command name reserved for the Inbox holding list on `State`. */
 const INBOX_NAME = 'inbox';
@@ -62,11 +67,20 @@ function underRoot(root: string | undefined, relative: string): string {
   return `${root.replace(/\\/g, '/').replace(/\/+$/, '')}/${relative}`;
 }
 
+/** On-disk command that may still use v4 `skills[]`. */
+interface PersistedCommand {
+  name: string;
+  skills?: string[];
+  membership?: Partial<Record<IDE, string[]>>;
+  createdAt: string;
+  command?: string;
+}
+
 /** On-disk shape that may still use v3 `collections`. */
 interface PersistedState {
   version?: string;
-  commands?: Command[];
-  collections?: Command[];
+  commands?: PersistedCommand[];
+  collections?: PersistedCommand[];
   skills?: SkillRecord[];
   inbox?: string[];
   installedSkills?: Skill[];
@@ -76,9 +90,23 @@ function emptyState(): State {
   return { commands: [], skills: [], installedSkills: [], inbox: [], version: STATE_VERSION };
 }
 
-function normalizeState(raw: PersistedState): State {
+function toCommandRecord(raw: PersistedCommand): CommandRecord {
+  const membership =
+    raw.membership !== undefined
+      ? cloneMembership(raw.membership)
+      : { [DEFAULT_IDE]: [...(raw.skills ?? [])] };
   return {
-    commands: raw.commands ?? raw.collections ?? [],
+    name: raw.name,
+    membership,
+    createdAt: raw.createdAt,
+    ...(raw.command !== undefined ? { command: raw.command } : {}),
+  };
+}
+
+function normalizeState(raw: PersistedState): State {
+  const commands = (raw.commands ?? raw.collections ?? []).map(toCommandRecord);
+  return {
+    commands,
     skills: raw.skills ?? [],
     installedSkills: raw.installedSkills ?? [],
     inbox: raw.inbox ?? [],
@@ -86,14 +114,54 @@ function normalizeState(raw: PersistedState): State {
   };
 }
 
-/** Prefer `.skil/state.json`. Fall back to the old path. Do not copy on load. */
+function toView(record: CommandRecord, ide: IDE): Command {
+  return {
+    name: record.name,
+    skills: [...(record.membership[ide] ?? [])],
+    createdAt: record.createdAt,
+    ...(record.command !== undefined ? { command: record.command } : {}),
+  };
+}
+
+function cloneMembership(membership: Partial<Record<IDE, string[]>>): Partial<Record<IDE, string[]>> {
+  const next: Partial<Record<IDE, string[]>> = {};
+  for (const ide of ALL_IDES) {
+    const list = membership[ide];
+    if (list !== undefined) {
+      next[ide] = [...list];
+    }
+  }
+  return next;
+}
+
+function cloneCommandRecord(record: CommandRecord): CommandRecord {
+  return {
+    ...record,
+    membership: cloneMembership(record.membership),
+  };
+}
+
+function hasMembership(record: CommandRecord, ide: IDE): boolean {
+  return record.membership[ide] !== undefined;
+}
+
+function commandNotOnIde(name: string, ide: IDE): Error {
+  return new Error(`Command '${name}' not found on ${ide}. Run 'skil list --ide ${ide}' to see available commands.`);
+}
+
+/** Load `.skil/state.json`. Missing file → empty state. Leftover `.contextkit/state.json` with no `.skil/` file is an error. */
 function loadState(fs: IFileSystemAdapter): State {
   const current = fs.readJSON<PersistedState>(STATE_PATH);
   if (isOk(current)) {
     return normalizeState(current.value);
   }
-  const legacy = fs.readJSON<PersistedState>(LEGACY_STATE_PATH);
-  return isOk(legacy) ? normalizeState(legacy.value) : emptyState();
+  const leftover = fs.readJSON<PersistedState>(LEFTOVER_STATE_PATH);
+  if (isOk(leftover)) {
+    throw new Error(
+      'Found leftover .contextkit/state.json. Move it to .skil/state.json and retry.'
+    );
+  }
+  return emptyState();
 }
 
 /**
@@ -103,6 +171,7 @@ function loadState(fs: IFileSystemAdapter): State {
  */
 export class CollectionEngine implements ICollectionEngine {
   private state: State;
+  private writtenPaths: string[] = [];
 
   constructor(
     private readonly fs: IFileSystemAdapter,
@@ -113,86 +182,112 @@ export class CollectionEngine implements ICollectionEngine {
     this.mergeExternallyInstalledSkills();
   }
 
-  create(name: string, skillIds: string[], command?: string): Result<Collection> {
+  lastWrittenPaths(): string[] {
+    return [...this.writtenPaths];
+  }
+
+  create(name: string, skillIds: string[], command?: string, ide: IDE = DEFAULT_IDE): Result<Collection> {
     name = normalizeCommandName(name);
     if (name === INBOX_NAME) {
       return err(new Error(`'inbox' is not a command. Inbox is a holding list of skill IDs — add with 'contextkit inbox add' and file them onto a named command.`));
     }
-    if (this.state.commands.some((c) => c.name === name)) {
-      return err(new Error(`Command '${name}' already exists. Choose a different name or run 'contextkit list' to see existing commands.`));
+
+    const existing = this.state.commands.find((c) => c.name === name);
+    if (existing) {
+      if (hasMembership(existing, ide)) {
+        return err(new Error(`Command '${name}' already exists. Choose a different name or run 'contextkit list' to see existing commands.`));
+      }
+      const snapshot = cloneCommandRecord(existing);
+      existing.membership[ide] = [...skillIds];
+      const persistResult = this.persist();
+      if (!isOk(persistResult)) {
+        existing.membership = snapshot.membership;
+        return err(new Error(`Failed to save command '${name}': ${persistResult.error.message}`));
+      }
+      this.writeThrough(ide, [name]);
+      return ok(toView(existing, ide));
     }
 
-    const collection: Collection = {
+    const record: CommandRecord = {
       name,
-      skills: skillIds,
+      membership: { [ide]: [...skillIds] },
       createdAt: new Date().toISOString(),
       ...(command !== undefined ? { command } : {}),
     };
-    this.state.commands.push(collection);
+    this.state.commands.push(record);
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
       this.state.commands.pop();
       return err(new Error(`Failed to save command '${name}': ${persistResult.error.message}`));
     }
 
-    return ok(collection);
+    this.writeThrough(ide, [name]);
+    return ok(toView(record, ide));
   }
 
-  addSkill(name: string, skillId: string): Result<Collection> {
+  addSkill(name: string, skillId: string, ide: IDE = DEFAULT_IDE): Result<Collection> {
     name = normalizeCommandName(name);
-    const collection = this.state.commands.find((c) => c.name === name);
-    if (!collection) {
-      return err(commandNotFound(name));
+    const record = this.state.commands.find((c) => c.name === name);
+    if (!record || !hasMembership(record, ide)) {
+      return err(record ? commandNotOnIde(name, ide) : commandNotFound(name));
     }
-    if (collection.skills.includes(skillId)) {
-      return ok(collection);
+    const list = record.membership[ide] ?? [];
+    if (list.includes(skillId)) {
+      return ok(toView(record, ide));
     }
 
-    collection.skills.push(skillId);
+    const snapshot = [...list];
+    list.push(skillId);
+    record.membership[ide] = list;
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
-      collection.skills.pop();
+      record.membership[ide] = snapshot;
       return err(new Error(`Failed to save command '${name}': ${persistResult.error.message}`));
     }
 
-    return ok(collection);
+    this.writeThrough(ide, [name]);
+    return ok(toView(record, ide));
   }
 
-  removeSkill(name: string, skillId: string): Result<Collection> {
+  removeSkill(name: string, skillId: string, ide: IDE = DEFAULT_IDE): Result<Collection> {
     name = normalizeCommandName(name);
-    const collection = this.state.commands.find((c) => c.name === name);
-    if (!collection) {
-      return err(commandNotFound(name));
+    const record = this.state.commands.find((c) => c.name === name);
+    if (!record || !hasMembership(record, ide)) {
+      return err(record ? commandNotOnIde(name, ide) : commandNotFound(name));
     }
 
-    const index = collection.skills.indexOf(skillId);
+    const list = record.membership[ide] ?? [];
+    const index = list.indexOf(skillId);
     if (index === -1) {
-      return ok(collection);
+      return ok(toView(record, ide));
     }
 
-    collection.skills.splice(index, 1);
+    const snapshot = [...list];
+    list.splice(index, 1);
+    record.membership[ide] = list;
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
-      collection.skills.splice(index, 0, skillId);
+      record.membership[ide] = snapshot;
       return err(new Error(`Failed to save command '${name}': ${persistResult.error.message}`));
     }
 
-    return ok(collection);
+    this.writeThrough(ide, [name]);
+    return ok(toView(record, ide));
   }
 
   getCommand(name: string): Result<string> {
-    const collection = this.state.commands.find((c) => c.name === name);
-    if (!collection) {
+    const record = this.state.commands.find((c) => c.name === name);
+    if (!record) {
       return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
     }
-    if (!collection.command) {
+    if (!record.command) {
       return err(new Error(`Collection '${name}' has no command defined. Create it with 'contextkit create ${name} --command "<cmd>"'.`));
     }
-    return ok(collection.command);
+    return ok(record.command);
   }
 
-  list(): Collection[] {
-    return [...this.state.commands];
+  list(ide: IDE = DEFAULT_IDE): Collection[] {
+    return this.state.commands.filter((c) => hasMembership(c, ide)).map((c) => toView(c, ide));
   }
 
   sync(configPath: string): Result<SyncResult> {
@@ -211,16 +306,16 @@ export class CollectionEngine implements ICollectionEngine {
       .filter((c) => !configNames.has(c.name))
       .map((c) => `Local collection '${c.name}' is not in the config file. Add it to '${configPath}' or remove it locally.`);
 
-    const snapshot = this.state.commands.map((c) => ({ ...c }));
+    const snapshot = this.state.commands.map(cloneCommandRecord);
     const synced: string[] = [];
     for (const [name, skillIds] of Object.entries(configResult.value.collections)) {
       const existing = this.state.commands.find((c) => c.name === name);
       if (existing) {
-        existing.skills = skillIds;
+        existing.membership[DEFAULT_IDE] = skillIds;
       } else {
         this.state.commands.push({
           name,
-          skills: skillIds,
+          membership: { [DEFAULT_IDE]: skillIds },
           createdAt: new Date().toISOString(),
         });
       }
@@ -303,13 +398,13 @@ export class CollectionEngine implements ICollectionEngine {
     const failures: string[] = [];
 
     for (const name of collectionNames) {
-      const collection = this.state.commands.find((c) => c.name === name);
-      if (!collection) {
+      const record = this.state.commands.find((c) => c.name === name);
+      if (!record) {
         failures.push(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`);
         continue;
       }
 
-      for (const skillId of collection.skills) {
+      for (const skillId of record.membership[targetIDE] ?? record.membership[DEFAULT_IDE] ?? []) {
         const result = await this.skillsAdapter.convert(skillId, targetIDE);
         if (isOk(result)) {
           succeeded.push(`${name}:${skillId}`);
@@ -329,10 +424,11 @@ export class CollectionEngine implements ICollectionEngine {
   ): Promise<Result<ExportResult>> {
     name = normalizeCommandName(name);
     const command = this.state.commands.find((c) => c.name === name);
-    if (!command) {
-      return err(commandNotFound(name));
+    if (!command || !hasMembership(command, targetIDE)) {
+      return err(command ? commandNotOnIde(name, targetIDE) : commandNotFound(name));
     }
 
+    const skills = command.membership[targetIDE] ?? [];
     const path = underRoot(opts?.dest, `${COMMAND_DIR_BY_IDE[targetIDE]}/${name}.md`);
     const existing = this.fs.readFile(path);
     if (isOk(existing) && !isSkilStamped(existing.value) && opts?.replace !== true) {
@@ -343,16 +439,17 @@ export class CollectionEngine implements ICollectionEngine {
       );
     }
 
-    const written = this.fs.writeFile(path, renderCommandFile(name, command.skills));
+    const written = this.fs.writeFile(path, renderCommandFile(name, skills));
     if (!isOk(written)) {
       return err(new Error(`Failed to write command file '${path}': ${written.error.message}`));
     }
+    this.writtenPaths = [path];
 
     const succeeded = [path];
     const failures: string[] = [];
     let copied = false;
 
-    for (const skillId of command.skills) {
+    for (const skillId of skills) {
       const skillFolder = underRoot(opts?.dest, `${SKILL_ROOT_BY_IDE[targetIDE]}/${skillId}`);
       if (isOk(this.fs.readFile(`${skillFolder}/SKILL.md`))) {
         continue;
@@ -392,6 +489,42 @@ export class CollectionEngine implements ICollectionEngine {
     return ok({ succeeded, failures });
   }
 
+  async exportAll(
+    targetIDE: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>> {
+    const commands = this.state.commands.filter((command) => hasMembership(command, targetIDE));
+    if (commands.length === 0) {
+      return err(new Error('No commands to export'));
+    }
+
+    if (opts?.replace !== true) {
+      for (const command of commands) {
+        const path = underRoot(opts?.dest, `${COMMAND_DIR_BY_IDE[targetIDE]}/${command.name}.md`);
+        const existing = this.fs.readFile(path);
+        if (isOk(existing) && !isSkilStamped(existing.value)) {
+          return err(
+            new Error(
+              `Command file '${path}' exists and was not generated by skil. Re-export with replace to overwrite.`
+            )
+          );
+        }
+      }
+    }
+
+    const succeeded: string[] = [];
+    const failures: string[] = [];
+    for (const command of commands) {
+      const result = await this.exportCommand(command.name, targetIDE, opts);
+      if (!isOk(result)) {
+        return result;
+      }
+      succeeded.push(...result.value.succeeded);
+      failures.push(...result.value.failures);
+    }
+    return ok({ succeeded, failures });
+  }
+
   inbox(): string[] {
     return [...this.state.inbox];
   }
@@ -427,11 +560,11 @@ export class CollectionEngine implements ICollectionEngine {
     return ok(this.inbox());
   }
 
-  file(skillId: string, commandName: string): Result<Collection> {
+  file(skillId: string, commandName: string, ide: IDE = DEFAULT_IDE): Result<Collection> {
     commandName = normalizeCommandName(commandName);
-    const collection = this.state.commands.find((c) => c.name === commandName);
-    if (!collection) {
-      return err(commandNotFound(commandName));
+    const record = this.state.commands.find((c) => c.name === commandName);
+    if (!record || !hasMembership(record, ide)) {
+      return err(record ? commandNotOnIde(commandName, ide) : commandNotFound(commandName));
     }
 
     const inboxIndex = this.state.inbox.indexOf(skillId);
@@ -440,42 +573,127 @@ export class CollectionEngine implements ICollectionEngine {
     }
 
     const inboxSnapshot = [...this.state.inbox];
-    const skillsSnapshot = [...collection.skills];
+    const skillsSnapshot = [...(record.membership[ide] ?? [])];
+    const list = record.membership[ide] ?? [];
 
     this.state.inbox.splice(inboxIndex, 1);
-    if (!collection.skills.includes(skillId)) {
-      collection.skills.push(skillId);
+    if (!list.includes(skillId)) {
+      list.push(skillId);
     }
+    record.membership[ide] = list;
 
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
       this.state.inbox = inboxSnapshot;
-      collection.skills = skillsSnapshot;
+      record.membership[ide] = skillsSnapshot;
       return err(new Error(`Failed to save command '${commandName}': ${persistResult.error.message}`));
     }
 
-    return ok(collection);
+    this.writeThrough(ide, [commandName]);
+    return ok(toView(record, ide));
   }
 
-  delete(name: string): Result<void> {
+  delete(name: string, ide: IDE = DEFAULT_IDE): Result<void> {
     name = normalizeCommandName(name);
     const index = this.state.commands.findIndex((c) => c.name === name);
     if (index === -1) {
       return err(commandNotFound(name));
     }
 
-    const removed = this.state.commands[index];
-    if (removed === undefined) {
-      return err(commandNotFound(name));
+    const record = this.state.commands[index];
+    if (record === undefined || !hasMembership(record, ide)) {
+      return err(record ? commandNotOnIde(name, ide) : commandNotFound(name));
     }
-    this.state.commands.splice(index, 1);
+
+    const snapshot = cloneCommandRecord(record);
+    delete record.membership[ide];
+    const dropRow = Object.keys(record.membership).length === 0;
+    if (dropRow) {
+      this.state.commands.splice(index, 1);
+    }
+
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
-      this.state.commands.splice(index, 0, removed);
+      if (dropRow) {
+        this.state.commands.splice(index, 0, snapshot);
+      } else {
+        record.membership = snapshot.membership;
+      }
       return err(new Error(`Failed to save after deleting '${name}': ${persistResult.error.message}`));
     }
 
+    this.writeThrough(ide, [name]);
     return ok(undefined);
+  }
+
+  async copyTo(
+    name: string,
+    fromIde: IDE,
+    toIde: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>> {
+    name = normalizeCommandName(name);
+    const record = this.state.commands.find((c) => c.name === name);
+    if (!record || !hasMembership(record, fromIde)) {
+      return err(record ? commandNotOnIde(name, fromIde) : commandNotFound(name));
+    }
+
+    const destPath = underRoot(opts?.dest, `${COMMAND_DIR_BY_IDE[toIde]}/${name}.md`);
+    const existing = this.fs.readFile(destPath);
+    if (isOk(existing) && !isSkilStamped(existing.value) && opts?.replace !== true) {
+      return err(
+        new Error(
+          `Command file '${destPath}' exists and was not generated by skil. Re-export with replace to overwrite.`
+        )
+      );
+    }
+
+    const snapshot = cloneCommandRecord(record);
+    record.membership[toIde] = [...(record.membership[fromIde] ?? [])];
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      record.membership = snapshot.membership;
+      return err(new Error(`Failed to save command '${name}': ${persistResult.error.message}`));
+    }
+
+    return this.exportCommand(name, toIde, opts);
+  }
+
+  async copyAll(
+    fromIde: IDE,
+    toIde: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>> {
+    const names = this.list(fromIde).map((command) => command.name);
+    if (names.length === 0) {
+      return err(new Error(`No commands to copy from ${fromIde}`));
+    }
+
+    if (opts?.replace !== true) {
+      for (const name of names) {
+        const path = underRoot(opts?.dest, `${COMMAND_DIR_BY_IDE[toIde]}/${name}.md`);
+        const existing = this.fs.readFile(path);
+        if (isOk(existing) && !isSkilStamped(existing.value)) {
+          return err(
+            new Error(
+              `Command file '${path}' exists and was not generated by skil. Re-export with replace to overwrite.`
+            )
+          );
+        }
+      }
+    }
+
+    const succeeded: string[] = [];
+    const failures: string[] = [];
+    for (const name of names) {
+      const result = await this.copyTo(name, fromIde, toIde, opts);
+      if (!isOk(result)) {
+        return result;
+      }
+      succeeded.push(...result.value.succeeded);
+      failures.push(...result.value.failures);
+    }
+    return ok({ succeeded, failures });
   }
 
   scan(): Result<ScanResult> {
@@ -511,30 +729,21 @@ export class CollectionEngine implements ICollectionEngine {
     const snapshot = {
       skills: this.state.skills.map((record) => ({ ...record, paths: [...record.paths], deployedTo: [...record.deployedTo] })),
       inbox: [...this.state.inbox],
-      commands: this.state.commands.map((command) => ({ ...command, skills: [...command.skills] })),
+      commands: this.state.commands.map(cloneCommandRecord),
     };
 
     const previous = new Map(this.state.skills.map((record) => [record.id, record]));
-    const filed = new Set(this.state.commands.flatMap((command) => command.skills));
     const added: string[] = [];
     const changed: string[] = [];
     const nextSkills: SkillRecord[] = [];
+    const matchedPrevious = new Set<string>();
+    const matchedFound = new Set<string>();
 
     for (const [id, seen] of found) {
       const prev = previous.get(id);
-      if (!prev) {
-        added.push(id);
-        nextSkills.push({
-          id,
-          hash: seen.hash,
-          paths: seen.paths,
-          deployedTo: [],
-          source: 'local',
-        });
-        if (!filed.has(id) && !this.state.inbox.includes(id)) {
-          this.state.inbox.push(id);
-        }
-      } else {
+      if (prev) {
+        matchedPrevious.add(id);
+        matchedFound.add(id);
         if (prev.hash !== seen.hash) {
           changed.push(id);
         }
@@ -546,19 +755,61 @@ export class CollectionEngine implements ICollectionEngine {
       }
     }
 
-    const gone: string[] = [];
-    for (const prev of this.state.skills) {
-      if (found.has(prev.id)) {
+    const unmatchedPrev = this.state.skills.filter((record) => !matchedPrevious.has(record.id));
+    const unmatchedFound = [...found.entries()].filter(([id]) => !matchedFound.has(id));
+    const renameMap = new Map<string, string>();
+
+    for (const prev of unmatchedPrev) {
+      const renameIndex = unmatchedFound.findIndex(([, seen]) => seen.hash === prev.hash);
+      if (renameIndex === -1) {
         continue;
       }
-      gone.push(prev.id);
-      this.state.inbox = this.state.inbox.filter((entry) => entry !== prev.id);
-      for (const command of this.state.commands) {
-        command.skills = command.skills.filter((skillId) => skillId !== prev.id);
+      const renamed = unmatchedFound.splice(renameIndex, 1)[0];
+      if (!renamed) {
+        continue;
+      }
+      const [newId, seen] = renamed;
+      matchedPrevious.add(prev.id);
+      renameMap.set(prev.id, newId);
+      this.renameSkillId(prev.id, newId);
+      nextSkills.push({
+        ...prev,
+        id: newId,
+        hash: seen.hash,
+        paths: seen.paths,
+      });
+    }
+
+    const filed = new Set(
+      this.state.commands.flatMap((command) => ALL_IDES.flatMap((ide) => command.membership[ide] ?? []))
+    );
+
+    for (const [id, seen] of unmatchedFound) {
+      added.push(id);
+      nextSkills.push({
+        id,
+        hash: seen.hash,
+        paths: seen.paths,
+        deployedTo: [],
+        source: 'local',
+      });
+      if (!filed.has(id) && !this.state.inbox.includes(id)) {
+        this.state.inbox.push(id);
       }
     }
 
+    const gone: string[] = [];
+    for (const prev of this.state.skills) {
+      if (matchedPrevious.has(prev.id) || nextSkills.some((record) => record.id === prev.id)) {
+        continue;
+      }
+      gone.push(prev.id);
+      this.dropSkillId(prev.id);
+    }
+
     this.state.skills = nextSkills;
+
+    const commandPulls = this.pullStampedCommands(gone, renameMap);
 
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
@@ -568,11 +819,160 @@ export class CollectionEngine implements ICollectionEngine {
       return err(new Error(`Failed to save scan: ${persistResult.error.message}`));
     }
 
-    return ok({ added, gone, changed });
+    this.writeThroughAfterScan(commandPulls, gone);
+    return ok({ added, gone, changed, commandPulls });
   }
 
   skills(): SkillRecord[] {
     return [...this.state.skills];
+  }
+
+  private dropSkillId(id: string): void {
+    this.state.inbox = this.state.inbox.filter((entry) => entry !== id);
+    for (const command of this.state.commands) {
+      for (const ide of ALL_IDES) {
+        const list = command.membership[ide];
+        if (list) {
+          command.membership[ide] = list.filter((skillId) => skillId !== id);
+        }
+      }
+    }
+  }
+
+  private renameSkillId(fromId: string, toId: string): void {
+    this.state.inbox = this.state.inbox.map((entry) => (entry === fromId ? toId : entry));
+    for (const command of this.state.commands) {
+      for (const ide of ALL_IDES) {
+        const list = command.membership[ide];
+        if (list) {
+          command.membership[ide] = list.map((skillId) => (skillId === fromId ? toId : skillId));
+        }
+      }
+    }
+  }
+
+  private pullStampedCommands(gone: string[], renameMap: Map<string, string>): Array<{ ide: IDE; name: string }> {
+    const catalog = new Set(this.state.skills.map((record) => record.id));
+    const goneSet = new Set(gone);
+    const pulls: Array<{ ide: IDE; name: string }> = [];
+
+    for (const ide of ALL_IDES) {
+      const listed = this.fs.listFiles(COMMAND_DIR_BY_IDE[ide]);
+      if (!isOk(listed)) {
+        continue;
+      }
+
+      for (const path of listed.value) {
+        if (!path.endsWith('.md')) {
+          continue;
+        }
+        const name = path.slice(path.lastIndexOf('/') + 1, -'.md'.length);
+        if (name === '') {
+          continue;
+        }
+        const contents = this.fs.readFile(path);
+        if (!isOk(contents) || !isSkilStamped(contents.value)) {
+          continue;
+        }
+        const parsed = parseStampedSkills(contents.value);
+        if (parsed === null) {
+          continue;
+        }
+        const remapped = parsed.map((id) => renameMap.get(id) ?? id);
+
+        let record = this.state.commands.find((command) => command.name === name);
+        const previous = record ? [...(record.membership[ide] ?? [])] : undefined;
+        const adopted = remapped.filter((id) => !goneSet.has(id) || catalog.has(id));
+        const hadKey = record !== undefined && hasMembership(record, ide);
+        const sameList = hadKey && listsEqual(previous ?? [], adopted);
+        if (sameList) {
+          continue;
+        }
+
+        if (!record) {
+          record = {
+            name,
+            membership: {},
+            createdAt: new Date().toISOString(),
+          };
+          this.state.commands.push(record);
+        }
+        record.membership[ide] = adopted;
+        pulls.push({ ide, name });
+      }
+    }
+
+    return pulls;
+  }
+
+  /**
+   * Rewrite stamped command files for `ide` and `names`. Skips unstamped
+   * existing files. Removes our stamp when that IDE no longer has the command.
+   */
+  writeThrough(ide: IDE, names: string[], dest?: string): string[] {
+    const written: string[] = [];
+    for (const name of names) {
+      const path = underRoot(dest, `${COMMAND_DIR_BY_IDE[ide]}/${name}.md`);
+      const existing = this.fs.readFile(path);
+      if (isOk(existing) && !isSkilStamped(existing.value)) {
+        continue;
+      }
+
+      const record = this.state.commands.find((command) => command.name === name);
+      const skills = record?.membership[ide];
+      if (skills === undefined) {
+        if (isOk(existing) && isSkilStamped(existing.value)) {
+          const removed = this.fs.removeFile(path);
+          if (isOk(removed)) {
+            written.push(path);
+          }
+        }
+        continue;
+      }
+
+      const result = this.fs.writeFile(path, renderCommandFile(name, skills));
+      if (isOk(result)) {
+        written.push(path);
+      }
+    }
+    this.writtenPaths = written;
+    return written;
+  }
+
+  /**
+   * After scan: rewrite existing stamps for IDEs that already have one.
+   * Skip a stamp just adopted from disk unless gone-id cleanup changed membership.
+   */
+  writeThroughAfterScan(commandPulls: Array<{ ide: IDE; name: string }>, gone: string[]): void {
+    const goneSet = new Set(gone);
+    const written: string[] = [];
+
+    for (const ide of ALL_IDES) {
+      const listed = this.fs.listFiles(COMMAND_DIR_BY_IDE[ide]);
+      if (!isOk(listed)) {
+        continue;
+      }
+
+      for (const path of listed.value) {
+        if (!path.endsWith('.md')) {
+          continue;
+        }
+        const contents = this.fs.readFile(path);
+        if (!isOk(contents) || !isSkilStamped(contents.value)) {
+          continue;
+        }
+        const name = path.slice(path.lastIndexOf('/') + 1, -'.md'.length);
+        const pulled = commandPulls.some((pull) => pull.ide === ide && pull.name === name);
+        const membership = this.state.commands.find((command) => command.name === name)?.membership[ide];
+        const stampSkills = parseStampedSkills(contents.value) ?? [];
+        const current = membership ?? [];
+        if (pulled && listsEqual(current, stampSkills.filter((id) => !goneSet.has(id)))) {
+          continue;
+        }
+        written.push(...this.writeThrough(ide, [name]));
+      }
+    }
+    this.writtenPaths = written;
   }
 
   private recordLocalDeploy(skillId: string, targetIDE: IDE, dest: string): void {
@@ -614,6 +1014,29 @@ export class CollectionEngine implements ICollectionEngine {
       }
     }
   }
+}
+
+function listsEqual(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+function parseStampedSkills(contents: string): string[] | null {
+  if (!isSkilStamped(contents)) {
+    return null;
+  }
+  const match = contents.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match?.[1]) {
+    return [];
+  }
+  const parsed = loadYaml(match[1]);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return [];
+  }
+  const skills = (parsed as { skills?: unknown }).skills;
+  if (!Array.isArray(skills)) {
+    return [];
+  }
+  return skills.filter((id): id is string => typeof id === 'string');
 }
 
 function catalogId(folder: string, root: string): string {

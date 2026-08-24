@@ -1,6 +1,8 @@
 import type { Command } from 'commander';
 import type { ICollectionEngine } from '../../interfaces/engine.js';
 import { isOk } from '../../core/result.js';
+import type { IDE } from '../../types/index.js';
+import { ideOption } from '../ides.js';
 import { printOutcome, type CommandOutcome } from '../output.js';
 
 export function runInboxList(engine: ICollectionEngine): CommandOutcome {
@@ -25,8 +27,13 @@ export function runInboxAdd(engine: ICollectionEngine, skillId: string): Command
   return { message: `Added '${skillId}' to Inbox`, isError: false };
 }
 
-export function runInboxFile(engine: ICollectionEngine, skillId: string, command: string): CommandOutcome {
-  const result = engine.file(skillId, command);
+export function runInboxFile(
+  engine: ICollectionEngine,
+  skillId: string,
+  command: string,
+  ide: IDE = 'cursor'
+): CommandOutcome {
+  const result = engine.file(skillId, command, ide);
   if (!isOk(result)) {
     return { message: result.error.message, isError: true };
   }
@@ -51,8 +58,9 @@ export function registerInboxCommand(program: Command, engine: ICollectionEngine
 
   inbox
     .command('file <skillId> <command>')
-    .description('Move an Inbox ID onto an existing command')
-    .action((skillId: string, command: string) => {
-      printOutcome(runInboxFile(engine, skillId, command));
+    .description('Move an Inbox ID onto an existing command on an IDE')
+    .addOption(ideOption())
+    .action((skillId: string, command: string, options: { ide: IDE }) => {
+      printOutcome(runInboxFile(engine, skillId, command, options.ide));
     });
 }

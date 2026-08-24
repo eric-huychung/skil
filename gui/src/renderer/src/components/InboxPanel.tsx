@@ -12,6 +12,10 @@ function goneMessage(ids: string[]): string {
   return `Gone: ${ids.join(', ')}`;
 }
 
+function pullMessage(pulls: Array<{ ide: string; name: string }>): string {
+  return `Pulled: ${pulls.map((pull) => `${pull.ide}/${pull.name}`).join(', ')}`;
+}
+
 function matchesQuery(skillId: string, query: string): boolean {
   const needle = query.trim().toLowerCase();
   return needle.length === 0 || skillId.toLowerCase().includes(needle);
@@ -87,11 +91,11 @@ export default function InboxPanel() {
           <p className="eyebrow">Inbox</p>
           <h1>Inbox</h1>
           <p className="workspace-lede">
-            Unfiled skills from scans and Discover. File them onto a command when you are ready.
+            Staging pool from scans and Discover. File them onto a command when you are ready. They stay here after you file.
           </p>
         </div>
         <div className="library-heading-actions">
-          {inbox !== null && <span className="library-count">{inbox.length} unfiled</span>}
+          {inbox !== null && <span className="library-count">{inbox.length} skills</span>}
           <button
             type="button"
             className={`icon-button ${FOCUS_RING}`}
@@ -129,6 +133,11 @@ export default function InboxPanel() {
       {lastScan && lastScan.gone.length > 0 && (
         <p role="status" aria-atomic="true" className="scan-gone">
           {goneMessage(lastScan.gone)}
+        </p>
+      )}
+      {lastScan && lastScan.commandPulls.length > 0 && (
+        <p role="status" aria-atomic="true" className="scan-gone">
+          {pullMessage(lastScan.commandPulls)}
         </p>
       )}
 
