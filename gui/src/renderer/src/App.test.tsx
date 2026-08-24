@@ -28,7 +28,7 @@ describe('App', () => {
 
     renderWithProviders(<App />);
 
-    expect(screen.getByText('skil')).toBeInTheDocument();
+    expect(screen.getByText('Skil')).toBeInTheDocument();
     expect(screen.getByText('skil 0.2.2')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Commands' })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByText('No commands yet')).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe('App', () => {
 
     await clickPickFolder();
 
-    expect(await screen.findByText('test-project')).toBeInTheDocument();
+    expect((await screen.findAllByText(DEFAULT_TEST_PROJECT_ROOT)).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Change folder' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Config is in dev' })).toBeInTheDocument();
   });
@@ -117,10 +117,10 @@ describe('App', () => {
     renderWithProviders(<App />);
     await openSync();
 
-    expect(await screen.findByText('test-project')).toBeInTheDocument();
+    expect((await screen.findAllByText(DEFAULT_TEST_PROJECT_ROOT)).length).toBeGreaterThan(0);
     await userEvent.click(screen.getByRole('button', { name: 'Change folder' }));
 
-    expect(screen.getByText('test-project')).toBeInTheDocument();
+    expect(screen.getAllByText(DEFAULT_TEST_PROJECT_ROOT).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Change folder' })).toBeInTheDocument();
   });
 

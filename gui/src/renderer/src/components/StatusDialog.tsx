@@ -1,6 +1,6 @@
 import { useEffect, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { CircleNotch } from '@phosphor-icons/react';
+import { CheckCircle, CircleNotch, XCircle } from '@phosphor-icons/react';
 import { FOCUS_RING } from '../lib/focus-ring';
 
 export type StatusKind = 'loading' | 'success' | 'error';
@@ -57,14 +57,17 @@ export function StatusDialog({
             <span aria-hidden="true">×</span>
           </button>
         )}
+        <span
+          className={`status-icon ${kind === 'success' ? 'status-icon-success' : kind === 'error' ? 'status-icon-error' : 'status-icon-loading'}`}
+          aria-hidden="true"
+        >
+          {kind === 'loading' && <CircleNotch size={24} weight="regular" className="spin" />}
+          {kind === 'success' && <CheckCircle size={24} weight="regular" />}
+          {kind === 'error' && <XCircle size={24} weight="regular" />}
+        </span>
         <p className="eyebrow">{eyebrow}</p>
         <h2 id={titleId}>{title}</h2>
-        {kind === 'loading' && (
-          <div className="install-status">
-            <CircleNotch size={22} weight="regular" className="spin" aria-hidden="true" />
-            {children}
-          </div>
-        )}
+        {kind === 'loading' && <div className="install-status">{children}</div>}
         {kind === 'success' && children}
         {kind === 'error' && (
           <>

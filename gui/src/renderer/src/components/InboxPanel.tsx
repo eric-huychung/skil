@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowRight, ArrowsClockwise, CaretLeft, CaretRight } from '@phosphor-icons/react';
+import { ArrowRight, ArrowsClockwise, CaretLeft, CaretRight, MagnifyingGlass } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import type { ScanResult } from '../../../shared/ipc';
@@ -86,6 +86,9 @@ export default function InboxPanel() {
         <div>
           <p className="eyebrow">Inbox</p>
           <h1>Inbox</h1>
+          <p className="workspace-lede">
+            Unfiled skills from scans and Discover. File them onto a command when you are ready.
+          </p>
         </div>
         <div className="library-heading-actions">
           {inbox !== null && <span className="library-count">{inbox.length} unfiled</span>}
@@ -103,6 +106,7 @@ export default function InboxPanel() {
 
       <form onSubmit={handleSearch}>
         <label className="search-box" htmlFor="inbox-search-query">
+          <MagnifyingGlass size={16} weight="regular" aria-hidden="true" />
           <span className="sr-only">Search skills</span>
           <input
             id="inbox-search-query"

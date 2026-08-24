@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Folder, GearSix, MagnifyingGlass, Moon, Question, Sparkle, Sun, Tray } from '@phosphor-icons/react';
+import { ArrowsClockwise, Folder, MagnifyingGlass, Moon, Question, Sun, Tray } from '@phosphor-icons/react';
 import { useTheme } from './theme';
 import { useBridge } from './bridge-context';
 import { FOCUS_RING } from './lib/focus-ring';
+import { Logo } from './components/Logo';
 import CollectionList from './components/CollectionList';
 import CreateCollectionForm from './components/CreateCollectionForm';
 import InboxPanel from './components/InboxPanel';
@@ -11,16 +12,11 @@ import SkillSearch from './components/SkillSearch';
 type WorkspaceTab = 'config' | 'search' | 'inbox' | 'collections';
 
 const TABS: { id: WorkspaceTab; label: string; icon: typeof Folder }[] = [
-  { id: 'config', label: 'Sync', icon: GearSix },
+  { id: 'config', label: 'Sync', icon: ArrowsClockwise },
   { id: 'search', label: 'Discover', icon: MagnifyingGlass },
   { id: 'inbox', label: 'Inbox', icon: Tray },
   { id: 'collections', label: 'Commands', icon: Folder },
 ];
-
-function folderName(root: string): string {
-  const parts = root.replace(/\\/g, '/').split('/').filter(Boolean);
-  return parts.at(-1) ?? root;
-}
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -31,31 +27,41 @@ function ThemeToggle() {
       aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
       className={`icon-button ${FOCUS_RING}`}
     >
-      {theme === 'dark' ? <Sun size={17} weight="regular" /> : <Moon size={17} weight="regular" />}
+      {theme === 'dark' ? <Sun size={16} weight="regular" /> : <Moon size={16} weight="regular" />}
     </button>
   );
 }
 
-function RailLabel({ tab }: { tab: (typeof TABS)[number] }) {
-  return <span>{tab.label}</span>;
-}
-
 function ConfigPanel({ root, onPick }: { root: string | null; onPick: () => void }) {
+  const connected = Boolean(root);
   return (
     <section className="config-panel panel-section">
       <p className="eyebrow">Workspace</p>
       <h1>Sync</h1>
+      <p className="workspace-lede">
+        A snapshot of the last read-only scan of your project. Re-scan after editing the repo to refresh
+        everything below.
+      </p>
 
       <div className="config-card">
-        <span className="status-dot" aria-hidden="true" />
+        <span className="connect-icon" aria-hidden="true">
+          <Folder size={20} weight="regular" />
+        </span>
         <div>
           <h2>Project folder</h2>
+          <p className="sync-status">
+            <span className={`sync-status-dot ${connected ? 'connected' : 'disconnected'}`} />
+            {connected ? 'Connected' : 'No project connected'}
+          </p>
           {root ? (
             <p className="project-folder-name" title={root}>
-              {folderName(root)}
+              {root}
             </p>
           ) : (
-            <p className="muted-copy">No project connected</p>
+            <p className="muted-copy">
+              Point Skil at a project folder to read its .cursor, .claude, .windsurf, and .agents files. No
+              login needed.
+            </p>
           )}
           <p className="muted-copy">
             Connect a folder to read and write that project&apos;s .skil state. Skip this if you just want to
@@ -115,14 +121,16 @@ export default function App() {
 
   return (
     <div className={`app-shell ${theme === 'dark' ? 'dark-shell' : 'light-shell'}`}>
-      <header className="topbar">
+      <header className="topbar glass-nav">
         <div className="brand-mark">
-          <span className="brand-glyph" aria-hidden="true">
-            <Sparkle size={15} weight="regular" />
-          </span>
-          <span>skil</span>
+          <Logo />
           <span className="beta-pill">BETA</span>
         </div>
+        {boundRoot && (
+          <span className="path-pill glass-panel" title={boundRoot}>
+            {boundRoot}
+          </span>
+        )}
         <div className="top-actions">
           <ThemeToggle />
         </div>
@@ -139,13 +147,14 @@ export default function App() {
                   key={item.id}
                   type="button"
                   role="tab"
+                  title={item.label}
                   aria-label={item.label}
                   aria-selected={selected}
                   className={`rail-item ${selected ? 'active' : ''} ${FOCUS_RING}`}
                   onClick={() => setTab(item.id)}
                 >
                   <span className="rail-icon">
-                    <Icon size={17} weight="regular" aria-hidden="true" />
+                    <Icon size={16} weight="regular" aria-hidden="true" />
                     {item.id === 'config' && (
                       <span
                         className={`sync-dot ${boundRoot ? 'connected' : 'disconnected'}`}
@@ -154,19 +163,18 @@ export default function App() {
                       />
                     )}
                   </span>
-                  <RailLabel tab={item} />
                 </button>
               );
             })}
           </div>
-        <button
-          type="button"
-          className={`rail-item help-item ${FOCUS_RING}`}
-          aria-label="Help"
-          onClick={() => setHelpOpen(true)}
-        >
-            <Question size={17} weight="regular" aria-hidden="true" />
-            <span>Help</span>
+          <button
+            type="button"
+            className={`rail-item help-item ${FOCUS_RING}`}
+            aria-label="Help"
+            title="Help"
+            onClick={() => setHelpOpen(true)}
+          >
+            <Question size={16} weight="regular" aria-hidden="true" />
           </button>
         </nav>
 

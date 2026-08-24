@@ -141,8 +141,8 @@ function CollectionDetail({
     <section className="detail-panel panel-section" aria-label={`Command ${collection.name} details`}>
       <div className="detail-header">
         <div>
-          <p className="eyebrow">Command / {collection.name}</p>
-          <h2>{collection.name}</h2>
+          <p className="eyebrow">Command</p>
+          <h2>/{collection.name}</h2>
           <p className="muted-copy">
             {collection.skills.length === 1 ? '1 skill' : `${collection.skills.length} skills`}
           </p>
@@ -411,6 +411,7 @@ function CollectionsPanel({ children }: { children: ReactNode }) {
         <div>
           <p className="eyebrow">Workspace</p>
           <h1>Commands</h1>
+          <p className="workspace-lede">Named SDLC knobs. File inbox skills onto them, then export.</p>
         </div>
       </div>
       {children}
@@ -462,13 +463,12 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
                 onKeyDown={(event) => selectCollection(event, collection.name, setSelectedName)}
               >
                 <div className="card-title">
-                  <span>{collection.name}</span>
+                  <span>/{collection.name}</span>
                 </div>
                 <div className="skill-count">
                   <span>
                     {collection.skills.length} {collection.skills.length === 1 ? 'skill' : 'skills'}
                   </span>
-                  <span className="mini-dot" aria-hidden="true" />
                 </div>
               </li>
             ))}
