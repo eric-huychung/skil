@@ -20,6 +20,11 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
+async function chooseFormat(detail: HTMLElement, option: string) {
+  await userEvent.click(within(detail).getByLabelText(/^Export .+ to$/));
+  await userEvent.click(await screen.findByRole('option', { name: option }));
+}
+
 describe('CollectionList', () => {
   it('shows the empty state when there are no commands', async () => {
     const bridge = createTestBridge(createInMemoryEngine());
@@ -153,7 +158,7 @@ describe('CollectionList', () => {
     const detail = await screen.findByRole('region', { name: 'Command frontend details' });
 
     await waitFor(() => expect(within(detail).getByRole('button', { name: 'Export frontend' })).toBeEnabled());
-    await userEvent.selectOptions(within(detail).getByLabelText('Export frontend to'), 'claude');
+    await chooseFormat(detail, 'Claude Code');
     await userEvent.click(within(detail).getByRole('button', { name: 'Export frontend' }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Exported' });
@@ -231,7 +236,7 @@ describe('CollectionList', () => {
     const detail = await screen.findByRole('region', { name: 'Command frontend details' });
 
     expect(within(detail).getByLabelText('Export frontend to')).toBeEnabled();
-    await userEvent.selectOptions(within(detail).getByLabelText('Export frontend to'), 'claude');
+    await chooseFormat(detail, 'Claude Code');
     await userEvent.click(within(detail).getByRole('button', { name: 'Export frontend' }));
 
     const destDialog = await screen.findByRole('dialog', { name: 'Exported' });
@@ -256,9 +261,9 @@ describe('CollectionList', () => {
     const bridge = {
       ...base,
       pickDestinationFolder: async () => destinations[pickCount++] ?? null,
-      exportCommand: async (name, targetIDE, opts) => {
-        exportedDests.push(opts?.dest);
-        return base.exportCommand(name, targetIDE, opts);
+      exportCommand: async (...args: Parameters<typeof base.exportCommand>) => {
+        exportedDests.push(args[2]?.dest);
+        return base.exportCommand(...args);
       },
     };
 
@@ -418,7 +423,7 @@ describe('CollectionList', () => {
     expect(within(detail).queryByText('skill/0')).not.toBeInTheDocument();
   });
 
-  it('places Target IDE, then Included skills, then From Inbox', async () => {
+  it('places Format, then Included skills, then From Inbox', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', ['addyosmani/api-design']);
     engine.addToInbox('obra/react-patterns');
@@ -426,11 +431,29 @@ describe('CollectionList', () => {
 
     renderWithProviders(<CollectionList />, { bridge });
     const detail = await screen.findByRole('region', { name: 'Command frontend details' });
+    expect(within(detail).getByText('Format')).toBeInTheDocument();
     const target = within(detail).getByLabelText('Export frontend to');
     const included = within(detail).getByText('Included skills');
     const inboxToggle = within(detail).getByRole('button', { name: 'From Inbox, 1 skill' });
     expect(target.compareDocumentPosition(included) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(included.compareDocumentPosition(inboxToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('groups planning, build, and testing under SDLC headings', async () => {
+    const engine = createInMemoryEngine();
+    engine.create('planning', ['a', 'b']);
+    engine.create('build', ['c']);
+    engine.create('testing', []);
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CollectionList />, { bridge });
+
+    expect(await screen.findByText('Planning')).toBeInTheDocument();
+    expect(screen.getByText('Build')).toBeInTheDocument();
+    expect(screen.getByText('Testing')).toBeInTheDocument();
+    expect(screen.getByRole('listitem', { name: 'Command planning' })).toHaveTextContent('2 skills');
+    expect(screen.getByRole('listitem', { name: 'Command build' })).toHaveTextContent('1 skill');
+    expect(screen.getByRole('listitem', { name: 'Command testing' })).toHaveTextContent('0 skills');
   });
 
   it('deletes the selected collection after confirm', async () => {

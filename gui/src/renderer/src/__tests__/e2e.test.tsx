@@ -42,7 +42,8 @@ describe('GUI workflow (real engine)', () => {
     expect(engine.inbox()).toEqual(['obra/react-patterns']);
     expect(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' })).toBeInTheDocument();
 
-    await userEvent.selectOptions(within(detail).getByLabelText('Export frontend to'), 'windsurf');
+    await userEvent.click(within(detail).getByLabelText('Export frontend to'));
+    await userEvent.click(await screen.findByRole('option', { name: 'Windsurf' }));
     await userEvent.click(within(detail).getByRole('button', { name: 'Export frontend' }));
 
     expect(await screen.findByRole('dialog', { name: 'Exported' })).toHaveTextContent(

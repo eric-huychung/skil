@@ -10,6 +10,7 @@ const bridge: ContextKitBridge = {
   searchSkills: (query) => ipcRenderer.invoke(IPC_CHANNELS.searchSkills, query),
   browseSkills: (view) => ipcRenderer.invoke(IPC_CHANNELS.browseSkills, view),
   listInbox: () => ipcRenderer.invoke(IPC_CHANNELS.listInbox),
+  listSkills: () => ipcRenderer.invoke(IPC_CHANNELS.listSkills),
   addToInbox: (skillId) => ipcRenderer.invoke(IPC_CHANNELS.addToInbox, skillId),
   addSkill: (name, skillId) => ipcRenderer.invoke(IPC_CHANNELS.addSkill, name, skillId),
   deleteCollection: (name) => ipcRenderer.invoke(IPC_CHANNELS.deleteCollection, name),

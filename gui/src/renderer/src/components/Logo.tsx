@@ -40,7 +40,7 @@ export function Logo({
     <span className={cn('flex items-center gap-2', className)}>
       <span
         className={cn(
-          'flex size-8 items-center justify-center rounded-lg bg-[var(--accent-blue)] text-[var(--accent-blue-foreground)]',
+          'flex size-8 items-center justify-center rounded-lg bg-[var(--brand)] text-[var(--brand-foreground)]',
           chipClassName
         )}
       >

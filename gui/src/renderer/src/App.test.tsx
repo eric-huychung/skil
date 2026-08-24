@@ -101,11 +101,48 @@ describe('App', () => {
 
     expect(screen.queryByRole('button', { name: 'Pick folder' })).not.toBeInTheDocument();
 
-    await clickPickFolder();
+    await openSync();
+    expect(screen.getByRole('button', { name: 'Pick folder' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Re-scan' })).toBeDisabled();
+    expect(screen.getByText('Last scanned Never')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pick folder' }));
 
     expect((await screen.findAllByText(DEFAULT_TEST_PROJECT_ROOT)).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Change folder' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Config is in dev' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Config is in dev' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Re-scan' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Re-scan' })).not.toHaveTextContent(/re-scan/i);
+    expect(screen.queryByText('Last scanned Never')).not.toBeInTheDocument();
+    expect(screen.getByText('Skills found')).toBeInTheDocument();
+    expect(screen.getByText('Skills by source')).toBeInTheDocument();
+  });
+
+  it('rescans from the icon and shows skills found next to skills by source', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    fs.writeFile('.claude/skills/ui/SKILL.md', '# ui\n');
+    installTestBridge(engine);
+
+    renderWithProviders(<App />);
+    await clickPickFolder();
+
+    await waitFor(() => {
+      const found = screen.getByText('Skills found').closest('.skills-found-card');
+      if (!found) throw new Error('expected skills found card');
+      expect(within(found as HTMLElement).getByText('2')).toBeInTheDocument();
+    });
+    expect(screen.getByText('.cursor')).toBeInTheDocument();
+    expect(screen.getByText('.claude')).toBeInTheDocument();
+
+    fs.writeFile('.windsurf/skills/lint/SKILL.md', '# lint\n');
+    await userEvent.click(screen.getByRole('button', { name: 'Re-scan' }));
+
+    await waitFor(() => {
+      const card = screen.getByText('Skills found').closest('.skills-found-card');
+      if (!card) throw new Error('expected skills found card');
+      expect(within(card as HTMLElement).getByText('3')).toBeInTheDocument();
+    });
   });
 
   it('leaves the bound folder unchanged when the picker is canceled', async () => {

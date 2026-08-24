@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowsClockwise, Folder, MagnifyingGlass, Moon, Question, Sun, Tray } from '@phosphor-icons/react';
+import { ArrowsClockwise, Clock, Cube, Folder, FolderOpen, MagnifyingGlass, Moon, Question, Sun, Tray } from '@phosphor-icons/react';
 import { useTheme } from './theme';
 import { useBridge } from './bridge-context';
 import { FOCUS_RING } from './lib/focus-ring';
-import { Logo } from './components/Logo';
+import { countSkillsBySource, formatScannedAt } from './lib/skill-sources';
+import type { SkillRecord } from '../../shared/ipc';
 import CollectionList from './components/CollectionList';
 import CreateCollectionForm from './components/CreateCollectionForm';
 import InboxPanel from './components/InboxPanel';
@@ -32,8 +33,36 @@ function ThemeToggle() {
   );
 }
 
-function ConfigPanel({ root, onPick }: { root: string | null; onPick: () => void }) {
+function ConfigPanel({
+  root,
+  scanning,
+  lastScannedAt,
+  onPick,
+  onRescan,
+}: {
+  root: string | null;
+  scanning: boolean;
+  lastScannedAt: Date | null;
+  onPick: () => void;
+  onRescan: () => void;
+}) {
+  const bridge = useBridge();
   const connected = Boolean(root);
+  const [skills, setSkills] = useState<SkillRecord[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void bridge.listSkills().then((next) => {
+      if (!cancelled) setSkills(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge, root, lastScannedAt]);
+
+  const bySource = countSkillsBySource(skills);
+  const maxSourceCount = Math.max(...bySource.map((row) => row.count), 1);
+
   return (
     <section className="config-panel panel-section">
       <p className="eyebrow">Workspace</p>
@@ -47,12 +76,42 @@ function ConfigPanel({ root, onPick }: { root: string | null; onPick: () => void
         <span className="connect-icon" aria-hidden="true">
           <Folder size={20} weight="regular" />
         </span>
-        <div>
-          <h2>Project folder</h2>
-          <p className="sync-status">
-            <span className={`sync-status-dot ${connected ? 'connected' : 'disconnected'}`} />
-            {connected ? 'Connected' : 'No project connected'}
-          </p>
+        <div className="config-card-body">
+          <div className="config-card-head">
+            <div>
+              <h2>Project folder</h2>
+              <p className="sync-status">
+                <span className={`sync-status-dot ${connected ? 'connected' : 'disconnected'}`} />
+                {connected ? 'Connected' : 'No project connected'}
+              </p>
+            </div>
+            <div className="folder-actions">
+              <button
+                type="button"
+                className={`icon-button ${FOCUS_RING}`}
+                aria-label={root ? 'Change folder' : 'Pick folder'}
+                title={root ? 'Change folder' : 'Pick folder'}
+                onClick={onPick}
+              >
+                <FolderOpen size={16} weight="regular" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className={`icon-button ${FOCUS_RING}`}
+                aria-label="Re-scan"
+                title="Re-scan"
+                disabled={!connected || scanning}
+                onClick={onRescan}
+              >
+                <ArrowsClockwise
+                  size={16}
+                  weight="regular"
+                  className={scanning ? 'spin' : undefined}
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+          </div>
           {root ? (
             <p className="project-folder-name" title={root}>
               {root}
@@ -63,26 +122,36 @@ function ConfigPanel({ root, onPick }: { root: string | null; onPick: () => void
               login needed.
             </p>
           )}
-          <p className="muted-copy">
-            Connect a folder to read and write that project&apos;s .skil state. Skip this if you just want to
-            sketch commands or browse skills.
+          <p className="last-scanned">
+            <Clock size={14} weight="regular" aria-hidden="true" />
+            Last scanned {formatScannedAt(lastScannedAt)}
           </p>
-          <button
-            type="button"
-            className={`primary-button empty-pick-button ${FOCUS_RING}`}
-            aria-label={root ? 'Change folder' : 'Pick folder'}
-            onClick={onPick}
-          >
-            {root ? 'Change folder' : 'Pick folder'}
-          </button>
         </div>
       </div>
 
-      <div className="config-card">
-        <span className="status-dot" aria-hidden="true" />
-        <div>
-          <h2>Config is in dev</h2>
-          <p className="muted-copy">Workspace sync and IDE configuration are coming soon.</p>
+      <div className="sync-metrics">
+        <div className="skills-found-card glass-panel">
+          <Cube size={16} weight="regular" className="found-icon" aria-hidden="true" />
+          <p className="found-value">{skills.length}</p>
+          <p className="found-label">Skills found</p>
+        </div>
+        <div className="skills-source-card glass-panel">
+          <h2>Skills by source</h2>
+          <p className="muted-copy">Where each skill was discovered across your agent config folders.</p>
+          <div className="source-list">
+            {bySource.map(({ source, count }) => (
+              <div className="source-row" key={source}>
+                <span className="source-name">{source}</span>
+                <div className="source-bar" aria-hidden="true">
+                  <div
+                    className="source-bar-fill"
+                    style={{ width: `${(count / maxSourceCount) * 100}%` }}
+                  />
+                </div>
+                <span className="source-count">{count}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -95,6 +164,8 @@ export default function App() {
   const [tab, setTab] = useState<WorkspaceTab>('collections');
   const [helpOpen, setHelpOpen] = useState(false);
   const [projectRoot, setProjectRoot] = useState<string | null | undefined>(undefined);
+  const [lastScannedAt, setLastScannedAt] = useState<Date | null>(null);
+  const [scanning, setScanning] = useState(false);
   const rootLoadId = useRef(0);
   // Remounting CollectionList via key is the simplest way to refresh it
   // after a mutation elsewhere (create) or after the engine is rebuilt
@@ -108,22 +179,35 @@ export default function App() {
     });
   }, [bridge]);
 
+  const boundRoot = typeof projectRoot === 'string' ? projectRoot : null;
+
   async function handlePickFolder() {
     const picked = await bridge.pickProjectFolder();
     rootLoadId.current += 1;
     if (picked === null) return;
+    setScanning(true);
     await bridge.scan();
+    setScanning(false);
+    setLastScannedAt(new Date());
     setProjectRoot(picked);
     setCollectionsVersion((version) => version + 1);
   }
 
-  const boundRoot = typeof projectRoot === 'string' ? projectRoot : null;
+  async function handleRescan() {
+    if (!boundRoot) return;
+    setScanning(true);
+    const result = await bridge.scan();
+    setScanning(false);
+    if (!result.ok) return;
+    setLastScannedAt(new Date());
+    setCollectionsVersion((version) => version + 1);
+  }
 
   return (
     <div className={`app-shell ${theme === 'dark' ? 'dark-shell' : 'light-shell'}`}>
       <header className="topbar glass-nav">
         <div className="brand-mark">
-          <Logo />
+          <span className="wordmark">Skil</span>
           <span className="beta-pill">BETA</span>
         </div>
         {boundRoot && (
@@ -178,7 +262,15 @@ export default function App() {
           </button>
         </nav>
 
-        {tab === 'config' && <ConfigPanel root={boundRoot} onPick={() => void handlePickFolder()} />}
+        {tab === 'config' && (
+          <ConfigPanel
+            root={boundRoot}
+            scanning={scanning}
+            lastScannedAt={lastScannedAt}
+            onPick={() => void handlePickFolder()}
+            onRescan={() => void handleRescan()}
+          />
+        )}
 
         {tab === 'search' && <SkillSearch />}
 
@@ -193,7 +285,7 @@ export default function App() {
 
       <footer className="footer-bar">
         <span>
-          <span className="live-dot" aria-hidden="true" /> Config is in dev
+          <span className="live-dot" aria-hidden="true" />
         </span>
         <span>skil 0.2.2</span>
       </footer>

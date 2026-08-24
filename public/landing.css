@@ -1,21 +1,25 @@
+@import './brand.css';
+
 :root {
   color-scheme: light;
   --background: oklch(1 0 0);
-  --foreground: oklch(0.19 0.03 253);
-  --card: oklch(0.99 0.002 253);
-  --muted: oklch(0.96 0.004 253);
-  --muted-foreground: oklch(0.48 0.02 253);
-  --accent: oklch(0.94 0.008 253);
+  --foreground: oklch(0.19 0.03 var(--brand-hue));
+  --card: oklch(0.99 0.002 var(--brand-hue));
+  --muted: oklch(0.96 0.004 var(--brand-hue));
+  --muted-foreground: oklch(0.48 0.02 var(--brand-hue));
+  --accent: oklch(0.94 0.008 var(--brand-hue));
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.9 0.006 253);
+  --border: oklch(0.9 0.006 var(--brand-hue));
   --radius: 0.9rem;
   --glass-bg: 0 0 0 / 0.03;
   --glass-bg-strong: 0 0 0 / 0.05;
   --glass-border: 0 0 0 / 0.08;
   --glass-highlight: 255 255 255 / 0.6;
-  --accent-blue: #232f3e;
-  --accent-blue-foreground: #ffffff;
-  --glow: 35 47 62 / 0.16;
+  --brand: var(--color-brand);
+  --brand-foreground: var(--color-brand-foreground);
+  --accent-blue: var(--brand);
+  --accent-blue-foreground: var(--brand-foreground);
+  --glow: var(--color-brand-rgb) / 0.18;
   --emerald: #10b981;
   --font-sans: 'Geist', system-ui, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, monospace;
@@ -24,20 +28,22 @@
 .dark {
   color-scheme: dark;
   --background: oklch(0.09 0 0);
-  --foreground: oklch(0.96 0.002 253);
-  --card: oklch(0.12 0.004 253);
-  --muted: oklch(0.16 0.006 253);
-  --muted-foreground: oklch(0.63 0.015 253);
-  --accent: oklch(0.19 0.01 253);
+  --foreground: oklch(0.96 0.002 var(--brand-hue));
+  --card: oklch(0.12 0.004 var(--brand-hue));
+  --muted: oklch(0.16 0.006 var(--brand-hue));
+  --muted-foreground: oklch(0.63 0.015 var(--brand-hue));
+  --accent: oklch(0.19 0.01 var(--brand-hue));
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --glass-bg: 255 255 255 / 0.04;
   --glass-bg-strong: 255 255 255 / 0.07;
   --glass-border: 255 255 255 / 0.1;
   --glass-highlight: 255 255 255 / 0.14;
-  --accent-blue: #4a6b8f;
-  --accent-blue-foreground: #ffffff;
-  --glow: 74 107 143 / 0.28;
+  --brand: var(--color-brand);
+  --brand-foreground: var(--color-brand-foreground);
+  --accent-blue: var(--brand);
+  --accent-blue-foreground: var(--brand-foreground);
+  --glow: var(--color-brand-rgb) / 0.28;
 }
 
 *,
@@ -176,6 +182,11 @@ svg {
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.02em;
+}
+
+.wordmark-lg {
+  font-size: 1.375rem;
+  letter-spacing: -0.04em;
 }
 
 .beta {
@@ -454,6 +465,11 @@ svg {
   border-radius: 1.5rem;
   padding: 2rem 1rem;
   text-align: center;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.tool-card:hover {
+  background: var(--accent);
 }
 
 .tool-icon {
@@ -521,6 +537,12 @@ svg {
 .feature-card {
   display: flex;
   border-radius: 1.5rem;
+  transition: background-color 0.15s ease;
+}
+
+.step-card:hover,
+.feature-card:hover {
+  background: var(--accent);
 }
 
 .step-card {
@@ -699,6 +721,12 @@ svg {
   padding: 0.625rem 0.75rem;
   font-size: 0.875rem;
   color: var(--muted-foreground);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.preview-command:hover {
+  background: var(--accent);
+  color: var(--foreground);
 }
 
 .preview-command.active {

@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type Rea
 import { CaretDown, CaretLeft, CaretRight, Check, CircleNotch, DownloadSimple, Plus, Trash, X } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
+import { groupCommandsByStage } from '../lib/sdlc';
 import type { Collection, IDE } from '../../../shared/ipc';
-import { IDE_OPTIONS, ideLabel, targetPhrase } from './InstallSkill';
+import { targetPhrase } from './InstallSkill';
+import { FormatSelect } from './FormatSelect';
 import { StatusDialog } from './StatusDialog';
 
 const INBOX_PAGE_SIZE = 10;
@@ -181,23 +183,14 @@ function CollectionDetail({
       )}
 
       <div className="target-row">
-        <span>Target IDE</span>
-        <label htmlFor={`export-ide-${collection.name}`} className="sr-only">
-          {`Export ${collection.name} to`}
-        </label>
-        <select
+        <span>Format</span>
+        <FormatSelect
           id={`export-ide-${collection.name}`}
+          label={`Export ${collection.name} to`}
           value={exportIde}
-          onChange={(event) => setExportIde(event.target.value as IDE)}
           disabled={isExporting}
-          className={FOCUS_RING}
-        >
-          {IDE_OPTIONS.map((ide) => (
-            <option key={ide} value={ide}>
-              {ideLabel(ide)}
-            </option>
-          ))}
-        </select>
+          onChange={setExportIde}
+        />
       </div>
 
       <div className="active-skills">
@@ -451,28 +444,35 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
         {collections.length === 0 ? (
           <p className="muted-copy">No commands yet</p>
         ) : (
-          <ul className="collection-list">
-            {collections.map((collection) => (
-              <li
-                key={collection.name}
-                aria-label={`Command ${collection.name}`}
-                aria-current={collection.name === selectedName ? 'true' : undefined}
-                className={`collection-card ${collection.name === selectedName ? 'selected' : ''}`}
-                tabIndex={0}
-                onClick={() => setSelectedName(collection.name)}
-                onKeyDown={(event) => selectCollection(event, collection.name, setSelectedName)}
-              >
-                <div className="card-title">
-                  <span>/{collection.name}</span>
-                </div>
-                <div className="skill-count">
-                  <span>
-                    {collection.skills.length} {collection.skills.length === 1 ? 'skill' : 'skills'}
-                  </span>
-                </div>
-              </li>
+          <div className="command-stages">
+            {groupCommandsByStage(collections).map((stage) => (
+              <div className="command-stage" key={stage.key}>
+                {stage.label && <p className="stage-label">{stage.label}</p>}
+                <ul className="collection-list">
+                  {stage.commands.map((collection) => (
+                    <li
+                      key={collection.name}
+                      aria-label={`Command ${collection.name}`}
+                      aria-current={collection.name === selectedName ? 'true' : undefined}
+                      className={`collection-card ${collection.name === selectedName ? 'selected' : ''}`}
+                      tabIndex={0}
+                      onClick={() => setSelectedName(collection.name)}
+                      onKeyDown={(event) => selectCollection(event, collection.name, setSelectedName)}
+                    >
+                      <div className="card-title">
+                        <span>/{collection.name}</span>
+                      </div>
+                      <div className="skill-count">
+                        <span>
+                          {collection.skills.length} {collection.skills.length === 1 ? 'skill' : 'skills'}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
         {children}
       </CollectionsPanel>

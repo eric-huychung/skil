@@ -1,0 +1,16 @@
+/*
+ * Brand primitives. Change this file to rebrand.
+ * Landing (`public/landing.css`) and the desktop GUI both import it.
+ */
+
+:root {
+  --brand-hue: 292.2;
+  --color-brand: #8b5cf6;
+  --color-brand-foreground: #ffffff;
+  --color-brand-rgb: 139 92 246;
+}
+
+.dark {
+  --color-brand: #a78bfa;
+  --color-brand-rgb: 167 139 250;
+}

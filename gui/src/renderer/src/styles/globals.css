@@ -4,39 +4,42 @@
 @import '@fontsource/geist-sans/600.css';
 @import '@fontsource/geist-mono/400.css';
 @import '@fontsource/geist-mono/500.css';
+@import '../../../../../public/brand.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   color-scheme: light;
   --background: oklch(1 0 0);
-  --foreground: oklch(0.19 0.03 253);
-  --card: oklch(0.99 0.002 253);
-  --card-foreground: oklch(0.19 0.03 253);
+  --foreground: oklch(0.19 0.03 var(--brand-hue));
+  --card: oklch(0.99 0.002 var(--brand-hue));
+  --card-foreground: oklch(0.19 0.03 var(--brand-hue));
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.19 0.03 253);
-  --primary: oklch(0.32 0.045 253);
-  --primary-foreground: oklch(0.99 0.002 253);
-  --secondary: oklch(0.96 0.004 253);
-  --secondary-foreground: oklch(0.32 0.045 253);
-  --muted: oklch(0.96 0.004 253);
-  --muted-foreground: oklch(0.48 0.02 253);
-  --accent: oklch(0.94 0.008 253);
-  --accent-foreground: oklch(0.32 0.045 253);
+  --popover-foreground: oklch(0.19 0.03 var(--brand-hue));
+  --primary: oklch(0.32 0.045 var(--brand-hue));
+  --primary-foreground: oklch(0.99 0.002 var(--brand-hue));
+  --secondary: oklch(0.96 0.004 var(--brand-hue));
+  --secondary-foreground: oklch(0.32 0.045 var(--brand-hue));
+  --muted: oklch(0.96 0.004 var(--brand-hue));
+  --muted-foreground: oklch(0.48 0.02 var(--brand-hue));
+  --accent: oklch(0.94 0.008 var(--brand-hue));
+  --accent-foreground: oklch(0.32 0.045 var(--brand-hue));
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: #ffffff;
-  --border: oklch(0.9 0.006 253);
-  --input: oklch(0.9 0.006 253);
-  --ring: oklch(0.32 0.045 253 / 40%);
+  --border: oklch(0.9 0.006 var(--brand-hue));
+  --input: oklch(0.9 0.006 var(--brand-hue));
+  --ring: oklch(0.32 0.045 var(--brand-hue) / 40%);
   --radius: 0.9rem;
 
   --glass-bg: 0 0 0 / 0.03;
   --glass-bg-strong: 0 0 0 / 0.05;
   --glass-border: 0 0 0 / 0.08;
   --glass-highlight: 255 255 255 / 0.6;
-  --accent-blue: #232f3e;
-  --accent-blue-foreground: #ffffff;
-  --glow: 35 47 62 / 0.16;
+  --brand: var(--color-brand);
+  --brand-foreground: var(--color-brand-foreground);
+  --accent-blue: var(--brand);
+  --accent-blue-foreground: var(--brand-foreground);
+  --glow: var(--color-brand-rgb) / 0.18;
 
   --surface: var(--background);
   --surface-raised: rgb(var(--glass-bg-strong));
@@ -45,38 +48,40 @@
   --muted-ink: var(--muted-foreground);
   --line: rgb(var(--glass-border));
   --line-strong: color-mix(in srgb, var(--foreground) 18%, transparent);
-  --highlight: var(--accent-blue);
+  --highlight: var(--brand);
 }
 
 .dark {
   color-scheme: dark;
   --background: oklch(0.09 0 0);
-  --foreground: oklch(0.96 0.002 253);
-  --card: oklch(0.12 0.004 253);
-  --card-foreground: oklch(0.96 0.002 253);
-  --popover: oklch(0.12 0.004 253);
-  --popover-foreground: oklch(0.96 0.002 253);
-  --primary: oklch(0.55 0.06 253);
-  --primary-foreground: oklch(0.98 0.002 253);
-  --secondary: oklch(0.16 0.006 253);
-  --secondary-foreground: oklch(0.96 0.002 253);
-  --muted: oklch(0.16 0.006 253);
-  --muted-foreground: oklch(0.63 0.015 253);
-  --accent: oklch(0.19 0.01 253);
-  --accent-foreground: oklch(0.96 0.002 253);
+  --foreground: oklch(0.96 0.002 var(--brand-hue));
+  --card: oklch(0.12 0.004 var(--brand-hue));
+  --card-foreground: oklch(0.96 0.002 var(--brand-hue));
+  --popover: oklch(0.12 0.004 var(--brand-hue));
+  --popover-foreground: oklch(0.96 0.002 var(--brand-hue));
+  --primary: oklch(0.55 0.06 var(--brand-hue));
+  --primary-foreground: oklch(0.98 0.002 var(--brand-hue));
+  --secondary: oklch(0.16 0.006 var(--brand-hue));
+  --secondary-foreground: oklch(0.96 0.002 var(--brand-hue));
+  --muted: oklch(0.16 0.006 var(--brand-hue));
+  --muted-foreground: oklch(0.63 0.015 var(--brand-hue));
+  --accent: oklch(0.19 0.01 var(--brand-hue));
+  --accent-foreground: oklch(0.96 0.002 var(--brand-hue));
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: #ffffff;
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.55 0.06 253 / 50%);
+  --ring: oklch(0.55 0.06 var(--brand-hue) / 50%);
 
   --glass-bg: 255 255 255 / 0.04;
   --glass-bg-strong: 255 255 255 / 0.07;
   --glass-border: 255 255 255 / 0.1;
   --glass-highlight: 255 255 255 / 0.14;
-  --accent-blue: #4a6b8f;
-  --accent-blue-foreground: #ffffff;
-  --glow: 74 107 143 / 0.28;
+  --brand: var(--color-brand);
+  --brand-foreground: var(--color-brand-foreground);
+  --accent-blue: var(--brand);
+  --accent-blue-foreground: var(--brand-foreground);
+  --glow: var(--color-brand-rgb) / 0.28;
 
   --surface: var(--background);
   --surface-raised: rgb(var(--glass-bg-strong));
@@ -85,7 +90,7 @@
   --muted-ink: var(--muted-foreground);
   --line: rgb(var(--glass-border));
   --line-strong: color-mix(in srgb, var(--foreground) 18%, transparent);
-  --highlight: var(--accent-blue);
+  --highlight: var(--brand);
 }
 
 @theme inline {
@@ -166,6 +171,11 @@
   }
   button {
     cursor: pointer;
+    transition:
+      color 0.15s ease,
+      background-color 0.15s ease,
+      opacity 0.15s ease,
+      border-color 0.15s ease;
   }
 }
 
@@ -232,7 +242,13 @@
 
 .brand-mark {
   gap: 10px;
-  font-size: 18px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+
+.wordmark {
+  font-size: 1.375rem;
   font-weight: 600;
   letter-spacing: -0.04em;
 }
@@ -571,8 +587,38 @@
   border: 0;
 }
 
-.primary-button:hover {
-  opacity: 0.9;
+.primary-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand) 88%, black);
+  opacity: 1;
+}
+
+.export-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand) 88%, black);
+}
+
+.outline-button:hover:not(:disabled),
+.add-icon-button:hover:not(:disabled),
+.filter:hover:not(:disabled),
+.search-submit:hover,
+.format-trigger:hover:not(:disabled),
+.format-option:hover,
+.inbox-toggle:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.format-option[aria-selected='true'] {
+  background: var(--accent);
+}
+
+.library-skill,
+.included-skill {
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.library-skill:hover,
+.included-skill:hover {
+  background: var(--accent);
 }
 
 .outline-button {
@@ -707,7 +753,7 @@
 }
 
 .skill-install-menu [role='menuitem']:hover {
-  background: var(--surface-soft);
+  background: var(--accent);
 }
 
 .install-status {
@@ -1158,7 +1204,7 @@
 }
 
 .config-card {
-  max-width: 620px;
+  max-width: 56rem;
   display: flex;
   align-items: flex-start;
   gap: 16px;
@@ -1171,6 +1217,199 @@
   box-shadow:
     inset 0 1px 0 0 rgb(var(--glass-highlight)),
     0 8px 30px -8px rgb(0 0 0 / 0.25);
+}
+
+.config-card-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.config-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.folder-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.last-scanned {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.sync-metrics {
+  display: grid;
+  grid-template-columns: minmax(9.5rem, 12.5rem) minmax(0, 1fr);
+  gap: 12px;
+  max-width: 56rem;
+  margin-top: 16px;
+  align-items: stretch;
+}
+
+.skills-found-card,
+.skills-source-card {
+  border-radius: 1.5rem;
+  padding: 24px;
+}
+
+.skills-found-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100%;
+}
+
+.found-icon {
+  color: var(--brand);
+}
+
+.found-value {
+  margin: 20px 0 0;
+  font-size: 2.25rem;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.found-label {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.skills-source-card h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.skills-source-card .muted-copy {
+  margin-top: 4px;
+}
+
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.source-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.source-name {
+  width: 5.5rem;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+.source-bar {
+  height: 8px;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--muted);
+}
+
+.source-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--brand);
+  transition: width 0.2s ease;
+}
+
+.source-count {
+  width: 2rem;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.command-stages {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 28px;
+}
+
+.command-stage .collection-list {
+  margin-top: 8px;
+}
+
+.stage-label {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.format-select {
+  position: relative;
+}
+
+.format-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  min-width: 10rem;
+  height: 32px;
+  margin: 0;
+  padding: 0 8px 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 0.875rem;
+}
+
+.format-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 5;
+  min-width: 11rem;
+  padding: 4px;
+  border: 1px solid rgb(var(--glass-border));
+  border-radius: 10px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.format-option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.875rem;
+  text-align: left;
 }
 
 .config-card h2 {
@@ -1378,7 +1617,7 @@
 }
 
 .delete-card:hover {
-  color: var(--ink);
+  color: var(--destructive);
 }
 
 .inbox-toggle {
@@ -1429,7 +1668,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #232f3e;
+  color: var(--foreground);
   background: #fff;
   border: 0;
   border-radius: 10px;

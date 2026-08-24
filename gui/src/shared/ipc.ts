@@ -16,6 +16,7 @@ export const IPC_CHANNELS = {
   searchSkills: 'contextkit:search-skills',
   browseSkills: 'contextkit:browse-skills',
   listInbox: 'contextkit:list-inbox',
+  listSkills: 'contextkit:list-skills',
   addToInbox: 'contextkit:add-to-inbox',
   addSkill: 'contextkit:add-skill',
   deleteCollection: 'contextkit:delete-collection',
@@ -45,6 +46,8 @@ export interface ContextKitBridge {
   searchSkills(query: string): Promise<Result<Skill[]>>;
   browseSkills(view: BrowseView): Promise<Result<Skill[]>>;
   listInbox(): Promise<string[]>;
+  /** Catalog rows from the last scan. Used by Sync for counts and source bars. */
+  listSkills(): Promise<SkillRecord[]>;
   addToInbox(skillId: string): Promise<Result<string[]>>;
   addSkill(name: string, skillId: string): Promise<Result<Collection>>;
   deleteCollection(name: string): Promise<Result<void>>;

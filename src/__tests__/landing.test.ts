@@ -28,6 +28,13 @@ describe('landing page', () => {
     expect(landing).toContain('github.com/eric-huychung/context_kit');
   });
 
+  it('shows a wordmark and beta in the header, not the logo chip', () => {
+    const header = landing.match(/<header[\s\S]*?<\/header>/)?.[0] ?? '';
+    expect(header).toContain('wordmark-lg');
+    expect(header).toContain('BETA');
+    expect(header).not.toContain('logo-chip');
+  });
+
   it('shows the same product sections as the ui-example landing', () => {
     expect(landing).toContain('Works with the agents you already use');
     expect(landing).toContain('.cursor');
