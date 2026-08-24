@@ -1,16 +1,456 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ContextKit API</title>
+    <meta
+      name="description"
+      content="Connect a repo, scan .cursor / .claude / .windsurf / .agents for skills, organize them into your SDLC, and export back — no login required."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <title>Skil — Organize your agent skills into workflows</title>
+    <link rel="icon" href="/icon-light-32x32.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" href="/icon-dark-32x32.png" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-icon.png" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/400.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/600.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-mono@5.2.5/400.css" />
+    <link rel="stylesheet" href="/landing.css" />
   </head>
   <body>
-    <h1>ContextKit API</h1>
-    <p>This deployment is the skills.sh proxy. There is no web app here.</p>
-    <ul>
-      <li><a href="/api/skills/search?q=react"><code>GET /api/skills/search?q=react</code></a></li>
-      <li><a href="/api/skills?view=all-time"><code>GET /api/skills?view=all-time</code></a></li>
-    </ul>
+    <div class="page">
+      <header class="site-header glass-nav">
+        <div class="site-header-inner">
+          <a href="/" class="brand">
+            <span class="logo">
+              <span class="logo-chip" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="5" y="4" width="14" height="3.4" rx="1.7" fill="currentColor" />
+                  <path d="M7.4 7.4v6.5a2 2 0 0 0 2 2H10M7.4 10.8a2 2 0 0 0 2 2H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.85" />
+                  <rect x="11" y="10.6" width="8" height="3" rx="1.5" fill="currentColor" opacity="0.85" />
+                  <rect x="11" y="15.9" width="8" height="3" rx="1.5" fill="currentColor" opacity="0.7" />
+                </svg>
+              </span>
+              <span class="wordmark">Skil</span>
+            </span>
+            <span class="beta">BETA</span>
+          </a>
+          <nav class="header-nav" aria-label="Page">
+            <a href="#how-it-works">How it works</a>
+            <a href="#preview">Product</a>
+            <a href="#features">Features</a>
+          </nav>
+          <div class="header-actions">
+            <button type="button" id="theme-toggle" class="icon-btn" aria-label="Switch to light theme">
+              <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+              </svg>
+              <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            </button>
+            <a class="btn btn-lg btn-accent" href="#download">Open app</a>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="ambient-glow hero-glow" aria-hidden="true"></div>
+          <div class="hero-inner">
+            <div class="pill glass-panel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9" />
+              </svg>
+              Native macOS app. Read your repo, organize, export.
+            </div>
+            <h1>Give your agent skills a <span class="accent-word">home</span></h1>
+            <p class="lede">
+              Point the Skil desktop app at a repo and it scans .cursor, .claude,
+              .windsurf, and .agents for skills, then organizes them into the SDLC
+              stages your team already follows.
+            </p>
+            <div class="hero-cta">
+              <div class="download">
+                <div class="download-row">
+                  <a class="btn btn-lg btn-accent" href="#download">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M16.365 1.43c0 1.14-.463 2.21-1.247 3.011-.847.87-2.217 1.54-3.396 1.45-.144-1.09.415-2.27 1.172-3.09C13.79 1.9 15.198 1.2 16.365 1.43zM20.48 17.44c-.55 1.29-.81 1.86-1.52 3-.99 1.58-2.39 3.55-4.13 3.56-1.54.02-1.94-1.01-4.04-1-2.1.01-2.54 1.02-4.08 1-1.74-.02-3.07-1.8-4.06-3.37-2.77-4.4-3.06-9.56-1.35-12.28 1.21-1.93 3.13-3.06 4.94-3.06 1.84 0 3 .99 4.52.99 1.48 0 2.38-.99 4.5-.99 1.61 0 3.31.88 4.5 2.4-3.95 2.16-3.31 7.79.72 9.75z" />
+                    </svg>
+                    Download for Mac
+                  </a>
+                  <a
+                    class="btn btn-lg btn-ghost glass-panel"
+                    href="https://github.com/eric-huychung/context_kit"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                    </svg>
+                    View source
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-inner">
+            <div class="tools-head">
+              <h2>Works with the agents you already use</h2>
+              <p>
+                Skil reads and writes the config folders your tools already
+                create — no new format, no migration.
+              </p>
+            </div>
+            <div class="tool-grid">
+              <div class="tool-card glass-panel">
+                <span class="tool-icon">
+                  <span class="tool-logo" style="mask: url('/logos/cursor.svg') center / contain no-repeat; -webkit-mask: url('/logos/cursor.svg') center / contain no-repeat;" aria-hidden="true"></span>
+                </span>
+                <div>
+                  <p>Cursor</p>
+                  <p class="mono">.cursor</p>
+                </div>
+              </div>
+              <div class="tool-card glass-panel">
+                <span class="tool-icon">
+                  <span class="tool-logo" style="mask: url('/logos/claude.svg') center / contain no-repeat; -webkit-mask: url('/logos/claude.svg') center / contain no-repeat;" aria-hidden="true"></span>
+                </span>
+                <div>
+                  <p>Claude Code</p>
+                  <p class="mono">.claude</p>
+                </div>
+              </div>
+              <div class="tool-card glass-panel">
+                <span class="tool-icon">
+                  <span class="tool-logo" style="mask: url('/logos/windsurf.svg') center / contain no-repeat; -webkit-mask: url('/logos/windsurf.svg') center / contain no-repeat;" aria-hidden="true"></span>
+                </span>
+                <div>
+                  <p>Windsurf</p>
+                  <p class="mono">.windsurf</p>
+                </div>
+              </div>
+              <div class="tool-card glass-panel">
+                <span class="tool-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M12 8V4H8M4 14a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2H8a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2" />
+                    <path d="M16 4h2a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-1a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2" />
+                  </svg>
+                </span>
+                <div>
+                  <p>Agents</p>
+                  <p class="mono">.agents</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="how-it-works" class="section-lg">
+          <div class="section-inner">
+            <div class="section-copy">
+              <h2>One flow, from scattered files to a shared playbook</h2>
+              <p>
+                Skil doesn't invent a new format. It reads what your agents
+                already use and gives it structure.
+              </p>
+            </div>
+            <ol class="step-grid">
+              <li class="step-card glass-panel">
+                <div class="step-top">
+                  <span class="icon-box icon-box-solid" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2M3 7v10a2 2 0 0 0 2 2h7" />
+                      <circle cx="18" cy="18" r="3" />
+                    </svg>
+                  </span>
+                  <span class="step-index">01</span>
+                </div>
+                <div>
+                  <h3>Connect a repo</h3>
+                  <p>Point Skil at a local project folder. No account, no OAuth, nothing to sign into.</p>
+                </div>
+              </li>
+              <li class="step-card glass-panel">
+                <div class="step-top">
+                  <span class="icon-box icon-box-solid" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="m21 21-4.3-4.3M8 11h6" />
+                    </svg>
+                  </span>
+                  <span class="step-index">02</span>
+                </div>
+                <div>
+                  <h3>Scan</h3>
+                  <p>It reads .cursor, .claude, .windsurf, and .agents and lists every skill it finds.</p>
+                </div>
+              </li>
+              <li class="step-card glass-panel">
+                <div class="step-top">
+                  <span class="icon-box icon-box-solid" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="3" width="7" height="7" rx="1" />
+                      <rect x="14" y="3" width="7" height="7" rx="1" />
+                      <rect x="3" y="14" width="7" height="7" rx="1" />
+                      <rect x="14" y="14" width="7" height="7" rx="1" />
+                    </svg>
+                  </span>
+                  <span class="step-index">03</span>
+                </div>
+                <div>
+                  <h3>Organize</h3>
+                  <p>Group skills under the SDLC commands you use — planning, build, testing, review.</p>
+                </div>
+              </li>
+              <li class="step-card glass-panel">
+                <div class="step-top">
+                  <span class="icon-box icon-box-solid" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 13V5M8 9l4-4 4 4" />
+                      <path d="M20 16.2A4.5 4.5 0 0 0 17.5 8h-1.1A7 7 0 1 0 4 14.9" />
+                      <path d="m8 17 4 4 4-4" />
+                    </svg>
+                  </span>
+                  <span class="step-index">04</span>
+                </div>
+                <div>
+                  <h3>Export</h3>
+                  <p>Write the organized set back to the repo. Additive by default, with a warning before anything is overwritten.</p>
+                </div>
+              </li>
+            </ol>
+          </div>
+        </section>
+
+        <section id="preview" class="section-lg">
+          <div class="section-inner">
+            <div class="preview-head">
+              <h2>The workspace, at a glance</h2>
+              <p>
+                Commands on the left, the skills that back them on the right.
+                Nothing is hidden three menus deep.
+              </p>
+            </div>
+            <div class="window glass-panel-strong">
+              <div class="window-chrome">
+                <span class="dot dot-red"></span>
+                <span class="dot dot-blue"></span>
+                <span class="dot dot-muted"></span>
+                <div class="window-url glass-panel">skil.app/app</div>
+              </div>
+              <div class="window-body">
+                <div class="preview-rail glass-panel" aria-hidden="true">
+                  <span class="rail-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                  </span>
+                  <span class="rail-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                  </span>
+                  <span class="rail-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+                  </span>
+                  <span class="rail-icon active">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </span>
+                </div>
+                <div class="preview-list glass-panel">
+                  <p class="preview-label">Commands</p>
+                  <div class="preview-command">/planning<span>2 skills</span></div>
+                  <div class="preview-command active glass-panel-strong">/build<span>1 skills</span></div>
+                  <div class="preview-command">/testing<span>0 skills</span></div>
+                  <div class="preview-command">/review<span>1 skills</span></div>
+                </div>
+                <div class="preview-detail glass-panel">
+                  <div>
+                    <p class="preview-label">Command</p>
+                    <h3>/build</h3>
+                  </div>
+                  <div>
+                    <p class="preview-label">From inbox</p>
+                    <div class="preview-skill glass-panel">
+                      <span>agent-browser</span>
+                      <span class="source-chip">.cursor</span>
+                    </div>
+                    <div class="preview-skill glass-panel">
+                      <span>find-skills</span>
+                      <span class="source-chip">.claude</span>
+                    </div>
+                    <div class="preview-skill glass-panel">
+                      <span>frontend-design</span>
+                      <span class="source-chip">.cursor</span>
+                    </div>
+                    <div class="preview-skill glass-panel">
+                      <span>grill-me</span>
+                      <span class="source-chip">.windsurf</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="features" class="section-lg">
+          <div class="section-inner">
+            <div class="features-head">
+              <h2>Built to stay out of your way</h2>
+            </div>
+            <div class="feature-grid">
+              <div class="feature-card glass-panel">
+                <span class="icon-box icon-box-soft" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3z"/></svg>
+                </span>
+                <div>
+                  <h3>No login required</h3>
+                  <p>Point Skil at a folder and start. There is no account to create.</p>
+                </div>
+              </div>
+              <div class="feature-card glass-panel">
+                <span class="icon-box icon-box-soft" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+                </span>
+                <div>
+                  <h3>Additive by default</h3>
+                  <p>Exports add files and warn before overwriting anything you already have.</p>
+                </div>
+              </div>
+              <div class="feature-card glass-panel">
+                <span class="icon-box icon-box-soft" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+                </span>
+                <div>
+                  <h3>Organized by SDLC stage</h3>
+                  <p>Skills sit under the commands that use them, and commands sit under the stage they belong to.</p>
+                </div>
+              </div>
+              <div class="feature-card glass-panel">
+                <span class="icon-box icon-box-soft" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                </span>
+                <div>
+                  <h3>Re-scan anytime</h3>
+                  <p>Refresh the view after editing the repo. It is a re-scan, not a live merge — you stay in control.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="cli" class="section-lg">
+          <div class="section-inner cli-grid">
+            <div class="cli-copy">
+              <div class="pill glass-panel">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="m4 17 6-6-6-6M12 19h8" />
+                </svg>
+                Also on the command line
+              </div>
+              <h2>Prefer the terminal? There's a CLI for that</h2>
+              <p>
+                The same scan, organize, and export flow, scriptable for CI or a
+                pre-commit hook. Everything the desktop app does, headless.
+              </p>
+              <ul class="cli-list">
+                <li><span class="cli-dot"></span>No login or API key — it reads your local repo.</li>
+                <li><span class="cli-dot"></span>Additive exports with a warning before overwrite.</li>
+                <li><span class="cli-dot"></span>File skills onto commands so the map stays yours.</li>
+              </ul>
+            </div>
+            <div class="terminal glass-panel-strong">
+              <div class="terminal-bar">
+                <span class="dot dot-red"></span>
+                <span class="dot dot-blue"></span>
+                <span class="dot dot-muted"></span>
+                <span class="terminal-title">zsh — skil</span>
+              </div>
+              <pre><code>
+<span class="term-comment"># Install the CLI with Homebrew</span>
+<span><span class="prompt">$</span>brew install skil</span>
+<span class="term-comment"># Scan the current repo for skills</span>
+<span><span class="prompt">$</span>skil scan</span>
+<span class="term-output">✓ Found 52 skills across 4 sources</span>
+<span class="term-comment"># Export a command to your IDE</span>
+<span><span class="prompt">$</span>skil export build --to cursor</span>
+<span class="term-output">✓ Wrote .cursor/commands/build.md</span>
+              </code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section id="download" class="cta-wrap">
+          <div class="cta glass-panel-strong">
+            <div class="ambient-glow cta-glow" aria-hidden="true"></div>
+            <div class="cta-icon glass-panel" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16.365 1.43c0 1.14-.463 2.21-1.247 3.011-.847.87-2.217 1.54-3.396 1.45-.144-1.09.415-2.27 1.172-3.09C13.79 1.9 15.198 1.2 16.365 1.43zM20.48 17.44c-.55 1.29-.81 1.86-1.52 3-.99 1.58-2.39 3.55-4.13 3.56-1.54.02-1.94-1.01-4.04-1-2.1.01-2.54 1.02-4.08 1-1.74-.02-3.07-1.8-4.06-3.37-2.77-4.4-3.06-9.56-1.35-12.28 1.21-1.93 3.13-3.06 4.94-3.06 1.84 0 3 .99 4.52.99 1.48 0 2.38-.99 4.5-.99 1.61 0 3.31.88 4.5 2.4-3.95 2.16-3.31 7.79.72 9.75z" />
+              </svg>
+            </div>
+            <h2>Your agents already know how to work.<br />Give it structure.</h2>
+            <p>Download the Mac app and see everything Skil finds in under a minute.</p>
+            <div class="cta-actions">
+              <div class="download">
+                <div class="chip-group" role="radiogroup" aria-label="Choose your Mac chip">
+                  <button type="button" class="chip" role="radio" data-arch="silicon" aria-checked="true">
+                    <span class="chip-radio" aria-hidden="true"><span></span></span>
+                    <span class="chip-label">Apple Silicon</span>
+                    <span class="chip-sub">M1 · M2 · M3 · M4</span>
+                  </button>
+                  <button type="button" class="chip" role="radio" data-arch="intel" aria-checked="false">
+                    <span class="chip-radio" aria-hidden="true"><span></span></span>
+                    <span class="chip-label">Intel</span>
+                    <span class="chip-sub">Core i5 · i7 · i9</span>
+                  </button>
+                </div>
+                <div class="download-row">
+                  <button type="button" id="download-button" class="btn btn-lg btn-accent">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M16.365 1.43c0 1.14-.463 2.21-1.247 3.011-.847.87-2.217 1.54-3.396 1.45-.144-1.09.415-2.27 1.172-3.09C13.79 1.9 15.198 1.2 16.365 1.43zM20.48 17.44c-.55 1.29-.81 1.86-1.52 3-.99 1.58-2.39 3.55-4.13 3.56-1.54.02-1.94-1.01-4.04-1-2.1.01-2.54 1.02-4.08 1-1.74-.02-3.07-1.8-4.06-3.37-2.77-4.4-3.06-9.56-1.35-12.28 1.21-1.93 3.13-3.06 4.94-3.06 1.84 0 3 .99 4.52.99 1.48 0 2.38-.99 4.5-.99 1.61 0 3.31.88 4.5 2.4-3.95 2.16-3.31 7.79.72 9.75z" />
+                    </svg>
+                    <span id="download-label">Download for Apple Silicon</span>
+                  </button>
+                  <a
+                    class="btn btn-lg btn-ghost glass-panel"
+                    href="https://github.com/eric-huychung/context_kit"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View source
+                  </a>
+                </div>
+                <p class="download-note">macOS 12 Monterey or later · Universal .dmg also available</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <div class="footer-inner">
+          <a href="/" class="logo logo-sm">
+            <span class="logo-chip" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <rect x="5" y="4" width="14" height="3.4" rx="1.7" fill="currentColor" />
+                <path d="M7.4 7.4v6.5a2 2 0 0 0 2 2H10M7.4 10.8a2 2 0 0 0 2 2H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.85" />
+                <rect x="11" y="10.6" width="8" height="3" rx="1.5" fill="currentColor" opacity="0.85" />
+                <rect x="11" y="15.9" width="8" height="3" rx="1.5" fill="currentColor" opacity="0.7" />
+              </svg>
+            </span>
+            <span class="wordmark">Skil</span>
+          </a>
+          <p class="footer-copy">Reads your repo. Doesn't phone home.</p>
+          <nav class="footer-nav">
+            <a href="#download">Open app</a>
+            <a href="#how-it-works">How it works</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
+    <script src="/landing.js"></script>
   </body>
 </html>
