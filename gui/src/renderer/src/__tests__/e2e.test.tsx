@@ -16,6 +16,8 @@ describe('GUI workflow (real engine)', () => {
     installTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
 
     renderWithProviders(<App />);
+    await screen.findByTitle(DEFAULT_TEST_PROJECT_ROOT);
+    await userEvent.click(screen.getByRole('button', { name: 'Open Cursor workspace' }));
 
     await waitFor(() => expect(screen.getByText('No commands yet')).toBeInTheDocument());
     expect(engine.list()).toHaveLength(0);
@@ -35,6 +37,7 @@ describe('GUI workflow (real engine)', () => {
     expect(engine.skills()).toEqual([]);
 
     await userEvent.click(screen.getByRole('tab', { name: 'Commands' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Open Cursor workspace' }));
     const detail = await screen.findByRole('region', { name: 'Command frontend details' });
     await userEvent.click(within(detail).getByRole('button', { name: 'Add obra/react-patterns to frontend' }));
 
@@ -42,8 +45,8 @@ describe('GUI workflow (real engine)', () => {
     expect(engine.inbox()).toEqual(['obra/react-patterns']);
     expect(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByLabelText('Copy to'));
-    await userEvent.click(await screen.findByRole('option', { name: 'Windsurf' }));
+    const dests = screen.getByRole('group', { name: 'Copy to' });
+    await userEvent.click(within(dests).getByRole('button', { name: 'Windsurf' }));
     await userEvent.click(screen.getByRole('button', { name: 'Copy frontend to Windsurf' }));
 
     expect(await screen.findByRole('dialog', { name: 'Copied' })).toHaveTextContent(

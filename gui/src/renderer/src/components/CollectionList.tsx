@@ -1,20 +1,32 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { CaretDown, CaretLeft, CaretRight, Check, CircleNotch, Copy, FloppyDisk, Plus, Trash, X } from '@phosphor-icons/react';
+import { cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
+import { ArrowLeft, CaretDown, CaretLeft, CaretRight, Check, CircleNotch, Copy, FloppyDisk, Plus, Trash, X } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import { groupCommandsByStage } from '../lib/sdlc';
 import type { Collection, IDE } from '../../../shared/ipc';
 import { targetPhrase } from './InstallSkill';
-import { FormatSelect, FORMAT_LABELS } from './FormatSelect';
 import { StatusDialog } from './StatusDialog';
 import { IDE_OPTIONS } from './InstallSkill';
-import { CommandFormatContext } from './format-context';
+import { CommandFormatContext, FORMAT_LABELS } from './format-context';
 
 function otherIde(ide: IDE): IDE {
   return IDE_OPTIONS.find((option) => option !== ide) ?? 'claude';
 }
 
 const INBOX_PAGE_SIZE = 10;
+
+type IdeSummary = { commands: number; skills: number };
+
+const EMPTY_SUMMARIES: Record<IDE, IdeSummary> = {
+  cursor: { commands: 0, skills: 0 },
+  claude: { commands: 0, skills: 0 },
+  windsurf: { commands: 0, skills: 0 },
+  agents: { commands: 0, skills: 0 },
+};
+
+function uniqueSkillCount(collections: Collection[]): number {
+  return new Set(collections.flatMap((collection) => collection.skills)).size;
+}
 
 type ExportOutcome =
   | { status: 'loading'; ide: IDE; dest?: string }
@@ -259,12 +271,53 @@ function selectCollection(event: KeyboardEvent<HTMLLIElement>, name: string, onS
   }
 }
 
+function IdeOverview({
+  summaries,
+  onOpen,
+}: {
+  summaries: Record<IDE, IdeSummary>;
+  onOpen: (ide: IDE) => void;
+}) {
+  return (
+    <section className="collections-panel panel-section">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Workspace</p>
+          <h1>Commands</h1>
+          <p className="workspace-lede">Pick an IDE, then file inbox skills onto its commands.</p>
+        </div>
+      </div>
+      <div className="ide-card-grid">
+        {IDE_OPTIONS.map((ide) => {
+          const summary = summaries[ide];
+          return (
+            <button
+              key={ide}
+              type="button"
+              className={`ide-workspace-card glass-panel ${FOCUS_RING}`}
+              aria-label={`Open ${FORMAT_LABELS[ide]} workspace`}
+              onClick={() => onOpen(ide)}
+            >
+              <h2>{FORMAT_LABELS[ide]}</h2>
+              <p className="found-value">{summary.commands}</p>
+              <p className="found-label">{summary.commands === 1 ? 'command' : 'commands'}</p>
+              <p className="ide-card-skills">
+                {summary.skills === 1 ? '1 skill' : `${summary.skills} skills`}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function CollectionsPanel({
   children,
   formatIde,
-  onFormatIdeChange,
   copyDest,
   onCopyDestChange,
+  onBack,
   onSave,
   onCopy,
   onCopyAll,
@@ -275,9 +328,9 @@ function CollectionsPanel({
 }: {
   children: ReactNode;
   formatIde: IDE;
-  onFormatIdeChange: (ide: IDE) => void;
   copyDest: IDE;
   onCopyDestChange: (ide: IDE) => void;
+  onBack: () => void;
   onSave: () => void;
   onCopy: () => void;
   onCopyAll: () => void;
@@ -286,12 +339,27 @@ function CollectionsPanel({
   canCopy: boolean;
   selectedName: string | null;
 }) {
+  const dests = IDE_OPTIONS.filter((option) => option !== formatIde);
+
   return (
     <section className="collections-panel panel-section">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Workspace</p>
-          <h1>Commands</h1>
+          <div className="workspace-title-row">
+            <button
+              type="button"
+              onClick={onBack}
+              aria-label="Back to IDEs"
+              title="Back to IDEs"
+              className={`icon-button ${FOCUS_RING}`}
+            >
+              <ArrowLeft size={16} weight="regular" aria-hidden="true" />
+            </button>
+            <div>
+              <p className="eyebrow">{FORMAT_LABELS[formatIde]}</p>
+              <h1>Commands</h1>
+            </div>
+          </div>
           <p className="workspace-lede">Named SDLC knobs. File inbox skills onto them, then export.</p>
         </div>
         <div className="library-heading-actions">
@@ -312,38 +380,45 @@ function CollectionsPanel({
           </button>
         </div>
       </div>
-      <div className="target-row">
-        <span>Format</span>
-        <FormatSelect id="format-ide" label="Format" value={formatIde} disabled={isBusy} onChange={onFormatIdeChange} />
-      </div>
-      <div className="target-row">
-        <span>Copy to</span>
-        <FormatSelect
-          id="copy-dest-ide"
-          label="Copy to"
-          value={copyDest}
-          disabled={isBusy}
-          onChange={onCopyDestChange}
-        />
-        <button
-          type="button"
-          onClick={onCopy}
-          disabled={!canCopy || isBusy}
-          aria-label={`Copy ${selectedName ?? 'command'} to ${FORMAT_LABELS[copyDest]}`}
-          className={`outline-button ${FOCUS_RING}`}
-        >
-          <Copy size={14} weight="regular" aria-hidden="true" />
-          Copy
-        </button>
-        <button
-          type="button"
-          onClick={onCopyAll}
-          disabled={!canSave || isBusy}
-          aria-label={`Copy all to ${FORMAT_LABELS[copyDest]}`}
-          className={`outline-button ${FOCUS_RING}`}
-        >
-          Copy all
-        </button>
+      <div className="copy-bar">
+        <p className="copy-bar-label">Copy to</p>
+        <div className="copy-bar-body">
+          <div className="copy-dests" role="group" aria-label="Copy to">
+            {dests.map((ide) => (
+              <button
+                key={ide}
+                type="button"
+                aria-pressed={copyDest === ide}
+                disabled={isBusy}
+                className={`copy-dest ${FOCUS_RING}`}
+                onClick={() => onCopyDestChange(ide)}
+              >
+                {FORMAT_LABELS[ide]}
+              </button>
+            ))}
+          </div>
+          <div className="copy-bar-actions">
+            <button
+              type="button"
+              onClick={onCopy}
+              disabled={!canCopy || isBusy}
+              aria-label={`Copy ${selectedName ?? 'command'} to ${FORMAT_LABELS[copyDest]}`}
+              className={`outline-button ${FOCUS_RING}`}
+            >
+              <Copy size={14} weight="regular" aria-hidden="true" />
+              Copy
+            </button>
+            <button
+              type="button"
+              onClick={onCopyAll}
+              disabled={!canSave || isBusy}
+              aria-label={`Copy all to ${FORMAT_LABELS[copyDest]}`}
+              className={`outline-button ${FOCUS_RING}`}
+            >
+              Copy all
+            </button>
+          </div>
+        </div>
       </div>
       {children}
     </section>
@@ -355,25 +430,47 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
   const [collections, setCollections] = useState<Collection[] | null>(null);
   const [inbox, setInbox] = useState<string[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
-  const [formatIde, setFormatIde] = useState<IDE>('cursor');
+  const [workspaceIde, setWorkspaceIde] = useState<IDE | null>(null);
+  const [summaries, setSummaries] = useState<Record<IDE, IdeSummary>>(EMPTY_SUMMARIES);
   const [copyDest, setCopyDest] = useState<IDE>('claude');
+  const formatIde = workspaceIde ?? 'cursor';
   const [exportOutcome, setExportOutcome] = useState<ExportOutcome | null>(null);
   const [copyOutcome, setCopyOutcome] = useState<ExportOutcome | null>(null);
   const [confirmReplace, setConfirmReplace] = useState(false);
   const [confirmCopyReplace, setConfirmCopyReplace] = useState(false);
   const [pendingCopyAll, setPendingCopyAll] = useState(false);
   const [exportDest, setExportDest] = useState<string | undefined>();
+  const refreshId = useRef(0);
   const isBusy = exportOutcome?.status === 'loading' || copyOutcome?.status === 'loading';
 
   const refresh = useCallback(async () => {
-    const [next, nextInbox] = await Promise.all([bridge.listCollections(formatIde), bridge.listInbox()]);
-    setCollections(next);
+    const id = ++refreshId.current;
+    const [nextInbox, ...lists] = await Promise.all([
+      bridge.listInbox(),
+      ...IDE_OPTIONS.map((ide) => bridge.listCollections(ide)),
+    ]);
+    if (id !== refreshId.current) return;
     setInbox(nextInbox);
+    setSummaries(
+      Object.fromEntries(
+        IDE_OPTIONS.map((ide, index) => [
+          ide,
+          { commands: lists[index].length, skills: uniqueSkillCount(lists[index]) },
+        ])
+      ) as Record<IDE, IdeSummary>
+    );
+    if (!workspaceIde) {
+      setCollections(null);
+      setSelectedName(null);
+      return;
+    }
+    const next = lists[IDE_OPTIONS.indexOf(workspaceIde)];
+    setCollections(next);
     setSelectedName((current) => {
       if (current && next.some((collection) => collection.name === current)) return current;
       return next[0]?.name ?? null;
     });
-  }, [bridge, formatIde]);
+  }, [bridge, workspaceIde]);
 
   useEffect(() => {
     void refresh();
@@ -393,8 +490,9 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
       }
     }
     const target = dest ?? root ?? undefined;
-    setExportOutcome({ status: 'loading', ide: formatIde, dest: target });
-    const result = await bridge.exportAll(formatIde, {
+    if (!workspaceIde) return;
+    setExportOutcome({ status: 'loading', ide: workspaceIde, dest: target });
+    const result = await bridge.exportAll(workspaceIde, {
       ...(replace ? { replace: true } : {}),
       ...(dest ? { dest } : {}),
     });
@@ -406,7 +504,7 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
         return;
       }
       setExportDest(undefined);
-      setExportOutcome({ status: 'error', ide: formatIde, dest: target, message: result.error.message });
+      setExportOutcome({ status: 'error', ide: workspaceIde, dest: target, message: result.error.message });
       return;
     }
     setExportDest(undefined);
@@ -414,16 +512,16 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
     if (result.value.failures.length > 0) {
       setExportOutcome({
         status: 'error',
-        ide: formatIde,
+        ide: workspaceIde,
         dest: target,
-        summary: `Exported the command files, but some skills did not deploy to ${targetPhrase(formatIde, target)}`,
+        summary: `Exported the command files, but some skills did not deploy to ${targetPhrase(workspaceIde, target)}`,
         message: result.value.failures.join('\n'),
       });
       return;
     }
     setExportOutcome({
       status: 'success',
-      ide: formatIde,
+      ide: workspaceIde,
       dest: target,
       path: result.value.succeeded[0],
     });
@@ -444,10 +542,11 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
       ...(replace ? { replace: true } : {}),
       ...(dest ? { dest } : {}),
     };
+    if (!workspaceIde) return;
     const result = all
-      ? await bridge.copyAll(formatIde, copyDest, opts)
+      ? await bridge.copyAll(workspaceIde, copyDest, opts)
       : selectedName
-        ? await bridge.copyTo(selectedName, formatIde, copyDest, opts)
+        ? await bridge.copyTo(selectedName, workspaceIde, copyDest, opts)
         : { ok: false as const, error: new Error('Select a command to copy') };
 
     if (!result.ok) {
@@ -479,17 +578,25 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
     await refresh();
   }
 
-  function handleFormatChange(ide: IDE) {
-    setFormatIde(ide);
-    setCopyDest((current) => (current === ide ? otherIde(ide) : current));
+  function openWorkspace(ide: IDE) {
+    setWorkspaceIde(ide);
+    setCopyDest(otherIde(ide));
   }
 
-  const panel = (
+  const createSlot = isValidElement(children)
+    ? cloneElement(children as ReactElement<{ onCreated?: (collection: Collection) => void }>, {
+        onCreated: () => {
+          void refresh();
+        },
+      })
+    : children;
+
+  const panel = workspaceIde ? (
     <CollectionsPanel
-      formatIde={formatIde}
-      onFormatIdeChange={handleFormatChange}
+      formatIde={workspaceIde}
       copyDest={copyDest}
       onCopyDestChange={setCopyDest}
+      onBack={() => setWorkspaceIde(null)}
       onSave={() => void handleExport()}
       onCopy={() => void handleCopy(false)}
       onCopyAll={() => void handleCopy(true)}
@@ -531,16 +638,19 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
           ))}
         </div>
       )}
-      {children}
+      {createSlot}
     </CollectionsPanel>
+  ) : (
+    <IdeOverview summaries={summaries} onOpen={openWorkspace} />
   );
 
-  const selected = collections?.find((collection) => collection.name === selectedName) ?? null;
+  const selected =
+    workspaceIde && collections ? (collections.find((collection) => collection.name === selectedName) ?? null) : null;
 
   return (
     <CommandFormatContext.Provider value={formatIde}>
       {panel}
-      {selected && (
+      {selected && workspaceIde && (
         <CollectionDetail
           key={`${formatIde}:${selected.name}`}
           collection={selected}

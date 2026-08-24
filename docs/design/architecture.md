@@ -130,7 +130,7 @@ interface SkilEngine {
 - Filing / unfiling / create / delete take an `ide`. They change **that IDE's** membership only.
 - `create('build', [], undefined, 'cursor')` when `/build` already exists on Claude **adds** `membership.cursor` — not "already exists". "Already exists" only if that IDE already has the name.
 - `delete('build', 'cursor')` drops Cursor membership (and Cursor's stamped file if it is ours). Claude's `/build` stays. Drop the command row when no IDE still has it.
-- GUI uses `addSkill` (Inbox stays). Engine `file()` still drops Inbox until that method is aligned.
+- Filing (`file` / GUI `addSkill`) does not drop the id from Inbox. Inbox is the picker. "Not on any command" is a UI filter.
 - `removeSkill` updates that IDE's list only. Inbox keeps the id. Gone folders drop the id from catalog, **every IDE's membership**, and Inbox.
 - `create('inbox')` is an error. Inbox is not a command. `create('/inbox')` is the same error.
 - Command names store without a leading slash. `create('/build', …)` and `file(..., '/build', ide)` normalize to `build`. UI may show `/build`.
@@ -148,7 +148,7 @@ interface SkilEngine {
 - On scan, parse stamped command files per IDE and adopt `skills:` into that IDE's membership when they disagree.
 - Coordinate `npx skills add` (or a copy into another IDE tree) and record `deployedTo`.
 - Write stamped command markdown for **one** IDE at a time. Leave dest skill folders that already exist.
-- After a membership mutation, rewrite that IDE's stamped files (write-through). `lastWrittenPaths()` is the mute list for DiskWatch. `writeThrough` / `writeThroughAfterScan` live on the class, not the public interface; `scan()` calls the latter.
+- After a membership mutation, rewrite that IDE's stamped files (write-through). `lastWrittenPaths()` is the mute list for DiskWatch. `writeThrough` / `writeThroughAfterScan` live on the class, not the public interface; `scan()` calls the latter. After-scan write-through skips a stamp whose `skills:` list already matches that IDE's membership.
 
 **Why deep:** CLI, GUI, and tests all call the same methods. Membership, hash policy, gone-id cleanup, and stamp rules must not leak to the UI.
 
@@ -238,7 +238,7 @@ Same engine. No business logic in React.
 
 **Tabs:**
 - **Inbox** — one global staging pool (scan + Discover adds), re-scan, install from Inbox. Filing onto a command does not remove the id. Not per IDE.
-- **Commands** — one tab. **Format** (reuse `FormatSelect`) is the IDE switcher. List + detail = that IDE's commands. Create / file / delete / install apply to the selected IDE. **Copy to Claude** (label = dest IDE): one command or all — writes stamped file + missing skill folders. Do **not** add four IDE tabs.
+- **Commands** — one tab. Landing is four IDE cards (Cursor / Claude / Windsurf / Agents) with command + unique skill counts. Click a card to open that IDE's workspace (list + detail). Create / file / delete / install apply to that IDE. **Copy to** is dest chips plus Copy / Copy all — writes stamped file + missing skill folders. Back returns to the cards. Do **not** add four IDE tabs.
 - **Discover** — skills.sh browse/search, Add → Inbox (does not install)
 - **Sync** — pick / change folder only. Not a live merge. No per-IDE `state.json`.
 
@@ -246,7 +246,7 @@ After pick, the GUI calls `scan()` once. Inbox is a rail tab above Commands. Sca
 
 **Install:** Inbox matches Discover (search + 25-per-page list). A download icon opens an IDE menu; picking an IDE calls `bridge.install(skillId, ide)` → `engine.install`. Same icon-then-pick on filed skills. Progress, success, and failure open a modal. Failure keeps a short `role="alert"`; the full message is in collapsed Details. No connected folder → dest picker, then `install(..., { dest })`. Discover does not grow an Install control.
 
-**Copy (Commands):** from the Format switcher's IDE, "Copy to \<other IDE\>" on one command or all. Calls `copyTo` / `copyAll`. Same stamp / replace / missing-skill rules as export. Unstamped existing dest file shows a Replace confirm.
+**Copy (Commands):** from the open IDE workspace, dest chips pick the other IDE, then Copy (selected command) or Copy all. Calls `copyTo` / `copyAll`. Same stamp / replace / missing-skill rules as export. Unstamped existing dest file shows a Replace confirm.
 
 **Export (Commands):** still available as push of the **current IDE's** membership (Save / export). Writes the command file, then copies local filed skills the target IDE is missing (or `install` for Discover-only ids). Dest skill folders already present are left alone. Loading / success / failure is a modal; failure details stay collapsed. Unstamped existing command file shows a Replace confirm. IDE picker stays enabled with no folder; Export then picks a dest and calls `exportCommand(..., { dest })` without binding the session.
 
@@ -257,7 +257,7 @@ After pick, the GUI calls `scan()` once. Inbox is a rail tab above Commands. Sca
 1. **Connect a repo.** No login.
 2. **Scan** `.cursor` / `.claude` / `.windsurf` / `.agents` — **skills** (catalog + Inbox) and **stamped command files** (that IDE's membership).
 3. **Inventory.** Scanned and Discover ids sit in one Inbox. They stay there after filing.
-4. **Organize on an IDE.** Format = Cursor. Create `/build`, file `tdd` onto it. Cursor membership saves. Claude's `/build` is unchanged (or absent).
+4. **Organize on an IDE.** Open the Cursor card. Create `/build`, file `tdd` onto it. Cursor membership saves. Claude's `/build` is unchanged (or absent).
 5. **Copy to Claude.** Writes Claude membership, Claude's stamped file, and missing skill folders.
 6. **Discover → Inbox → file onto a command → install** writes the skill into that IDE's skills dir.
 7. **Export** (explicit, current IDE): write **our** command file and deploy filed skills that IDE is missing. Do not touch their old `/build.md` unless they opt in to replace. Do not overwrite dest skill folders.
@@ -367,7 +367,7 @@ Unchanged: skills.sh listing DTO. In-memory only. Not a catalog row until they A
 
 ### One catalog, per-IDE command membership (not four state files, not four tabs)
 
-**Decision:** `.skil/state.json` is the only map. Inbox + `skills[]` stay global. `commands[].membership` is M:N by IDE. Format on Commands switches which list you see. Copy writes the dest IDE. No `.cursor/.skil/state.json`.
+**Decision:** `.skil/state.json` is the only map. Inbox + `skills[]` stay global. `commands[].membership` is M:N by IDE. Commands landing is IDE cards; click opens that list. Copy writes the dest IDE. No `.cursor/.skil/state.json`.
 
 **Rejected (this phase):** four IDE tabs. **Rejected:** per-IDE Inbox. **Rejected:** four taxonomies to merge.
 
@@ -379,7 +379,7 @@ This **reverses** the 2026-08-24 "one map, not four memberships" decision.
 
 ### Write-through is per IDE
 
-**Decision:** Create / file / unfile / delete while Format = Cursor rewrite Cursor stamped files only. Claude / Windsurf / Agents stay until Copy or Export.
+**Decision:** Create / file / unfile / delete in the Cursor workspace rewrite Cursor stamped files only. Claude / Windsurf / Agents stay until Copy or Export.
 
 **Rationale:** A Cursor edit must not clobber Claude's `/build.md`.
 
@@ -387,7 +387,7 @@ This **reverses** the 2026-08-24 "one map, not four memberships" decision.
 
 **Decision:** Filing onto a command does not remove the id from Inbox. Gone folders still drop the id from Inbox and every IDE's membership. Inbox is not per IDE.
 
-**Rationale:** Inbox is the picker. "Unfiled" is a filter. GUI `addSkill` already matches this. Align engine `file()` later.
+**Rationale:** Inbox is the picker. "Unfiled" is a filter. `file()` and GUI `addSkill` both keep the id.
 
 ### We do not scan unstamped `commands/` (or Windsurf `workflows/`)
 
@@ -409,7 +409,7 @@ This **reverses** the 2026-08-24 "one map, not four memberships" decision.
 
 ### Watcher is scan, not live merge
 
-**Decision:** Watch the four skills dirs and the four command/workflow dirs. Debounce ~500ms. Mute paths we just wrote for ~1s. Skip `.git`. Then scan + write-through IDEs that already have a stamped file. Do not rewrite a stamped file we just adopted from disk in the same pass unless gone-id cleanup changed membership.
+**Decision:** Watch the four skills dirs and the four command/workflow dirs. Debounce ~500ms. Mute paths we just wrote for ~1s. Skip `.git`. Then scan + write-through IDEs that already have a stamped file. Skip rewrite when the stamp already matches membership (including a stamp just adopted from disk). Gone-id cleanup that changed the list still rewrites. After a successful scan, GUI main notifies the window so lists refresh. Explicit Scan remains for connect / nothing-changed-on-disk.
 
 **Rationale:** Explicit Scan is too easy to skip. A 3-way merge of map + disk + body edits is the next-phase trap. Disk wins that IDE; we tell them once.
 
@@ -427,14 +427,14 @@ This **reverses** the 2026-08-24 "one map, not four memberships" decision.
 
 **Integration (20%)** — CLI with in-memory engine; temp-dir FS for walk + hash + stamped pull; DiskWatch debounce/mute with fake clock.
 
-**E2E (10%)** — GUI with real engine, fake adapters: connect → scan → Format Claude → empty or pulled list → Copy to Claude → Cursor list unchanged.
+**E2E (10%)** — GUI with real engine, fake adapters: connect → scan → open Claude card → empty or pulled list → Copy to Claude → Cursor list unchanged.
 
 **Agreed seams**
 1. Engine: `scan`, `list(ide)`, `file` / `create` / `delete` with `ide`, `copyTo` / `copyAll`, `install`, `exportCommand`, inbox
 2. `IFileSystemAdapter.findSkillFolders` / `readFile` / `writeFile`
 3. `ISkillsAdapter.install(skillId, targetIDE)`
 4. CLI `scan` / `list --ide` / `copy` / `install` / `export`
-5. GUI via the bridge (Format switcher, Copy)
+5. GUI via the bridge (IDE cards → workspace, Copy dest chips, `onScan`)
 6. DiskWatch: debounce, mute, skip `.git`
 
 **Not seams:** concatenating `.cursor/skills` in a standalone test if `findSkillFolders` already takes that root; `createEngine` wiring; asserting the persisted `membership` object from the GUI.
@@ -477,15 +477,16 @@ Atomic JSON write. Schema version on every persist. v4 → v5 on load, no rewrit
 
 ## Decision Log
 
-- **Per-IDE command membership (2026-08-24, Phase 13, shipped):** One Inbox + one `skills[]`. Commands store `membership` by IDE. Format switcher, not four tabs. Copy writes dest stamped file + missing skills. Write-through is per IDE. Stamped pull: that IDE's disk wins; other IDEs untouched. Watcher after write-through. Reverses "one shared membership, prompt when Cursor and Claude disagree." Schema is v5 (`commands[].membership`); v4 `skills[]` loads as Cursor.
+- **Commands landing is IDE cards (2026-08-24):** One Commands tab. Overview cards show command + unique skill counts. Click opens that IDE's workspace. Copy bar is dest chips + Copy / Copy all. Not a Format dropdown. Still not four tabs.
+- **Per-IDE command membership (2026-08-24, Phase 13, shipped):** One Inbox + one `skills[]`. Commands store `membership` by IDE. IDE cards on Commands, not four tabs. Copy writes dest stamped file + missing skills. Write-through is per IDE. Stamped pull: that IDE's disk wins; other IDEs untouched. Watcher after write-through. Reverses "one shared membership, prompt when Cursor and Claude disagree." Schema is v5 (`commands[].membership`); v4 `skills[]` loads as Cursor.
 - **Not this phase (2026-08-24):** SQLite / eval library, stamps on `SKILL.md`, live 3-way merge, per-IDE Inbox.
 - **README matches the loop (2026-08-22, Task 40):** User-facing README documents scan → Inbox → file → install and/or export. Primary bin is `skil`. No one-click install from Discover, no import-from-IDE, no skillsmith export, no team YAML / `run` / linter as product. Architecture + PRD stay the spec; README stays the loop.
 - **No leftover state fallback (2026-08-24):** Only `.skil/state.json`. If that is missing and `.contextkit/state.json` is present, throw: move the file. CLI prints the message and exits; GUI folder pick shows an error and does not bind.
 - **State path and bin are skil (2026-08-22, Task 39):** Persist `.skil/state.json`. Bins: `skil` + `contextkit` alias. API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`. GUI title/brand say skil. Engine class and IPC stay `CollectionEngine` / `window.contextkit`.
 - **Product is skil; groupings are commands (2026-08-22):** ContextKit / collections were the old names. User-facing language is skil + command. Engine class may stay `CollectionEngine` until a rename task. State target: `.skil/state.json`.
-- **Inbox is a staging pool (2026-08-24):** Filing onto a command does not drop the id from Inbox. Scan still adds new ids. Gone folders still drop the id. GUI `addSkill` is the product path. Engine `file()` still removes — follow-up to align.
-- **One catalog, IDE picker on Commands (updated 2026-08-24):** No per-IDE `state.json`, no IDE tabs. Membership is per IDE inside one file. Install/export/copy `--to` / Format is how you see and push a specific tree.
-- **Watcher after write-through (2026-08-24, shipped):** Explicit Scan remains. Write-through for GUI edits on the active IDE. Light watcher (debounce / mute / skip `.git`) is scan + write-through, not a live merge.
+- **Inbox is a staging pool (2026-08-24):** Filing onto a command does not drop the id from Inbox. Scan still adds new ids. Gone folders still drop the id. `file()` and GUI `addSkill` both keep the id.
+- **One catalog, IDE picker on Commands (updated 2026-08-24):** No per-IDE `state.json`, no IDE tabs. Membership is per IDE inside one file. Install/export/copy `--to` / IDE cards on Commands is how you see and push a specific tree.
+- **Watcher after write-through (2026-08-24, shipped):** Explicit Scan remains (connect / nothing changed on disk). Write-through for GUI edits on the active IDE. Light watcher (debounce / mute / skip `.git`) is scan + write-through, not a live merge. Successful scan notifies the GUI to refresh. Unchanged stamps are not rewritten.
 - **Map + inbox + deploy, not folder trees (2026-08-22):** Commands are named id lists per IDE. Skills stay where they are on disk. Inbox is the staging pool (scan + Discover).
 - **Pull = scan skills + stamped commands; push = install / copy / write our command file (2026-08-22, updated 2026-08-24):** Re-scan is not a live merge. We do not parse unstamped `commands/`.
 - **No SkillScanner adapter (2026-08-22):** Grow `IFileSystemAdapter`. Two FS adapters already make the seam real.
@@ -516,7 +517,7 @@ Atomic JSON write. Schema version on every persist. v4 → v5 on load, no rewrit
 5. Stamped Claude `/build.md` with a different `skills:` list wins for Claude on pull; Cursor membership stays.
 6. Install writes into the target IDE skills dir and records `deployedTo`.
 7. Export / write-through will not clobber an unstamped `/build.md` without `--replace` or overwrite an existing dest skill folder.
-8. CLI and GUI share the engine. Zero catalog logic in React. Format is a switcher, not four tabs.
+8. CLI and GUI share the engine. Zero catalog logic in React. IDE cards on Commands, not four tabs.
 9. DiskWatch: two events inside 500ms become one scan; muted paths are ignored; `.git` is skipped.
 
 ## Not this phase

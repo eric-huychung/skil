@@ -72,8 +72,7 @@ function ConfigPanel({
       <p className="eyebrow">Workspace</p>
       <h1>Sync</h1>
       <p className="workspace-lede">
-        A snapshot of the last read-only scan of your project. Re-scan after editing the repo to refresh
-        everything below.
+        A snapshot of the last scan of your project. Disk edits refresh on their own. Re-scan if nothing on disk changed.
       </p>
 
       <div className="config-card">
@@ -171,15 +170,21 @@ export default function App() {
   const [lastScannedAt, setLastScannedAt] = useState<Date | null>(null);
   const [scanning, setScanning] = useState(false);
   const rootLoadId = useRef(0);
-  // Remounting CollectionList via key is the simplest way to refresh it
-  // after a mutation elsewhere (create) or after the engine is rebuilt
-  // against a newly picked folder.
+  // Remounting CollectionList via key refreshes it after a watcher scan
+  // or after the engine is rebuilt against a newly picked folder.
   const [collectionsVersion, setCollectionsVersion] = useState(0);
 
   useEffect(() => {
     const id = ++rootLoadId.current;
     void bridge.getProjectRoot().then((root) => {
       if (id === rootLoadId.current) setProjectRoot(root);
+    });
+  }, [bridge]);
+
+  useEffect(() => {
+    return bridge.onScan(() => {
+      setLastScannedAt(new Date());
+      setCollectionsVersion((version) => version + 1);
     });
   }, [bridge]);
 
@@ -200,11 +205,8 @@ export default function App() {
   async function handleRescan() {
     if (!boundRoot) return;
     setScanning(true);
-    const result = await bridge.scan();
+    await bridge.scan();
     setScanning(false);
-    if (!result.ok) return;
-    setLastScannedAt(new Date());
-    setCollectionsVersion((version) => version + 1);
   }
 
   return (
@@ -278,11 +280,11 @@ export default function App() {
 
         {tab === 'search' && <SkillSearch />}
 
-        {tab === 'inbox' && <InboxPanel key={`${boundRoot ?? 'session'}:${collectionsVersion}`} />}
+        {tab === 'inbox' && <InboxPanel key={boundRoot ?? 'session'} />}
 
         {tab === 'collections' && (
           <CollectionList key={`${boundRoot ?? 'session'}:${collectionsVersion}`}>
-            <CreateCollectionForm onCreated={() => setCollectionsVersion((version) => version + 1)} />
+            <CreateCollectionForm />
           </CollectionList>
         )}
       </div>

@@ -28,7 +28,7 @@ Discover Add puts an id in Inbox. It does not download. Install is a later, expl
 skil scan                                              # pull: SKILL.md folders in this repo
 skil inbox                                             # list staging skill ids
 skil inbox add <skillId>                               # hold an id in Inbox (no download)
-skil inbox file <skillId> <command> [--ide cursor]     # file onto that IDE (Inbox should stay; CLI still drops until aligned)
+skil inbox file <skillId> <command> [--ide cursor]     # file onto that IDE; Inbox keeps the id
 skil create <name> [--ide cursor] [--skills id-a,id-b] # /build stores build on that IDE; inbox is reserved
 skil delete <name> [--ide cursor]                      # drop that IDE's command; other IDEs stay
 skil list [--ide cursor]                               # list commands for one IDE (or all)
@@ -52,7 +52,7 @@ Search and browse go through skil's backend, which authenticates to skills.sh wi
 An Electron app (`gui/`) shares the same engine as the CLI. Window and brand say skil.
 
 - **Inbox** — staging pool, search, 25 per page, Scan / re-scan, install from Inbox (download icon, then pick an IDE). Filing does not remove ids. Install result is a modal. Gone ids from the last scan show as a status banner.
-- **Commands** — Format switches IDE (not four tabs). List/detail = that IDE. Create, file from Inbox, delete, install filed, export, Copy to another IDE (one command or all).
+- **Commands** — IDE cards (click into a workspace). Create, file from Inbox, delete, install filed, export, Copy to another IDE (dest chips, one command or all).
 - **Discover** — All time / Trending, typed search, skill details from listing fields, Add → Inbox. Works with no folder. Add does not install.
 - **Sync** — pick or change the project folder. Not a live merge. No per-IDE state file. Light watcher after write-through (debounce, mute our writes, skip `.git`).
 
@@ -60,9 +60,9 @@ Pick a folder and skil scans once. The Scan button on Inbox is re-scan. Scan nee
 
 Install: pick an IDE on Inbox (unfiled) or Commands (filed). Errors show as a visible alert.
 
-Copy (Commands): from the current Format IDE, copy one command or all to another IDE. Writes that dest stamped file and missing skill folders. Cursor files stay put.
+Copy (Commands): from the open IDE workspace, copy one command or all to another IDE. Writes that dest stamped file and missing skill folders. Cursor files stay put.
 
-Export (Commands): push the current Format IDE — write our stamped command files and deploy filed skills that IDE is missing (copy local folders; install Discover-only ids). Existing dest skill folders are left alone. Result is a modal. If a target command file exists and is not stamped by us, you can confirm Replace.
+Export (Commands): push the open IDE — write our stamped command files and deploy filed skills that IDE is missing (copy local folders; install Discover-only ids). Existing dest skill folders are left alone. Result is a modal. If a target command file exists and is not stamped by us, you can confirm Replace.
 
 Run it with `npm run gui:dev`.
 

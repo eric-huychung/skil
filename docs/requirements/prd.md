@@ -26,7 +26,7 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 1. **Connect a repo.** No login.
 2. **Scan** `.cursor` / `.claude` / `.windsurf` / `.agents` — skills (catalog + Inbox) and stamped command files (per-IDE membership). Skill = folder with `SKILL.md` (nested ok).
 3. **Show the inventory.** Scanned and Discover ids sit in one Inbox and stay there after filing.
-4. **Organize on an IDE:** Format = Cursor. Create `/build`, drop `tdd` on it. Cursor membership saves. Claude is unchanged.
+4. **Organize on an IDE:** Open the Cursor card. Create `/build`, drop `tdd` on it. Cursor membership saves. Claude is unchanged.
 5. **Copy to Claude** (one command or all): dest membership + stamped file + missing skill folders.
 6. **Discover → Inbox → file onto a command → install** writes the skill into that IDE's skills dir.
 7. **Export** (explicit, current IDE): generate **our** command file and deploy filed skills that IDE is missing. Do not touch their old `/build.md` unless they opt in to replace. Do not overwrite dest skill folders.
@@ -50,7 +50,7 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 14. As a developer using several IDEs, I want one catalog and Inbox, and **per-IDE command lists**, so Cursor `/build` can differ from Claude `/build` without four tabs or four `state.json` files
 15. As a developer, I want "Copy to Claude" (one command or all), so I can share a list without re-filing
 16. As a power user, I want CLI for scan / inbox / file / copy / install / export, so I can script pull and push
-17. As a visual user, I want a GUI to connect, scan, switch IDE on Commands, file, copy, install, and export, so I am not stuck in the terminal
+17. As a visual user, I want a GUI to connect, scan, pick an IDE on Commands, file, copy, install, and export, so I am not stuck in the terminal
 18. As a developer, I want search and browse without my own skills.sh API key
 19. As a developer, I want an empty search to show all-time and trending, so I can browse without inventing a query
 20. As a developer, I want a light disk watcher after write-through, so I do not have to hit Scan for every edit (debounce, mute our writes, skip `.git`)
@@ -70,7 +70,7 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 2. **FileSystemAdapter** — state JSON plus walk/read/write for `SKILL.md` discovery and command-file output.
 3. **SkillsAdapter** — search, browse, install. Convert/skillsmith is leftover. Product export is engine `exportCommand`, not skillsmith.
 4. **CLI** — parse and print.
-5. **GUI** — bind to the engine. Commands / Discover / folder pick. Format switcher on Commands.
+5. **GUI** — bind to the engine. Commands / Discover / folder pick. IDE cards on Commands (click into a workspace).
 6. **DiskWatch** — debounce / mute / skip `.git`. Calls scan + write-through. Not a second deep module.
 
 ### Data Model
@@ -105,9 +105,9 @@ v4 `commands[].skills` loads as Cursor membership. Other IDEs fill in via Copy o
 - **`run` / shell templates are leftover.** "Command template" now means the markdown file we generate, not `skil run`.
 - **README is the user-facing loop.** Scan → Inbox → file on an IDE → copy / install / export. Do not advertise leftover `sync` / `run` / convert, a marketplace, or a linter.
 - **Inbox is a staging pool.** Filing does not remove the id. `remove` from a command does not remove it from Inbox either. Gone folders drop the id from both.
-- **One state file, per-IDE lists.** Format on Commands switches the list. No tab-per-IDE, no `.cursor/.skil/state.json`.
+- **One state file, per-IDE lists.** Commands landing is IDE cards; click opens that list. No tab-per-IDE, no `.cursor/.skil/state.json`.
 - **Write-through is per IDE.** File / unfile / create / delete on Cursor rewrite Cursor stamped files only.
-- **Light watcher after write-through.** Disk edits: Scan or watcher (debounce ~500ms, mute our writes ~1s, skip `.git`). Not a live 3-way merge. GUI main starts/stops `DiskWatch` after folder pick.
+- **Light watcher after write-through.** Disk edits: watcher scans and the GUI refreshes (debounce ~500ms, mute our writes ~1s, skip `.git`). Explicit Scan remains for connect / nothing changed on disk. Unchanged stamps are not rewritten. Not a live 3-way merge. GUI main starts/stops `DiskWatch` after folder pick.
 
 ### CLI
 
@@ -116,7 +116,7 @@ v4 `commands[].skills` loads as Cursor membership. Other IDEs fill in via Copy o
 - `skil delete <name> --ide <ide>` — drop that IDE's membership
 - `skil list [--ide <ide>]`
 - `skil add <command> <skillId> --ide <ide>` / `skil remove <command> <skillId> --ide <ide>` — that IDE only; Inbox unchanged
-- `skil inbox` / `inbox add <skillId>` / `inbox file <skillId> <command> --ide <ide>` — file onto a command; Inbox keeps the id (`addSkill`). Engine `file()` still drops Inbox until aligned
+- `skil inbox` / `inbox add <skillId>` / `inbox file <skillId> <command> --ide <ide>` — file onto a command; Inbox keeps the id
 - `skil copy <command> --from <ide> --to <ide> [--replace]` / `skil copy --all --from <ide> --to <ide>`
 - `skil install <skillId> --to cursor|claude|windsurf|agents` — records `deployedTo` on the catalog; unknown `--to` is rejected before the engine
 - `skil export <command> --to <ide> [--replace]`
@@ -130,13 +130,13 @@ API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 
 - Window and brand say skil. Connect folder (Sync tab). No login.
 - Inbox tab (above Commands): Discover-like list (25 per page), search the staging pool, re-scan icon, install from Inbox. Filing does not remove ids. One Inbox for all IDEs.
-- Commands tab: **Format** (reuse the existing control) is the IDE switcher. List/detail = that IDE. Create, file from Inbox, delete, install filed, export, **Copy to \<IDE\>** (one or all). Do not add four tabs.
+- Commands tab: landing is four IDE cards (counts, click to open). List/detail = that IDE. Create, file from Inbox, delete, install filed, export, **Copy to** dest chips (one command or all). Do not add four tabs.
 - Discover: All time / Trending, typed search, Add → Inbox, details from listing fields
 - Discover does not require a folder. Scan needs a connected repo. Install, copy, and export can pick a dest folder without binding the session
 - Scan click without a folder opens a modal explaining why. Pick folder scans once; the Scan icon on Inbox is re-scan. Watcher also scans after debounce.
 - Install: download icon, then pick IDE (cursor / claude / windsurf / agents), call `engine.install(skillId, ide)`. Inbox or Commands. Loading / success / failure is a modal. Failure alert is short; full error is collapsed Details. No connected folder → dest folder picker, then install there
-- Copy on Commands: pick dest IDE, call `engine.copyTo` / `copyAll`. Writes dest stamped file and deploys missing skills. Unstamped dest file shows Replace.
-- Export on Commands: push the **current Format IDE**, call `engine.exportCommand` / `exportAll`. Writes our stamped command file and deploys filed skills that IDE is missing (copy local; install Discover-only; skip dest that already exists). Loading / success / failure is a modal; failure details stay collapsed. Unstamped existing command file shows a Replace confirm (`replace: true`).
+- Copy on Commands: dest chips pick the other IDE, then Copy / Copy all, call `engine.copyTo` / `copyAll`. Writes dest stamped file and deploys missing skills. Unstamped dest file shows Replace.
+- Export on Commands: push the **open IDE workspace**, call `engine.exportCommand` / `exportAll`. Writes our stamped command file and deploys filed skills that IDE is missing (copy local; install Discover-only; skip dest that already exists). Loading / success / failure is a modal; failure details stay collapsed. Unstamped existing command file shows a Replace confirm (`replace: true`).
 - Discover Add still does not install and does not grow an Install control
 - Gone ids and stamped-file pulls from the last scan show as a status banner
 - No typed skill-id fields in the GUI (CLI can still take ids)

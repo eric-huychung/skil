@@ -5,6 +5,7 @@ import App from './App';
 import {
   createInMemoryEngine,
   createInMemoryWorkspace,
+  createTestBridge,
   DEFAULT_TEST_PROJECT_ROOT,
   installTestBridge,
   renderWithProviders,
@@ -22,6 +23,10 @@ async function clickPickFolder() {
   await userEvent.click(within(card as HTMLElement).getByRole('button', { name: 'Pick folder' }));
 }
 
+async function openCommandsWorkspace(ide = 'Cursor') {
+  await userEvent.click(await screen.findByRole('button', { name: `Open ${ide} workspace` }));
+}
+
 describe('App', () => {
   it('mounts on Commands with the empty commands UI, not a pick-folder wall', async () => {
     installTestBridge(createInMemoryEngine());
@@ -31,12 +36,17 @@ describe('App', () => {
     expect(screen.getByText('Skil')).toBeInTheDocument();
     expect(screen.getByText('skil 0.2.2')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Commands' })).toHaveAttribute('aria-selected', 'true');
-    expect(await screen.findByText('No commands yet')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Open Cursor workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Claude Code workspace' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Inbox' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create New Command' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create New Command' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Pick a project folder' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Collections/)).not.toBeInTheDocument();
+
+    await openCommandsWorkspace();
+    expect(await screen.findByText('No commands yet')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create New Command' })).toBeInTheDocument();
   });
 
   it('reflects commands created through the engine without connecting a folder first', async () => {
@@ -44,6 +54,7 @@ describe('App', () => {
     engine.create('frontend', ['obra/react-patterns']);
 
     renderWithProviders(<App />);
+    await openCommandsWorkspace();
 
     expect(await screen.findByRole('listitem', { name: 'Command frontend' })).toBeInTheDocument();
   });
@@ -71,6 +82,7 @@ describe('App', () => {
     expect(tabs.indexOf('Inbox')).toBeLessThan(tabs.indexOf('Commands'));
     expect(await screen.findByRole('heading', { name: 'Commands' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Inbox' })).not.toBeInTheDocument();
+    await openCommandsWorkspace();
     expect(
       screen.getByRole('button', { name: 'Add obra/react-patterns to frontend' })
     ).toBeInTheDocument();
@@ -197,7 +209,7 @@ describe('App', () => {
 
     renderWithProviders(<App />);
 
-    expect(await screen.findByText('No commands yet')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Open Cursor workspace' })).toBeInTheDocument();
     expect(screen.queryByText('tdd')).not.toBeInTheDocument();
 
     await clickPickFolder();
@@ -218,5 +230,23 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Help' }));
 
     expect(screen.getByRole('dialog', { name: 'How can we help?' })).toBeInTheDocument();
+  });
+
+  it('refreshes Commands after a watcher scan', async () => {
+    const engine = createInMemoryEngine();
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<App />, { bridge });
+    await openCommandsWorkspace();
+    expect(await screen.findByText('No commands yet')).toBeInTheDocument();
+
+    engine.create('build', ['tdd']);
+    bridge.emitScan();
+
+    await waitFor(() => {
+      expect(within(screen.getByRole('button', { name: 'Open Cursor workspace' })).getByText('1')).toBeInTheDocument();
+    });
+    await openCommandsWorkspace();
+    expect(await screen.findByRole('listitem', { name: 'Command build' })).toBeInTheDocument();
   });
 });

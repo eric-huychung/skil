@@ -15,7 +15,7 @@ All notable changes to ContextKit are documented here. Versions follow [Semantic
 
 ### Changed
 - v4 `commands[].skills` loads as Cursor membership. Same name on another IDE adds that IDE's list; it is not "already exists".
-- GUI Format on Commands is the IDE switcher (list/detail/export = that IDE). Copy to another IDE is a separate action.
+- GUI Commands landing is IDE cards (counts, click into a workspace). Copy to is dest chips, not a Format dropdown.
 - Stamped command pull: that IDE's disk wins (`commandPulls`); other IDEs are left alone.
 - Export uses that IDE's membership. Sharing to another IDE is Copy, not Format + Save.
 - `npx skills add` now sends `owner/repo@skill` for 3-part skills.sh ids (`anthropics/skills/frontend-design`) and `-y` so Electron installs are non-interactive.
