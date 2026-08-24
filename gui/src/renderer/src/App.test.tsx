@@ -118,6 +118,31 @@ describe('App', () => {
     expect(screen.getByText('Skills by source')).toBeInTheDocument();
   });
 
+  it('shows 0 skills found when no folder is connected even if leftover catalog exists', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    fs.writeFile('.cursor/skills/ui/SKILL.md', '# ui\n');
+    fs.writeFile('.claude/skills/lint/SKILL.md', '# lint\n');
+    fs.writeFile('.claude/skills/review/SKILL.md', '# review\n');
+    fs.writeFile('.windsurf/skills/grill/SKILL.md', '# grill\n');
+    fs.writeFile('.agents/skills/find/SKILL.md', '# find\n');
+    fs.writeFile('.agents/skills/browser/SKILL.md', '# browser\n');
+    engine.scan();
+    expect(engine.skills()).toHaveLength(7);
+    installTestBridge(engine);
+
+    renderWithProviders(<App />);
+    await openSync();
+
+    const found = screen.getByText('Skills found').closest('.skills-found-card');
+    if (!found) throw new Error('expected skills found card');
+    expect(within(found as HTMLElement).getByText('0')).toBeInTheDocument();
+    expect(screen.getByText('.claude')).toBeInTheDocument();
+    expect(screen.getByText('.windsurf')).toBeInTheDocument();
+    expect(screen.getByText('.agents')).toBeInTheDocument();
+    expect(screen.queryByText('7')).not.toBeInTheDocument();
+  });
+
   it('rescans from the icon and shows skills found next to skills by source', async () => {
     const { engine, fs } = createInMemoryWorkspace();
     fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
@@ -136,13 +161,16 @@ describe('App', () => {
     expect(screen.getByText('.claude')).toBeInTheDocument();
 
     fs.writeFile('.windsurf/skills/lint/SKILL.md', '# lint\n');
+    fs.writeFile('.agents/skills/review/SKILL.md', '# review\n');
     await userEvent.click(screen.getByRole('button', { name: 'Re-scan' }));
 
     await waitFor(() => {
       const card = screen.getByText('Skills found').closest('.skills-found-card');
       if (!card) throw new Error('expected skills found card');
-      expect(within(card as HTMLElement).getByText('3')).toBeInTheDocument();
+      expect(within(card as HTMLElement).getByText('4')).toBeInTheDocument();
     });
+    expect(screen.getByText('.windsurf')).toBeInTheDocument();
+    expect(screen.getByText('.agents')).toBeInTheDocument();
   });
 
   it('leaves the bound folder unchanged when the picker is canceled', async () => {

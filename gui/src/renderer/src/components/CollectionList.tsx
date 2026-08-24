@@ -201,9 +201,6 @@ function CollectionDetail({
         {collection.skills.length === 0 && <p className="muted-copy">No skills in this command yet</p>}
         {collection.skills.map((skillId) => (
           <div className="included-skill" key={skillId}>
-            <span className="checkmark" aria-hidden="true">
-              <Check size={11} weight="regular" />
-            </span>
             <span>{skillId}</span>
             <div className="skill-actions">
               <button

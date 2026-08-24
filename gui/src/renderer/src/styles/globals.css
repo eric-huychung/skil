@@ -5,93 +5,9 @@
 @import '@fontsource/geist-mono/400.css';
 @import '@fontsource/geist-mono/500.css';
 @import '../../../../../public/brand.css';
+@import '../../../../../public/theme.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
-
-:root {
-  color-scheme: light;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.19 0.03 var(--brand-hue));
-  --card: oklch(0.99 0.002 var(--brand-hue));
-  --card-foreground: oklch(0.19 0.03 var(--brand-hue));
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.19 0.03 var(--brand-hue));
-  --primary: oklch(0.32 0.045 var(--brand-hue));
-  --primary-foreground: oklch(0.99 0.002 var(--brand-hue));
-  --secondary: oklch(0.96 0.004 var(--brand-hue));
-  --secondary-foreground: oklch(0.32 0.045 var(--brand-hue));
-  --muted: oklch(0.96 0.004 var(--brand-hue));
-  --muted-foreground: oklch(0.48 0.02 var(--brand-hue));
-  --accent: oklch(0.94 0.008 var(--brand-hue));
-  --accent-foreground: oklch(0.32 0.045 var(--brand-hue));
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: #ffffff;
-  --border: oklch(0.9 0.006 var(--brand-hue));
-  --input: oklch(0.9 0.006 var(--brand-hue));
-  --ring: oklch(0.32 0.045 var(--brand-hue) / 40%);
-  --radius: 0.9rem;
-
-  --glass-bg: 0 0 0 / 0.03;
-  --glass-bg-strong: 0 0 0 / 0.05;
-  --glass-border: 0 0 0 / 0.08;
-  --glass-highlight: 255 255 255 / 0.6;
-  --brand: var(--color-brand);
-  --brand-foreground: var(--color-brand-foreground);
-  --accent-blue: var(--brand);
-  --accent-blue-foreground: var(--brand-foreground);
-  --glow: var(--color-brand-rgb) / 0.18;
-
-  --surface: var(--background);
-  --surface-raised: rgb(var(--glass-bg-strong));
-  --surface-soft: rgb(var(--glass-bg));
-  --ink: var(--foreground);
-  --muted-ink: var(--muted-foreground);
-  --line: rgb(var(--glass-border));
-  --line-strong: color-mix(in srgb, var(--foreground) 18%, transparent);
-  --highlight: var(--brand);
-}
-
-.dark {
-  color-scheme: dark;
-  --background: oklch(0.09 0 0);
-  --foreground: oklch(0.96 0.002 var(--brand-hue));
-  --card: oklch(0.12 0.004 var(--brand-hue));
-  --card-foreground: oklch(0.96 0.002 var(--brand-hue));
-  --popover: oklch(0.12 0.004 var(--brand-hue));
-  --popover-foreground: oklch(0.96 0.002 var(--brand-hue));
-  --primary: oklch(0.55 0.06 var(--brand-hue));
-  --primary-foreground: oklch(0.98 0.002 var(--brand-hue));
-  --secondary: oklch(0.16 0.006 var(--brand-hue));
-  --secondary-foreground: oklch(0.96 0.002 var(--brand-hue));
-  --muted: oklch(0.16 0.006 var(--brand-hue));
-  --muted-foreground: oklch(0.63 0.015 var(--brand-hue));
-  --accent: oklch(0.19 0.01 var(--brand-hue));
-  --accent-foreground: oklch(0.96 0.002 var(--brand-hue));
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: #ffffff;
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.55 0.06 var(--brand-hue) / 50%);
-
-  --glass-bg: 255 255 255 / 0.04;
-  --glass-bg-strong: 255 255 255 / 0.07;
-  --glass-border: 255 255 255 / 0.1;
-  --glass-highlight: 255 255 255 / 0.14;
-  --brand: var(--color-brand);
-  --brand-foreground: var(--color-brand-foreground);
-  --accent-blue: var(--brand);
-  --accent-blue-foreground: var(--brand-foreground);
-  --glow: var(--color-brand-rgb) / 0.28;
-
-  --surface: var(--background);
-  --surface-raised: rgb(var(--glass-bg-strong));
-  --surface-soft: rgb(var(--glass-bg));
-  --ink: var(--foreground);
-  --muted-ink: var(--muted-foreground);
-  --line: rgb(var(--glass-border));
-  --line-strong: color-mix(in srgb, var(--foreground) 18%, transparent);
-  --highlight: var(--brand);
-}
 
 @theme inline {
   --font-sans: 'Geist', system-ui, sans-serif;
@@ -316,7 +232,7 @@
 }
 
 .sync-status-dot.connected {
-  background: #10b981;
+  background: var(--success);
 }
 
 .sync-status-dot.disconnected {
@@ -332,7 +248,7 @@
   color: var(--muted-foreground);
   background: transparent;
   border: 0;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-hover);
   width: 36px;
   height: 36px;
   display: grid;
@@ -340,8 +256,8 @@
 }
 
 .icon-button:hover {
-  color: var(--foreground);
-  background: var(--accent);
+  color: var(--hover-foreground);
+  background: var(--hover);
 }
 
 .icon-button:disabled {
@@ -366,6 +282,19 @@
   min-height: 0;
   border-right: 0;
   overflow-y: auto;
+}
+
+.workspace-config .config-panel {
+  width: 100%;
+  max-width: 56rem;
+  margin-inline: auto;
+  padding: 2.5rem 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .workspace-config .config-panel {
+    padding: 2.5rem 2.5rem;
+  }
 }
 
 .workspace-search .library-panel,
@@ -416,7 +345,7 @@
   color: var(--muted-foreground);
   background: transparent;
   border: 0;
-  border-radius: 0.75rem;
+  border-radius: var(--radius-hover);
   font-size: 0;
   line-height: 0;
 }
@@ -442,16 +371,16 @@
 }
 
 .sync-dot.connected {
-  background: #10b981;
+  background: var(--success);
 }
 
 .sync-dot.disconnected {
-  background: #f04438;
+  background: var(--destructive);
 }
 
 .rail-item:hover {
-  color: var(--foreground);
-  background: var(--accent);
+  color: var(--hover-foreground);
+  background: var(--hover);
 }
 
 .rail-item.active {
@@ -518,16 +447,22 @@
   color: var(--foreground);
   text-align: left;
   border: 0;
-  border-radius: 0.75rem;
-  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-hover);
+  padding: 0.7rem 0.85rem;
   background: transparent;
   transition: 0.15s ease;
   cursor: pointer;
   position: relative;
 }
 
-.collection-card:hover {
-  background: var(--accent);
+.collection-card:hover:not(.selected) {
+  background: var(--hover);
+  color: var(--hover-foreground);
+}
+
+.collection-card:hover:not(.selected) .skill-count,
+.collection-card:hover:not(.selected) p {
+  color: color-mix(in srgb, var(--hover-foreground) 72%, transparent);
 }
 
 .collection-card.selected {
@@ -603,8 +538,8 @@
 .format-trigger:hover:not(:disabled),
 .format-option:hover,
 .inbox-toggle:hover {
-  background: var(--accent);
-  color: var(--foreground);
+  background: var(--hover);
+  color: var(--hover-foreground);
 }
 
 .format-option[aria-selected='true'] {
@@ -618,7 +553,8 @@
 
 .library-skill:hover,
 .included-skill:hover {
-  background: var(--accent);
+  background: var(--hover);
+  color: var(--hover-foreground);
 }
 
 .outline-button {
@@ -753,7 +689,8 @@
 }
 
 .skill-install-menu [role='menuitem']:hover {
-  background: var(--accent);
+  background: var(--hover);
+  color: var(--hover-foreground);
 }
 
 .install-status {
@@ -815,7 +752,7 @@
   align-items: center;
   gap: 10px;
   border: 1px solid rgb(var(--glass-border));
-  border-radius: 1rem;
+  border-radius: var(--radius-hover);
   padding: 14px 16px;
   font-size: 0.875rem;
   background-color: rgb(var(--glass-bg));
@@ -828,16 +765,8 @@
   background: transparent;
 }
 
-.checkmark {
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
-  border-radius: 5px;
-  background: var(--ink);
-  color: var(--surface);
-  font-size: 11px;
-  flex-shrink: 0;
+.included-skill:hover .skill-actions > button {
+  color: var(--hover-foreground);
 }
 
 .search-box {
@@ -1127,8 +1056,8 @@
 }
 
 .add-icon-button[aria-pressed='true'] {
-  background: color-mix(in srgb, #10b981 15%, transparent);
-  color: #10b981;
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
   border-color: transparent;
 }
 
@@ -1204,7 +1133,6 @@
 }
 
 .config-card {
-  max-width: 56rem;
   display: flex;
   align-items: flex-start;
   gap: 16px;
@@ -1250,7 +1178,6 @@
   display: grid;
   grid-template-columns: minmax(9.5rem, 12.5rem) minmax(0, 1fr);
   gap: 12px;
-  max-width: 56rem;
   margin-top: 16px;
   align-items: stretch;
 }
@@ -1513,12 +1440,12 @@
 }
 
 .help-modal.status-success {
-  border-color: color-mix(in srgb, #10b981 50%, var(--border));
+  border-color: color-mix(in srgb, var(--success) 50%, var(--border));
 }
 
 .help-modal.status-success h2,
 .status-copy-success {
-  color: #10b981;
+  color: var(--success);
 }
 
 .help-modal.status-error {
@@ -1560,8 +1487,8 @@
 }
 
 .status-icon-success {
-  background: color-mix(in srgb, #10b981 12%, transparent);
-  color: #10b981;
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
 }
 
 .status-icon-error {

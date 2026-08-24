@@ -57,7 +57,7 @@ ipcMain.handle(
 ipcMain.handle(IPC_CHANNELS.searchSkills, (_event, query: string) => discovery.search(query));
 ipcMain.handle(IPC_CHANNELS.browseSkills, (_event, view: BrowseView) => discovery.browse(view));
 ipcMain.handle(IPC_CHANNELS.listInbox, () => currentEngine().inbox());
-ipcMain.handle(IPC_CHANNELS.listSkills, () => currentEngine().skills());
+ipcMain.handle(IPC_CHANNELS.listSkills, () => (projectRoot ? currentEngine().skills() : []));
 ipcMain.handle(IPC_CHANNELS.addToInbox, (_event, skillId: string) => currentEngine().addToInbox(skillId));
 ipcMain.handle(IPC_CHANNELS.addSkill, (_event, name: string, skillId: string) =>
   currentEngine().addSkill(name, skillId)

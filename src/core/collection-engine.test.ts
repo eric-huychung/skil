@@ -1081,6 +1081,23 @@ describe('CollectionEngine', () => {
       expect(engine.skills()[0]?.id).toBe('ui/styling');
     });
 
+    it('finds skills under .cursor, .claude, .windsurf, and .agents', () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      fs.writeFile('.claude/skills/ui/SKILL.md', '# ui\n');
+      fs.writeFile('.windsurf/skills/lint/SKILL.md', '# lint\n');
+      fs.writeFile('.agents/skills/review/SKILL.md', '# review\n');
+
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.skills()).toEqual([
+        expect.objectContaining({ id: 'tdd', paths: ['.cursor/skills/tdd'] }),
+        expect.objectContaining({ id: 'ui', paths: ['.claude/skills/ui'] }),
+        expect.objectContaining({ id: 'lint', paths: ['.windsurf/skills/lint'] }),
+        expect.objectContaining({ id: 'review', paths: ['.agents/skills/review'] }),
+      ]);
+    });
+
     it('merges the same id under two IDE trees into one catalog row', () => {
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
       fs.writeFile('.claude/skills/tdd/SKILL.md', '# tdd\n');

@@ -1,6 +1,7 @@
 /*
  * Brand primitives. Change this file to rebrand.
  * Landing (`public/landing.css`) and the desktop GUI both import it.
+ * Dark mode uses the same dark purple as light — do not lighten it.
  */
 
 :root {
@@ -11,6 +12,6 @@
 }
 
 .dark {
-  --color-brand: #a78bfa;
-  --color-brand-rgb: 167 139 250;
+  --color-brand: #8b5cf6;
+  --color-brand-rgb: 139 92 246;
 }

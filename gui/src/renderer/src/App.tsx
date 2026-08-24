@@ -51,6 +51,10 @@ function ConfigPanel({
   const [skills, setSkills] = useState<SkillRecord[]>([]);
 
   useEffect(() => {
+    if (!root) {
+      setSkills([]);
+      return;
+    }
     let cancelled = false;
     void bridge.listSkills().then((next) => {
       if (!cancelled) setSkills(next);

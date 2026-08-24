@@ -3,10 +3,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const landing = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), '../../public/index.html'),
-  'utf-8'
-);
+const publicDir = join(dirname(fileURLToPath(import.meta.url)), '../../public');
+const landing = readFileSync(join(publicDir, 'index.html'), 'utf-8');
+const brand = readFileSync(join(publicDir, 'brand.css'), 'utf-8');
 
 describe('landing page', () => {
   it('is the Skil marketing site, not an API stub', () => {
@@ -46,5 +45,25 @@ describe('landing page', () => {
     expect(landing).toContain('Prefer the terminal?');
     expect(landing).toContain('skil scan');
     expect(landing).toContain('Apple Silicon');
+  });
+
+  it('uses the same dark purple brand in light and dark', () => {
+    const light = brand.match(/:root\s*\{[\s\S]*?--color-brand:\s*([^;]+);/)?.[1]?.trim();
+    const dark = brand.match(/\.dark\s*\{[\s\S]*?--color-brand:\s*([^;]+);/)?.[1]?.trim();
+    expect(light).toBe('#8b5cf6');
+    expect(dark ?? light).toBe('#8b5cf6');
+  });
+
+  it('loads shared theme config from brand.css and theme.css', () => {
+    const landingCss = readFileSync(join(publicDir, 'landing.css'), 'utf-8');
+    const guiGlobals = readFileSync(
+      join(publicDir, '../gui/src/renderer/src/styles/globals.css'),
+      'utf-8'
+    );
+    expect(landingCss).toContain("import './brand.css'");
+    expect(landingCss).toContain("import './theme.css'");
+    expect(landingCss).not.toContain('--color-brand:');
+    expect(guiGlobals).toContain("import '../../../../../public/brand.css'");
+    expect(guiGlobals).toContain("import '../../../../../public/theme.css'");
   });
 });

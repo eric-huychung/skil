@@ -191,6 +191,28 @@ describe('RealFileSystemAdapter', () => {
         expect(result.value).toEqual(['.cursor/skills/tdd']);
       }
     });
+
+    it('walks .claude, .windsurf, and .agents skill trees the same way as .cursor', () => {
+      for (const tree of ['.claude', '.windsurf', '.agents'] as const) {
+        mkdirSync(join(tmpDir, tree, 'skills', 'ui'), { recursive: true });
+        writeFileSync(join(tmpDir, tree, 'skills', 'ui', 'SKILL.md'), `# ${tree}`);
+      }
+
+      adapter = new RealFileSystemAdapter(tmpDir);
+
+      expect(adapter.findSkillFolders('.claude/skills')).toEqual({
+        ok: true,
+        value: ['.claude/skills/ui'],
+      });
+      expect(adapter.findSkillFolders('.windsurf/skills')).toEqual({
+        ok: true,
+        value: ['.windsurf/skills/ui'],
+      });
+      expect(adapter.findSkillFolders('.agents/skills')).toEqual({
+        ok: true,
+        value: ['.agents/skills/ui'],
+      });
+    });
   });
 
   describe('readFile / writeFile', () => {

@@ -482,6 +482,9 @@ describe('CollectionList', () => {
     expect(await within(detail).findByText('obra/react-patterns')).toBeInTheDocument();
     expect(within(detail).queryByRole('button', { name: 'Install obra/react-patterns' })).not.toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' })).toBeInTheDocument();
+    const included = within(detail).getByText('obra/react-patterns').closest('.included-skill');
+    if (!included) throw new Error('expected included skill row');
+    expect(included.querySelector('.checkmark')).toBeNull();
   });
 
   it('does not delete when the confirm dialog is canceled', async () => {
