@@ -8,7 +8,8 @@
     "contextkit": "dist/cli/index.js"
   },
   "workspaces": [
-    "gui"
+    "gui",
+    "web"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -17,7 +18,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "gui:dev": "npm run dev --workspace=gui",
     "gui:build": "npm run build --workspace=gui",
-    "gui:test": "npm run test --workspace=gui"
+    "gui:test": "npm run test --workspace=gui",
+    "web:dev": "npm run dev --workspace=web",
+    "web:build": "npm run build --workspace=web"
   },
   "engines": {
     "node": ">=20"

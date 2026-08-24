@@ -1,6 +1,6 @@
 /*
  * Brand primitives. Change this file to rebrand.
- * Landing (`public/landing.css`) and the desktop GUI both import it.
+ * The Next.js landing (`web/`) and the desktop GUI both import it.
  * Dark mode uses the same dark purple as light — do not lighten it.
  */
 

@@ -11,6 +11,8 @@ dist/
 .vercel
 coverage/
 *.tsbuildinfo
+web/.next/
+web/out/
 
 #notes
 note.txt
@@ -20,3 +22,6 @@ tasks/
 TESTING FOLDER/
 skills-lock.json
 tasks/
+
+# ui examples
+ui-example/
