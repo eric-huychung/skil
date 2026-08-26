@@ -107,6 +107,33 @@ export class InMemoryFileSystemAdapter implements IFileSystemAdapter {
     return ok(undefined);
   }
 
+  listAllFiles(dir: string): Result<string[]> {
+    const normalized = normalizePath(dir);
+    if (this.textFiles.has(normalized)) {
+      return err(new Error(`Failed to list '${dir}': not a directory`));
+    }
+
+    const prefix = `${normalized}/`;
+    const files = [...this.textFiles.keys()].filter((path) => path.startsWith(prefix)).sort();
+    return ok(files);
+  }
+
+  removeDir(path: string): Result<void> {
+    const normalized = normalizePath(path);
+    if (this.textFiles.has(normalized)) {
+      this.textFiles.delete(normalized);
+      return ok(undefined);
+    }
+
+    const prefix = `${normalized}/`;
+    for (const filePath of [...this.textFiles.keys()]) {
+      if (filePath.startsWith(prefix)) {
+        this.textFiles.delete(filePath);
+      }
+    }
+    return ok(undefined);
+  }
+
   /** Test helper: makes every writeJSON() call fail with `error` until cleared with `setWriteError(null)`. */
   setWriteError(error: Error | null): void {
     this.writeError = error;

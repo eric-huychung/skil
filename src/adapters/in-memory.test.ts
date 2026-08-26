@@ -117,6 +117,41 @@ describe('InMemoryFileSystemAdapter', () => {
       expect(result.error.message).toMatch(/not found/);
     }
   });
+
+  it('lists every file under a folder, including nested ones', () => {
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    fs.writeFile('.cursor/skills/tdd/scripts/run.sh', 'echo hi\n');
+    fs.writeFile('.cursor/skills/ui/SKILL.md', '# ui\n');
+
+    expect(fs.listAllFiles('.cursor/skills/tdd')).toEqual({
+      ok: true,
+      value: ['.cursor/skills/tdd/SKILL.md', '.cursor/skills/tdd/scripts/run.sh'],
+    });
+  });
+
+  it('listAllFiles returns an empty list when the folder is missing', () => {
+    expect(fs.listAllFiles('.cursor/skills/tdd')).toEqual({ ok: true, value: [] });
+  });
+
+  it('listAllFiles errors when the path is a file', () => {
+    fs.writeFile('not-a-dir', 'nope');
+
+    const result = fs.listAllFiles('not-a-dir');
+
+    expect(isErr(result)).toBe(true);
+  });
+
+  it('removeDir deletes the folder tree and is ok when it is missing', () => {
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    fs.writeFile('.cursor/skills/tdd/scripts/run.sh', 'echo hi\n');
+    fs.writeFile('.cursor/skills/ui/SKILL.md', '# ui\n');
+
+    expect(isOk(fs.removeDir('.cursor/skills/tdd'))).toBe(true);
+    expect(isErr(fs.readFile('.cursor/skills/tdd/SKILL.md'))).toBe(true);
+    expect(isErr(fs.readFile('.cursor/skills/tdd/scripts/run.sh'))).toBe(true);
+    expect(fs.readFile('.cursor/skills/ui/SKILL.md')).toEqual({ ok: true, value: '# ui\n' });
+    expect(isOk(fs.removeDir('.cursor/skills/missing'))).toBe(true);
+  });
 });
 
 describe('InMemoryConfigAdapter', () => {

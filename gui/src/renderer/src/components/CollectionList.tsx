@@ -1,17 +1,15 @@
 import { cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
-import { ArrowLeft, CaretDown, CaretLeft, CaretRight, Check, CircleNotch, Copy, FloppyDisk, Plus, Trash, X } from '@phosphor-icons/react';
+import { ArrowLeft, CaretDown, CaretLeft, CaretRight, Check, CircleNotch, DownloadSimple, Plus, Trash, X } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
+import { matchingCommandNames, parseConflictedCommandNames } from '../lib/command-conflicts';
 import { groupCommandsByStage } from '../lib/sdlc';
+import { skillCountForIde } from '../lib/skill-sources';
 import type { Collection, IDE } from '../../../shared/ipc';
 import { targetPhrase } from './InstallSkill';
 import { StatusDialog } from './StatusDialog';
 import { IDE_OPTIONS } from './InstallSkill';
 import { CommandFormatContext, FORMAT_LABELS } from './format-context';
-
-function otherIde(ide: IDE): IDE {
-  return IDE_OPTIONS.find((option) => option !== ide) ?? 'claude';
-}
 
 const INBOX_PAGE_SIZE = 10;
 
@@ -24,14 +22,14 @@ const EMPTY_SUMMARIES: Record<IDE, IdeSummary> = {
   agents: { commands: 0, skills: 0 },
 };
 
-function uniqueSkillCount(collections: Collection[]): number {
-  return new Set(collections.flatMap((collection) => collection.skills)).size;
-}
-
 type ExportOutcome =
   | { status: 'loading'; ide: IDE; dest?: string }
   | { status: 'success'; ide: IDE; dest?: string; path?: string }
   | { status: 'error'; ide: IDE; dest?: string; message: string; summary?: string };
+
+type ConflictPrompt =
+  | { kind: 'export'; names: string[] }
+  | { kind: 'import'; fromIde: IDE; names: string[]; replace: boolean };
 
 function matchesQuery(skillId: string, query: string): boolean {
   const needle = query.trim().toLowerCase();
@@ -315,36 +313,27 @@ function IdeOverview({
 function CollectionsPanel({
   children,
   formatIde,
-  copyDest,
-  onCopyDestChange,
   onBack,
   onSave,
-  onCopy,
-  onCopyAll,
+  onImportFrom,
   isBusy,
   canSave,
-  canCopy,
-  selectedName,
+  summaries,
 }: {
   children: ReactNode;
   formatIde: IDE;
-  copyDest: IDE;
-  onCopyDestChange: (ide: IDE) => void;
   onBack: () => void;
   onSave: () => void;
-  onCopy: () => void;
-  onCopyAll: () => void;
+  onImportFrom: (ide: IDE) => void;
   isBusy: boolean;
   canSave: boolean;
-  canCopy: boolean;
-  selectedName: string | null;
+  summaries: Record<IDE, IdeSummary>;
 }) {
-  const dests = IDE_OPTIONS.filter((option) => option !== formatIde);
-
   return (
     <section className="collections-panel panel-section">
       <div className="section-heading">
         <div>
+          <p className="eyebrow">{FORMAT_LABELS[formatIde]}</p>
           <div className="workspace-title-row">
             <button
               type="button"
@@ -355,14 +344,12 @@ function CollectionsPanel({
             >
               <ArrowLeft size={16} weight="regular" aria-hidden="true" />
             </button>
-            <div>
-              <p className="eyebrow">{FORMAT_LABELS[formatIde]}</p>
-              <h1>Commands</h1>
-            </div>
+            <h1>Commands</h1>
           </div>
           <p className="workspace-lede">Named SDLC knobs. File inbox skills onto them, then export.</p>
         </div>
         <div className="library-heading-actions">
+          <ImportMenu formatIde={formatIde} summaries={summaries} isBusy={isBusy} onImportFrom={onImportFrom} />
           <button
             type="button"
             onClick={onSave}
@@ -375,49 +362,9 @@ function CollectionsPanel({
             {isBusy ? (
               <CircleNotch size={16} weight="regular" className="spin" aria-hidden="true" />
             ) : (
-              <FloppyDisk size={16} weight="regular" aria-hidden="true" />
+              <DownloadSimple size={16} weight="regular" aria-hidden="true" />
             )}
           </button>
-        </div>
-      </div>
-      <div className="copy-bar">
-        <p className="copy-bar-label">Copy to</p>
-        <div className="copy-bar-body">
-          <div className="copy-dests" role="group" aria-label="Copy to">
-            {dests.map((ide) => (
-              <button
-                key={ide}
-                type="button"
-                aria-pressed={copyDest === ide}
-                disabled={isBusy}
-                className={`copy-dest ${FOCUS_RING}`}
-                onClick={() => onCopyDestChange(ide)}
-              >
-                {FORMAT_LABELS[ide]}
-              </button>
-            ))}
-          </div>
-          <div className="copy-bar-actions">
-            <button
-              type="button"
-              onClick={onCopy}
-              disabled={!canCopy || isBusy}
-              aria-label={`Copy ${selectedName ?? 'command'} to ${FORMAT_LABELS[copyDest]}`}
-              className={`outline-button ${FOCUS_RING}`}
-            >
-              <Copy size={14} weight="regular" aria-hidden="true" />
-              Copy
-            </button>
-            <button
-              type="button"
-              onClick={onCopyAll}
-              disabled={!canSave || isBusy}
-              aria-label={`Copy all to ${FORMAT_LABELS[copyDest]}`}
-              className={`outline-button ${FOCUS_RING}`}
-            >
-              Copy all
-            </button>
-          </div>
         </div>
       </div>
       {children}
@@ -425,37 +372,175 @@ function CollectionsPanel({
   );
 }
 
-export default function CollectionList({ children }: { children?: ReactNode }) {
+function ImportMenu({
+  formatIde,
+  summaries,
+  isBusy,
+  onImportFrom,
+}: {
+  formatIde: IDE;
+  summaries: Record<IDE, IdeSummary>;
+  isBusy: boolean;
+  onImportFrom: (ide: IDE) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const sources = IDE_OPTIONS.filter((option) => option !== formatIde);
+  const canImport = sources.some((ide) => summaries[ide].commands > 0);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+
+    function handleKey(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMenuOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [menuOpen]);
+
+  return (
+    <div className="import-menu" ref={rootRef}>
+      <button
+        type="button"
+        className={`import-button ${FOCUS_RING}`}
+        disabled={!canImport || isBusy}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-controls={menuOpen ? 'import-from-menu' : undefined}
+        onClick={() => setMenuOpen((open) => !open)}
+      >
+        <span>Import</span>
+        <CaretDown size={12} weight="bold" aria-hidden="true" />
+      </button>
+      {menuOpen && (
+        <div id="import-from-menu" role="menu" aria-label="Import" className="skill-install-menu import-copy-menu">
+          {sources.map((ide) => (
+            <button
+              key={ide}
+              type="button"
+              role="menuitem"
+              className={FOCUS_RING}
+              disabled={summaries[ide].commands === 0 || isBusy}
+              onClick={() => {
+                setMenuOpen(false);
+                onImportFrom(ide);
+              }}
+            >
+              Import all from {FORMAT_LABELS[ide]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConflictDialog({
+  title,
+  body,
+  names,
+  confirmLabel,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  body: string;
+  names: string[];
+  confirmLabel: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
+      <div
+        className="help-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="conflict-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="eyebrow">Sync</p>
+        <h2 id="conflict-title">{title}</h2>
+        <p className="muted-copy">{body}</p>
+        {names.length > 0 && (
+          <ul className="conflict-list" aria-label="Conflicting commands">
+            {names.map((name) => (
+              <li key={name}>/{name}</li>
+            ))}
+          </ul>
+        )}
+        <div className="modal-actions">
+          <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function CollectionList({
+  children,
+  onProjectBound,
+}: {
+  children?: ReactNode;
+  onProjectBound?: (root: string) => void;
+}) {
   const bridge = useBridge();
   const [collections, setCollections] = useState<Collection[] | null>(null);
   const [inbox, setInbox] = useState<string[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [workspaceIde, setWorkspaceIde] = useState<IDE | null>(null);
   const [summaries, setSummaries] = useState<Record<IDE, IdeSummary>>(EMPTY_SUMMARIES);
-  const [copyDest, setCopyDest] = useState<IDE>('claude');
+  const [listsByIde, setListsByIde] = useState<Record<IDE, Collection[]>>({
+    cursor: [],
+    claude: [],
+    windsurf: [],
+    agents: [],
+  });
   const formatIde = workspaceIde ?? 'cursor';
   const [exportOutcome, setExportOutcome] = useState<ExportOutcome | null>(null);
-  const [copyOutcome, setCopyOutcome] = useState<ExportOutcome | null>(null);
-  const [confirmReplace, setConfirmReplace] = useState(false);
-  const [confirmCopyReplace, setConfirmCopyReplace] = useState(false);
-  const [pendingCopyAll, setPendingCopyAll] = useState(false);
+  const [importOutcome, setImportOutcome] = useState<ExportOutcome | null>(null);
+  const [conflict, setConflict] = useState<ConflictPrompt | null>(null);
   const [exportDest, setExportDest] = useState<string | undefined>();
+  const [importDest, setImportDest] = useState<string | undefined>();
   const refreshId = useRef(0);
-  const isBusy = exportOutcome?.status === 'loading' || copyOutcome?.status === 'loading';
+  const isBusy = exportOutcome?.status === 'loading' || importOutcome?.status === 'loading';
 
   const refresh = useCallback(async () => {
     const id = ++refreshId.current;
-    const [nextInbox, ...lists] = await Promise.all([
+    const [nextInbox, catalog, ...lists] = await Promise.all([
       bridge.listInbox(),
+      bridge.listSkills(),
       ...IDE_OPTIONS.map((ide) => bridge.listCollections(ide)),
     ]);
     if (id !== refreshId.current) return;
     setInbox(nextInbox);
+    setListsByIde(
+      Object.fromEntries(IDE_OPTIONS.map((ide, index) => [ide, lists[index]])) as Record<IDE, Collection[]>
+    );
     setSummaries(
       Object.fromEntries(
         IDE_OPTIONS.map((ide, index) => [
           ide,
-          { commands: lists[index].length, skills: uniqueSkillCount(lists[index]) },
+          { commands: lists[index].length, skills: skillCountForIde(catalog, ide) },
         ])
       ) as Record<IDE, IdeSummary>
     );
@@ -476,8 +561,22 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    return bridge.onScan(() => {
+      void refresh();
+    });
+  }, [bridge, refresh]);
+
+  async function bindPickedFolder(root: string | null, dest: string | undefined) {
+    if (root || !dest) return;
+    const bound = await bridge.bindProjectFolder(dest);
+    if (!bound) return;
+    onProjectBound?.(bound);
+    await bridge.scan();
+  }
+
   async function handleExport(replace?: boolean) {
-    setConfirmReplace(false);
+    setConflict(null);
     const root = await bridge.getProjectRoot();
     let dest: string | undefined;
     if (!root) {
@@ -500,15 +599,15 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
     if (!result.ok) {
       if (isUnstampedConflict(result.error.message)) {
         setExportOutcome(null);
-        setConfirmReplace(true);
+        setConflict({ kind: 'export', names: parseConflictedCommandNames(result.error.message) });
         return;
       }
       setExportDest(undefined);
       setExportOutcome({ status: 'error', ide: workspaceIde, dest: target, message: result.error.message });
+      await bindPickedFolder(root, dest);
       return;
     }
     setExportDest(undefined);
-    setConfirmReplace(false);
     if (result.value.failures.length > 0) {
       setExportOutcome({
         status: 'error',
@@ -517,6 +616,7 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
         summary: `Exported the command files, but some skills did not deploy to ${targetPhrase(workspaceIde, target)}`,
         message: result.value.failures.join('\n'),
       });
+      await bindPickedFolder(root, dest);
       return;
     }
     setExportOutcome({
@@ -525,53 +625,67 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
       dest: target,
       path: result.value.succeeded[0],
     });
+    await bindPickedFolder(root, dest);
   }
 
-  async function handleCopy(all: boolean, replace?: boolean) {
-    setConfirmCopyReplace(false);
+  async function handleImport(fromIde: IDE, opts?: { replace?: boolean; skipMatchPrompt?: boolean }) {
+    setConflict(null);
+    if (!workspaceIde) return;
+    if (!opts?.replace && !opts?.skipMatchPrompt) {
+      const matching = matchingCommandNames(listsByIde[fromIde], listsByIde[workspaceIde]);
+      if (matching.length > 0) {
+        setConflict({ kind: 'import', fromIde, names: matching, replace: false });
+        return;
+      }
+    }
     const root = await bridge.getProjectRoot();
     let dest: string | undefined;
     if (!root) {
-      const picked = await bridge.pickDestinationFolder();
-      if (picked === null) return;
-      dest = picked;
+      dest = opts?.replace || opts?.skipMatchPrompt ? importDest : undefined;
+      if (dest === undefined) {
+        const picked = await bridge.pickDestinationFolder();
+        if (picked === null) return;
+        dest = picked;
+        setImportDest(picked);
+      }
     }
     const target = dest ?? root ?? undefined;
-    setCopyOutcome({ status: 'loading', ide: copyDest, dest: target });
-    const opts = {
-      ...(replace ? { replace: true } : {}),
+    setImportOutcome({ status: 'loading', ide: fromIde, dest: target });
+    const result = await bridge.copyAll(fromIde, workspaceIde, {
+      ...(opts?.replace ? { replace: true } : {}),
       ...(dest ? { dest } : {}),
-    };
-    if (!workspaceIde) return;
-    const result = all
-      ? await bridge.copyAll(workspaceIde, copyDest, opts)
-      : selectedName
-        ? await bridge.copyTo(selectedName, workspaceIde, copyDest, opts)
-        : { ok: false as const, error: new Error('Select a command to copy') };
+    });
 
     if (!result.ok) {
       if (isUnstampedConflict(result.error.message)) {
-        setCopyOutcome(null);
-        setPendingCopyAll(all);
-        setConfirmCopyReplace(true);
+        setImportOutcome(null);
+        setConflict({
+          kind: 'import',
+          fromIde,
+          names: parseConflictedCommandNames(result.error.message),
+          replace: true,
+        });
         return;
       }
-      setCopyOutcome({ status: 'error', ide: copyDest, dest: target, message: result.error.message });
+      setImportDest(undefined);
+      setImportOutcome({ status: 'error', ide: fromIde, dest: target, message: result.error.message });
       return;
     }
+    setImportDest(undefined);
     if (result.value.failures.length > 0) {
-      setCopyOutcome({
+      setImportOutcome({
         status: 'error',
-        ide: copyDest,
+        ide: fromIde,
         dest: target,
-        summary: `Copied, but some skills did not deploy to ${targetPhrase(copyDest, target)}`,
+        summary: `Imported, but some skills did not deploy to ${targetPhrase(workspaceIde, target)}`,
         message: result.value.failures.join('\n'),
       });
+      await refresh();
       return;
     }
-    setCopyOutcome({
+    setImportOutcome({
       status: 'success',
-      ide: copyDest,
+      ide: fromIde,
       dest: target,
       path: result.value.succeeded[0],
     });
@@ -580,7 +694,6 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
 
   function openWorkspace(ide: IDE) {
     setWorkspaceIde(ide);
-    setCopyDest(otherIde(ide));
   }
 
   const createSlot = isValidElement(children)
@@ -594,16 +707,12 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
   const panel = workspaceIde ? (
     <CollectionsPanel
       formatIde={workspaceIde}
-      copyDest={copyDest}
-      onCopyDestChange={setCopyDest}
       onBack={() => setWorkspaceIde(null)}
       onSave={() => void handleExport()}
-      onCopy={() => void handleCopy(false)}
-      onCopyAll={() => void handleCopy(true)}
+      onImportFrom={(ide) => void handleImport(ide)}
       isBusy={isBusy}
       canSave={(collections?.length ?? 0) > 0}
-      canCopy={selectedName !== null}
-      selectedName={selectedName}
+      summaries={summaries}
     >
       {collections === null ? null : collections.length === 0 ? (
         <p className="muted-copy">No commands yet</p>
@@ -694,92 +803,64 @@ export default function CollectionList({ children }: { children?: ReactNode }) {
           )}
         </StatusDialog>
       )}
-      {copyOutcome && (
+      {importOutcome && (
         <StatusDialog
-          eyebrow="Copy"
+          eyebrow="Import"
           title={
-            copyOutcome.status === 'loading'
-              ? 'Copying…'
-              : copyOutcome.status === 'success'
-                ? 'Copied'
-                : 'Copy failed'
+            importOutcome.status === 'loading'
+              ? 'Importing…'
+              : importOutcome.status === 'success'
+                ? 'Imported'
+                : 'Import failed'
           }
-          kind={copyOutcome.status}
-          errorDetail={copyOutcome.status === 'error' ? copyOutcome.message : undefined}
-          closeLabel="Close copy status"
-          onClose={() => setCopyOutcome(null)}
+          kind={importOutcome.status}
+          errorDetail={importOutcome.status === 'error' ? importOutcome.message : undefined}
+          closeLabel="Close import status"
+          onClose={() => setImportOutcome(null)}
         >
-          {copyOutcome.status === 'loading' && (
+          {importOutcome.status === 'loading' && (
             <p role="status" className="muted-copy">
-              Copying to {targetPhrase(copyOutcome.ide, copyOutcome.dest)}
+              Importing all from {targetPhrase(importOutcome.ide, importOutcome.dest)}
             </p>
           )}
-          {copyOutcome.status === 'success' && (
+          {importOutcome.status === 'success' && (
             <>
-              <p className="status-copy-success">{`Copied to ${targetPhrase(copyOutcome.ide, copyOutcome.dest)}`}</p>
-              {copyOutcome.path && <p className="status-path">{copyOutcome.path}</p>}
+              <p className="status-copy-success">{`Imported all from ${targetPhrase(importOutcome.ide, importOutcome.dest)}`}</p>
+              {importOutcome.path && <p className="status-path">{importOutcome.path}</p>}
             </>
           )}
-          {copyOutcome.status === 'error' && (
+          {importOutcome.status === 'error' && (
             <p role="alert" className="muted-copy text-destructive">
-              {copyOutcome.summary ?? `Could not copy to ${targetPhrase(copyOutcome.ide, copyOutcome.dest)}`}
+              {importOutcome.summary ?? `Could not import from ${targetPhrase(importOutcome.ide, importOutcome.dest)}`}
             </p>
           )}
         </StatusDialog>
       )}
-      {confirmReplace && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setConfirmReplace(false)}>
-          <div
-            className="help-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="replace-export-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <p className="eyebrow">Export</p>
-            <h2 id="replace-export-title">Replace existing file?</h2>
-            <p className="muted-copy">
-              A command file exists and was not generated by skil. Replace it with our command template?
-            </p>
-            <div className="modal-actions">
-              <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={() => setConfirmReplace(false)}>
-                Cancel
-              </button>
-              <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={() => void handleExport(true)}>
-                Replace
-              </button>
-            </div>
-          </div>
-        </div>
+      {conflict?.kind === 'export' && (
+        <ConflictDialog
+          title="Replace existing commands?"
+          body="These command files already exist and were not generated by skil. Replace them with our command templates?"
+          names={conflict.names}
+          confirmLabel="Replace"
+          onCancel={() => setConflict(null)}
+          onConfirm={() => void handleExport(true)}
+        />
       )}
-      {confirmCopyReplace && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setConfirmCopyReplace(false)}>
-          <div
-            className="help-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="replace-copy-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <p className="eyebrow">Copy</p>
-            <h2 id="replace-copy-title">Replace existing file?</h2>
-            <p className="muted-copy">
-              A command file exists and was not generated by skil. Replace it with our command template?
-            </p>
-            <div className="modal-actions">
-              <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={() => setConfirmCopyReplace(false)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={`primary-button ${FOCUS_RING}`}
-                onClick={() => void handleCopy(pendingCopyAll, true)}
-              >
-                Replace
-              </button>
-            </div>
-          </div>
-        </div>
+      {conflict?.kind === 'import' && workspaceIde && (
+        <ConflictDialog
+          title="Replace existing commands?"
+          body={
+            conflict.replace
+              ? `These command files already exist in ${FORMAT_LABELS[workspaceIde]} and were not generated by skil. Replace them with ${FORMAT_LABELS[conflict.fromIde]}'s versions?`
+              : `These commands already exist in ${FORMAT_LABELS[workspaceIde]}. Import will overwrite them with ${FORMAT_LABELS[conflict.fromIde]}'s versions.`
+          }
+          names={conflict.names}
+          confirmLabel="Replace"
+          onCancel={() => setConflict(null)}
+          onConfirm={() =>
+            void handleImport(conflict.fromIde, conflict.replace ? { replace: true } : { skipMatchPrompt: true })
+          }
+        />
       )}
     </CommandFormatContext.Provider>
   );

@@ -10,7 +10,7 @@ describe('RealFileSystemAdapter', () => {
   let adapter: RealFileSystemAdapter;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'contextkit-'));
+    tmpDir = mkdtempSync(join(tmpdir(), 'skil-'));
     adapter = new RealFileSystemAdapter();
   });
 
@@ -64,7 +64,7 @@ describe('RealFileSystemAdapter', () => {
     });
 
     it('creates the parent directory if it does not exist', () => {
-      const path = join(tmpDir, '.contextkit', 'state.json');
+      const path = join(tmpDir, '.skil', 'state.json');
 
       const result = adapter.writeJSON(path, { collections: [] });
 
@@ -95,20 +95,20 @@ describe('RealFileSystemAdapter', () => {
     it('resolves relative paths under the given root, not process.cwd()', () => {
       adapter = new RealFileSystemAdapter(tmpDir);
 
-      const result = adapter.writeJSON('.contextkit/state.json', { collections: [] });
+      const result = adapter.writeJSON('.skil/state.json', { collections: [] });
 
       expect(isOk(result)).toBe(true);
-      expect(JSON.parse(readFileSync(join(tmpDir, '.contextkit', 'state.json'), 'utf-8'))).toEqual({
+      expect(JSON.parse(readFileSync(join(tmpDir, '.skil', 'state.json'), 'utf-8'))).toEqual({
         collections: [],
       });
     });
 
     it('reads a relative path from under the given root', () => {
       adapter = new RealFileSystemAdapter(tmpDir);
-      mkdirSync(join(tmpDir, '.contextkit'), { recursive: true });
-      writeFileSync(join(tmpDir, '.contextkit', 'state.json'), JSON.stringify({ collections: ['frontend'] }));
+      mkdirSync(join(tmpDir, '.skil'), { recursive: true });
+      writeFileSync(join(tmpDir, '.skil', 'state.json'), JSON.stringify({ collections: ['frontend'] }));
 
-      const result = adapter.readJSON<{ collections: string[] }>('.contextkit/state.json');
+      const result = adapter.readJSON<{ collections: string[] }>('.skil/state.json');
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -117,7 +117,7 @@ describe('RealFileSystemAdapter', () => {
     });
 
     it('does not prefix an absolute path with the root', () => {
-      const outside = mkdtempSync(join(tmpdir(), 'contextkit-outside-'));
+      const outside = mkdtempSync(join(tmpdir(), 'skil-outside-'));
       try {
         const absolutePath = join(outside, 'state.json');
         adapter = new RealFileSystemAdapter(tmpDir);
@@ -230,7 +230,7 @@ describe('RealFileSystemAdapter', () => {
     });
 
     it('does not prefix an absolute path with the root', () => {
-      const outside = mkdtempSync(join(tmpdir(), 'contextkit-outside-'));
+      const outside = mkdtempSync(join(tmpdir(), 'skil-outside-'));
       try {
         const absolutePath = join(outside, 'SKILL.md');
         adapter.writeFile(absolutePath, '# outside\n');
@@ -292,6 +292,42 @@ describe('RealFileSystemAdapter', () => {
 
     it('returns an empty list when the directory is missing', () => {
       expect(adapter.listFiles('.claude/commands')).toEqual({ ok: true, value: [] });
+    });
+  });
+
+  describe('listAllFiles / removeDir', () => {
+    beforeEach(() => {
+      adapter = new RealFileSystemAdapter(tmpDir);
+    });
+
+    it('lists nested files under a folder', () => {
+      mkdirSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'scripts'), { recursive: true });
+      writeFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'SKILL.md'), '# tdd\n');
+      writeFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'scripts', 'run.sh'), 'echo hi\n');
+      mkdirSync(join(tmpDir, '.cursor', 'skills', 'ui'), { recursive: true });
+      writeFileSync(join(tmpDir, '.cursor', 'skills', 'ui', 'SKILL.md'), '# ui\n');
+
+      expect(adapter.listAllFiles('.cursor/skills/tdd')).toEqual({
+        ok: true,
+        value: ['.cursor/skills/tdd/SKILL.md', '.cursor/skills/tdd/scripts/run.sh'],
+      });
+    });
+
+    it('listAllFiles returns an empty list when the folder is missing', () => {
+      expect(adapter.listAllFiles('.cursor/skills/tdd')).toEqual({ ok: true, value: [] });
+    });
+
+    it('removeDir deletes the folder tree and leaves siblings', () => {
+      mkdirSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'scripts'), { recursive: true });
+      writeFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'SKILL.md'), '# tdd\n');
+      writeFileSync(join(tmpDir, '.cursor', 'skills', 'tdd', 'scripts', 'run.sh'), 'echo hi\n');
+      mkdirSync(join(tmpDir, '.cursor', 'skills', 'ui'), { recursive: true });
+      writeFileSync(join(tmpDir, '.cursor', 'skills', 'ui', 'SKILL.md'), '# ui\n');
+
+      expect(isOk(adapter.removeDir('.cursor/skills/tdd'))).toBe(true);
+      expect(readdirSync(join(tmpDir, '.cursor', 'skills'))).toEqual(['ui']);
+      expect(readFileSync(join(tmpDir, '.cursor', 'skills', 'ui', 'SKILL.md'), 'utf-8')).toBe('# ui\n');
+      expect(isOk(adapter.removeDir('.cursor/skills/missing'))).toBe(true);
     });
   });
 });

@@ -8,7 +8,7 @@ import {
   installTestBridge,
   renderWithProviders,
 } from '../test-utils';
-import { isOk } from '../../../../../src/core/result.js';
+import { isErr, isOk } from '../../../../../src/core/result.js';
 
 describe('GUI workflow (real engine)', () => {
   it('drives Discover Add → create → file → export through rendered components', async () => {
@@ -45,12 +45,14 @@ describe('GUI workflow (real engine)', () => {
     expect(engine.inbox()).toEqual(['obra/react-patterns']);
     expect(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' })).toBeInTheDocument();
 
-    const dests = screen.getByRole('group', { name: 'Copy to' });
-    await userEvent.click(within(dests).getByRole('button', { name: 'Windsurf' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Copy frontend to Windsurf' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Back to IDEs' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Open Windsurf workspace' }));
+    await waitFor(() => expect(screen.getByText('No commands yet')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Import' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Import all from Cursor' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Copied' })).toHaveTextContent(
-      'Copied to Windsurf in test-project'
+    expect(await screen.findByRole('dialog', { name: 'Imported' })).toHaveTextContent(
+      'Imported all from Cursor in test-project'
     );
     const written = fs.readFile('.windsurf/workflows/frontend.md');
     expect(isOk(written)).toBe(true);
@@ -59,5 +61,26 @@ describe('GUI workflow (real engine)', () => {
     }
     expect(engine.skills()[0]?.deployedTo.map((row) => row.ide)).toEqual(['windsurf']);
     expect(engine.list()).toHaveLength(1);
+  });
+
+  it('deletes a scanned inbox skill from disk after confirm', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    fs.writeFile('.cursor/skills/tdd/references/notes.md', '# notes\n');
+    installTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+
+    renderWithProviders(<App />);
+    await screen.findByTitle(DEFAULT_TEST_PROJECT_ROOT);
+    await userEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete tdd' }));
+    expect(await screen.findByRole('dialog', { name: 'Delete tdd?' })).toHaveTextContent(
+      '.cursor/skills/tdd'
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Delete skill' }));
+
+    await waitFor(() => expect(engine.inbox()).toEqual([]));
+    expect(engine.skills()).toEqual([]);
+    expect(isErr(fs.readFile('.cursor/skills/tdd/SKILL.md'))).toBe(true);
+    expect(isErr(fs.readFile('.cursor/skills/tdd/references/notes.md'))).toBe(true);
   });
 });

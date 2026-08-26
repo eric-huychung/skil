@@ -63,6 +63,18 @@ export interface IFileSystemAdapter {
    * resolve under the adapter root.
    */
   removeFile(path: string): Result<void>;
+
+  /**
+   * Lists every file under `dir`, nested included. Paths are relative
+   * to the adapter root. Missing dir → ok([]). A file at `dir` is an error.
+   */
+  listAllFiles(dir: string): Result<string[]>;
+
+  /**
+   * Deletes a directory tree. Missing path is ok (idempotent). Relative
+   * paths resolve under the adapter root.
+   */
+  removeDir(path: string): Result<void>;
 }
 
 /**
