@@ -55,11 +55,11 @@ export default function CreateCollectionForm({ onCreated }: { onCreated?: (colle
     <div className="create-collection">
       <button
         type="button"
-        className={`outline-button create-button ${FOCUS_RING}`}
+        className={`import-button create-button ${FOCUS_RING}`}
         onClick={() => setOpen(true)}
       >
         <Plus size={15} weight="regular" aria-hidden="true" />
-        Create New Command
+        <span>Create New Command</span>
       </button>
 
       {open && (

@@ -156,7 +156,7 @@ describe('SkillSearch', () => {
     expect(browseSkills).toHaveBeenCalledTimes(2);
   });
 
-  it('refetches the leaderboard when Refresh is clicked, even if the view is cached', async () => {
+  it('does not offer a Discover refresh control', async () => {
     const engine = createInMemoryEngine();
     const inner = createTestBridge(engine);
     const browseSkills = vi.fn(inner.browseSkills);
@@ -166,9 +166,8 @@ describe('SkillSearch', () => {
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
     expect(browseSkills).toHaveBeenCalledTimes(1);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh skills' }));
-
-    await waitFor(() => expect(browseSkills).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('button', { name: 'Refresh skills' })).not.toBeInTheDocument();
+    expect(browseSkills).toHaveBeenCalledTimes(1);
     expect(screen.getByText('obra/react-patterns')).toBeInTheDocument();
   });
 

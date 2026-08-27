@@ -8,6 +8,25 @@
     },
     "api/skills/search.ts": {
       "includeFiles": "dist/**"
+    },
+    "api/market/shelves.ts": {
+      "includeFiles": "dist/**"
+    },
+    "api/market/search.ts": {
+      "includeFiles": "dist/**"
+    },
+    "api/market/preview.ts": {
+      "includeFiles": "dist/**"
+    },
+    "api/cron/sync-market.ts": {
+      "includeFiles": "dist/**",
+      "maxDuration": 300
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/sync-market",
+      "schedule": "0 0 * * 0"
+    }
+  ]
 }

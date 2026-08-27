@@ -15,7 +15,7 @@ export function runDelete(engine: ICollectionEngine, name: string): CommandOutco
 export function registerDeleteCommand(program: Command, engine: ICollectionEngine): void {
   program
     .command('delete <name>')
-    .description('Delete a command')
+    .description('Drop a command from the project map')
     .action((name: string) => {
       printOutcome(runDelete(engine, name));
     });

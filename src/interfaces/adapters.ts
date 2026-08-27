@@ -1,5 +1,5 @@
 import type { Result } from '../core/result.js';
-import type { BrowseView, Config, IDE, Skill } from '../types/index.js';
+import type { BrowseView, Config, IDE, Skill, UsageEvent } from '../types/index.js';
 
 /**
  * Wraps project-local I/O: JSON state, SKILL.md discovery, and utf-8 files.
@@ -50,6 +50,31 @@ export interface IFileSystemAdapter {
    * are overwritten. Engine callers skip when dest already has SKILL.md.
    */
   copyDir(from: string, to: string): Result<void>;
+
+  /**
+   * Lists file paths (not directories) directly under `dir`. Paths are
+   * relative to the adapter root. Missing dir → ok([]). A file at `dir`
+   * is an error.
+   */
+  listFiles(dir: string): Result<string[]>;
+
+  /**
+   * Deletes a file. Missing path is ok (idempotent). Relative paths
+   * resolve under the adapter root.
+   */
+  removeFile(path: string): Result<void>;
+
+  /**
+   * Lists every file under `dir`, nested included. Paths are relative
+   * to the adapter root. Missing dir → ok([]). A file at `dir` is an error.
+   */
+  listAllFiles(dir: string): Result<string[]>;
+
+  /**
+   * Deletes a directory tree. Missing path is ok (idempotent). Relative
+   * paths resolve under the adapter root.
+   */
+  removeDir(path: string): Result<void>;
 }
 
 /**
@@ -90,4 +115,12 @@ export interface ISkillsAdapter {
 
   /** Returns skills already installed, read from local tooling state. */
   getInstalled(): Skill[];
+}
+
+/**
+ * Counts skill reads from IDE logs. In-memory in tests; Claude session
+ * JSONL in prod. Not a second deep module.
+ */
+export interface IUsageCollector {
+  collect(opts: { projectRoot: string; skillIds: string[] }): Promise<Result<UsageEvent[]>>;
 }

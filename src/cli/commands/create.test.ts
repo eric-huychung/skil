@@ -68,4 +68,15 @@ describe('runCreate', () => {
     expect(outcome.isError).toBe(false);
     expect(engine.list()[0]?.command).toBe('npm run dev');
   });
+
+  it('rejects a second create of the same name', () => {
+    const engine = buildEngine();
+    engine.create('build', ['tdd']);
+
+    const outcome = runCreate(engine, 'build', ['design']);
+
+    expect(outcome.isError).toBe(true);
+    expect(outcome.message).toContain("Command 'build' already exists");
+    expect(engine.list()[0]?.skills).toEqual(['tdd']);
+  });
 });

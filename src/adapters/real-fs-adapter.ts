@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { IFileSystemAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
@@ -105,6 +105,87 @@ export class RealFileSystemAdapter implements IFileSystemAdapter {
       return ok(undefined);
     } catch (error) {
       return err(new Error(`Failed to copy '${from}' to '${to}': ${(error as Error).message}`));
+    }
+  }
+
+  listFiles(dir: string): Result<string[]> {
+    const resolved = this.resolvePath(dir);
+    let stats;
+    try {
+      stats = statSync(resolved);
+    } catch {
+      return ok([]);
+    }
+    if (!stats.isDirectory()) {
+      return err(new Error(`Failed to list '${dir}': not a directory`));
+    }
+
+    try {
+      const entries = readdirSync(resolved, { withFileTypes: true });
+      return ok(
+        entries
+          .filter((entry) => entry.isFile())
+          .map((entry) => this.toAdapterRelative(join(resolved, entry.name)))
+          .sort()
+      );
+    } catch (error) {
+      return err(new Error(`Failed to list '${dir}': ${(error as Error).message}`));
+    }
+  }
+
+  removeFile(path: string): Result<void> {
+    const resolved = this.resolvePath(path);
+    try {
+      unlinkSync(resolved);
+      return ok(undefined);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') {
+        return ok(undefined);
+      }
+      return err(new Error(`Failed to delete '${path}': ${(error as Error).message}`));
+    }
+  }
+
+  listAllFiles(dir: string): Result<string[]> {
+    const resolved = this.resolvePath(dir);
+    let stats;
+    try {
+      stats = statSync(resolved);
+    } catch {
+      return ok([]);
+    }
+    if (!stats.isDirectory()) {
+      return err(new Error(`Failed to list '${dir}': not a directory`));
+    }
+
+    const found: string[] = [];
+    const visit = (current: string): void => {
+      const entries = readdirSync(current, { withFileTypes: true });
+      for (const entry of entries) {
+        const next = join(current, entry.name);
+        if (entry.isDirectory()) {
+          visit(next);
+        } else if (entry.isFile()) {
+          found.push(this.toAdapterRelative(next));
+        }
+      }
+    };
+    try {
+      visit(resolved);
+      return ok(found.sort());
+    } catch (error) {
+      return err(new Error(`Failed to list '${dir}': ${(error as Error).message}`));
+    }
+  }
+
+  removeDir(path: string): Result<void> {
+    const resolved = this.resolvePath(path);
+    try {
+      rmSync(resolved, { recursive: true, force: true });
+      return ok(undefined);
+    } catch (error) {
+      return err(new Error(`Failed to delete '${path}': ${(error as Error).message}`));
     }
   }
 

@@ -34,6 +34,15 @@ export function runInboxFile(engine: ICollectionEngine, skillId: string, command
   return { message: `Filed '${skillId}' onto '${result.value.name}'`, isError: false };
 }
 
+export function runInboxDelete(engine: ICollectionEngine, skillId: string): CommandOutcome {
+  const result = engine.deleteSkill(skillId);
+  if (!isOk(result)) {
+    return { message: result.error.message, isError: true };
+  }
+
+  return { message: `Deleted skill '${skillId}'`, isError: false };
+}
+
 export function registerInboxCommand(program: Command, engine: ICollectionEngine): void {
   const inbox = program
     .command('inbox')
@@ -51,8 +60,15 @@ export function registerInboxCommand(program: Command, engine: ICollectionEngine
 
   inbox
     .command('file <skillId> <command>')
-    .description('Move an Inbox ID onto an existing command')
+    .description('File an Inbox ID onto a command. Inbox keeps the id.')
     .action((skillId: string, command: string) => {
       printOutcome(runInboxFile(engine, skillId, command));
+    });
+
+  inbox
+    .command('delete <skillId>')
+    .description('Delete a skill from disk and Inbox. Nested skills stay. Discover-only ids leave Inbox.')
+    .action((skillId: string) => {
+      printOutcome(runInboxDelete(engine, skillId));
     });
 }

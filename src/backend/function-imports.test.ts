@@ -5,7 +5,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '../..');
-const apiEntries = ['api/skills/index.ts', 'api/skills/search.ts'].map((file) => resolve(repoRoot, file));
+const apiEntries = [
+  'api/skills/index.ts',
+  'api/skills/search.ts',
+  'api/market/shelves.ts',
+  'api/market/search.ts',
+  'api/market/preview.ts',
+  'api/cron/sync-market.ts',
+].map((file) => resolve(repoRoot, file));
 
 function relativeImportSpecifiers(source: string): string[] {
   return [...source.matchAll(/from ['"](\.\.?\/[^'"]+)['"]/g)].map((match) => match[1]!);

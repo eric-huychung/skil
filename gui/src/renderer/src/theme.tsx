@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 export type Theme = 'light' | 'dark';
 
-const STORAGE_KEY = 'contextkit-theme';
+const STORAGE_KEY = 'skil-theme';
 
 interface ThemeContextValue {
   theme: Theme;

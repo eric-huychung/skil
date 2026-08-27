@@ -31,7 +31,7 @@ describe('SkillsAdapter', () => {
       }
     });
 
-    it('calls a custom backend URL when CONTEXTKIT_API_URL is set', async () => {
+    it('calls a custom backend URL when SKIL_API_URL is set', async () => {
       nock('https://backend.example').get('/api/skills/search').query({ q: 'react' }).reply(200, { data: [] });
 
       const adapter = new SkillsAdapter('https://backend.example');
@@ -73,9 +73,13 @@ describe('SkillsAdapter', () => {
       const result = await adapter.install('obra/x', 'cursor');
 
       expect(isOk(result)).toBe(true);
-      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', 'cursor', '-y'], {
-        cwd: '/tmp/proj',
-      });
+      expect(execa).toHaveBeenCalledWith(
+        'npx',
+        ['skills', 'add', 'obra/x', '--agent', 'cursor', '--copy', '-y'],
+        {
+          cwd: '/tmp/proj',
+        }
+      );
     });
 
     it('rewrites owner/repo/skill ids to owner/repo@skill so npx can find nested skills', async () => {
@@ -87,7 +91,7 @@ describe('SkillsAdapter', () => {
       expect(isOk(result)).toBe(true);
       expect(execa).toHaveBeenCalledWith(
         'npx',
-        ['skills', 'add', 'anthropics/skills@frontend-design', '--agent', 'claude-code', '-y'],
+        ['skills', 'add', 'anthropics/skills@frontend-design', '--agent', 'claude-code', '--copy', '-y'],
         { cwd: '/tmp/proj' }
       );
     });
@@ -99,13 +103,19 @@ describe('SkillsAdapter', () => {
       const result = await adapter.install('obra/x', 'cursor', { cwd: '/tmp/other-project' });
 
       expect(isOk(result)).toBe(true);
-      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', 'cursor', '-y'], {
-        cwd: '/tmp/other-project',
-      });
+      expect(execa).toHaveBeenCalledWith(
+        'npx',
+        ['skills', 'add', 'obra/x', '--agent', 'cursor', '--copy', '-y'],
+        {
+          cwd: '/tmp/other-project',
+        }
+      );
     });
 
     it.each([
       ['claude', 'claude-code'],
+      ['codex', 'codex'],
+      ['copilot', 'github-copilot'],
       ['windsurf', 'windsurf'],
       ['agents', 'universal'],
     ] as const)('installs for %s with --agent %s', async (ide, agent) => {
@@ -115,7 +125,7 @@ describe('SkillsAdapter', () => {
       const result = await adapter.install('obra/x', ide);
 
       expect(isOk(result)).toBe(true);
-      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', agent, '-y'], {
+      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', agent, '--copy', '-y'], {
         cwd: process.cwd(),
       });
     });

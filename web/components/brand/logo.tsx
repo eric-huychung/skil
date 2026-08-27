@@ -71,7 +71,7 @@ export function Logo({
       {withWordmark && (
         <span
           className={cn(
-            'font-sans text-base font-semibold tracking-tight',
+            'wordmark',
             wordmarkClassName,
           )}
         >

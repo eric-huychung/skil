@@ -109,7 +109,7 @@ export function DownloadCta({
           className="glass-panel rounded-full px-6"
           render={
             <a
-              href="https://github.com/eric-huychung/context_kit"
+              href="https://github.com/eric-huychung/skil"
               target="_blank"
               rel="noreferrer"
             />

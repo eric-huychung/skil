@@ -1,47 +1,50 @@
 import type { Result } from '../core/result.js';
-import type { BrowseView, Collection, ExportResult, IDE, ScanResult, Skill, SkillRecord, SyncResult } from '../types/index.js';
+import type { BrowseView, Collection, ExportResult, IDE, ScanResult, Skill, SkillRecord, SyncResult, UsageRow } from '../types/index.js';
 
 /**
- * CollectionEngine is ContextKit's deep module: a small interface backed by
+ * CollectionEngine is skil's deep module: a small interface backed by
  * all business logic (state management, validation, skill install/convert
  * coordination). CLI and GUI layers only ever call these methods.
  */
 export interface ICollectionEngine {
   /**
-   * Creates a new command with the given skill IDs. A leading `/` is
-   * stripped (`/build` → `build`). Returns an error Result if a command
-   * with `name` already exists, or if the new command can't be saved to
-   * disk (in which case it is not kept — `create` can be safely retried).
+   * Creates a command with the given skill IDs. A leading `/` is stripped
+   * (`/build` → `build`). "Already exists" if the name is already on the
+   * project map. `ide` is ignored (one list). Returns an error Result if
+   * the change can't be saved (in which case it is not kept — `create`
+   * can be safely retried).
    */
-  create(name: string, skillIds: string[], command?: string): Result<Collection>;
+  create(name: string, skillIds: string[], command?: string, ide?: IDE): Result<Collection>;
 
   /**
    * Adds a skill to an existing command. Idempotent: adding a skill
-   * already on the command is a no-op that still returns the current
-   * command. Returns an error Result if the command doesn't exist, or
-   * if the change can't be saved to disk (in which case the command is
+   * already on the list is a no-op that still returns the current view.
+   * `ide` is ignored. Returns an error Result if the command doesn't
+   * exist, or if the change can't be saved (in which case the command is
    * left unchanged — `addSkill` can be safely retried).
    */
-  addSkill(name: string, skillId: string): Result<Collection>;
+  addSkill(name: string, skillId: string, ide?: IDE): Result<Collection>;
 
   /**
    * Removes a skill from an existing command. A no-op (not an error) if
-   * the skill isn't on the command. Returns an error Result if the
-   * command doesn't exist, or if the change can't be saved to disk (in
-   * which case the command is left unchanged — `removeSkill` can be
+   * the skill isn't on the list. `ide` is ignored. Returns an error
+   * Result if the command doesn't exist, or if the change can't be saved
+   * (in which case the command is left unchanged — `removeSkill` can be
    * safely retried).
    */
-  removeSkill(name: string, skillId: string): Result<Collection>;
+  removeSkill(name: string, skillId: string, ide?: IDE): Result<Collection>;
 
   /**
-   * Returns the command template stored for a collection, for `contextkit
+   * Returns the command template stored for a collection, for `skil
    * run` to execute. Returns an error Result if the collection doesn't
    * exist or has no command defined.
    */
   getCommand(name: string): Result<string>;
 
-  /** Returns all known commands. */
-  list(): Collection[];
+  /**
+   * Returns the project command map. `ide` is ignored (one list).
+   */
+  list(ide?: IDE): Collection[];
 
   /**
    * Merges collections from a team config file into local state. Additive:
@@ -84,8 +87,9 @@ export interface ICollectionEngine {
   convert(skillId: string, targetIDE: IDE): Promise<Result<void>>;
 
   /**
-   * Leftover skillsmith convert-all. Product export is `exportCommand`.
-   * CLI and GUI call `exportCommand`.
+   * Leftover skillsmith convert-all. Product export is `exportCommand`
+   * (one command) and `exportAll` (whole workspace). CLI still calls
+   * `exportCommand`; GUI calls `exportAll`.
    */
   export(collectionNames: string[], targetIDE: IDE): Promise<Result<ExportResult>>;
 
@@ -95,15 +99,33 @@ export interface ICollectionEngine {
    * skills dir. Local folders already on disk are copied (never
    * overwritten if dest has SKILL.md). Discover-only ids go through
    * `install`. Does not scan `commands/` and does not call `convert`.
+   * First write gets Goal/Sequence/Rules as one-line comments plus a
+   * `## Skills` list. Later writes refresh frontmatter `skills:` and
+   * `## Skills` and keep the user's Goal/Sequence/Rules (and anything
+   * else above `## Skills`). Old numbered stubs upgrade to comments.
    * If the target command file exists and lacks `generated_by: skil`,
    * returns an error unless `replace` is true — no skill deploy in
-   * that case. Missing command name is an error. Other IDE files are
-   * left alone. Skill deploy failures are listed on `failures`; the
-   * command file is still written. `dest` writes into that folder
-   * without rebinding the workspace.
+   * that case. `replace` also resets Goal/Sequence/Rules on a stamped
+   * file. Missing command name is an error. Other IDE files are left
+   * alone. Skill deploy failures are listed on `failures`; the command
+   * file is still written. `dest` writes into that folder without
+   * rebinding the workspace.
    */
   exportCommand(
     name: string,
+    targetIDE: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>>;
+
+  /**
+   * Writes stamped command files for every command in the workspace,
+   * then deploys unique filed skills the target IDE is missing.
+   * Checks every command file first: if any exists without
+   * `generated_by: skil` and `replace` is not true, returns an error
+   * and writes nothing. Empty workspace is an error. `dest` writes
+   * into that folder without rebinding the workspace.
+   */
+  exportAll(
     targetIDE: IDE,
     opts?: { replace?: boolean; dest?: string }
   ): Promise<Result<ExportResult>>;
@@ -129,28 +151,92 @@ export interface ICollectionEngine {
   removeFromInbox(skillId: string): Result<string[]>;
 
   /**
-   * Moves one Inbox ID onto an existing command. One persist; rollback
-   * on write failure. Error if the command is missing or the ID is not
-   * in Inbox — state is left unchanged. If the command already has the
-   * ID, it is still dropped from Inbox. Does not call `install`.
+   * Deletes a skill from the project. Catalog rows lose every IDE copy
+   * on disk (SKILL.md plus related files in that folder). Nested skill
+   * folders stay. Empty parents are pruned up to the IDE skills root.
+   * Drops the id from the catalog, Inbox, and every command, then
+   * write-through. Discover-only Inbox ids only leave Inbox. Unknown
+   * ids are a no-op. Persist failure leaves disk and state unchanged.
    */
-  file(skillId: string, commandName: string): Result<Collection>;
+  deleteSkill(skillId: string): Result<void>;
 
   /**
-   * Deletes a command by name. Missing name is an error. Deleting the
-   * last command is allowed. Returns an error Result if the change
-   * can't be saved (in which case commands are left unchanged).
+   * Adds an Inbox ID onto an existing command. Inbox stays a staging
+   * pool: the id is not removed. One persist; rollback on write failure.
+   * Error if the command is missing or the ID is not in Inbox. Does not
+   * call `install`. `ide` is ignored.
    */
-  delete(name: string): Result<void>;
+  file(skillId: string, commandName: string, ide?: IDE): Result<Collection>;
+
+  /**
+   * Drops the command from the project map. Missing name is an error.
+   * `ide` is ignored. Returns an error Result if the change can't be
+   * saved (in which case commands are left unchanged).
+   */
+  delete(name: string, ide?: IDE): Result<void>;
+
+  /**
+   * Writes the project map's command to `toIde` (stamped file + missing
+   * skill folders). Same stamp / replace / skip-existing-skill rules as
+   * `exportCommand`. `fromIde` is ignored. Unstamped dest file needs
+   * `replace: true`.
+   */
+  copyTo(
+    name: string,
+    fromIde: IDE,
+    toIde: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>>;
+
+  /**
+   * Writes every command on the map onto `toIde`. Same stamp / replace
+   * rules as `copyTo`. Empty map is an error. `fromIde` is ignored.
+   */
+  copyAll(
+    fromIde: IDE,
+    toIde: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>>;
+
+  /**
+   * Copies one IDE's skill folders and stamped command files from
+   * `sourceRoot` into this project. New ids are added (folders + Inbox).
+   * Command names union into the project map. Existing dest `SKILL.md`
+   * with a different hash or an unstamped dest command file is an error
+   * unless `replace` is true — then dest bodies and that command's list
+   * are overwritten. Same-hash skills and matching command lists are left
+   * alone. Unstamped source command files, other IDEs, and source Inbox /
+   * `state.json` are ignored. Empty source is an error. Does not bind
+   * `sourceRoot`.
+   */
+  importFrom(
+    sourceRoot: string,
+    ide: IDE,
+    opts?: { replace?: boolean }
+  ): Promise<Result<ExportResult>>;
+
+  /**
+   * Paths written by the last membership mutation's write-through (or
+   * copy/export). Watcher mutes these so our own writes are not a loop.
+   */
+  lastWrittenPaths(): string[];
 
   /**
    * Pull: walk IDE skill trees, hash SKILL.md, reconcile the catalog.
-   * New unfiled ids go to Inbox. Filed ids stay filed. Gone folders drop
-   * the id from catalog, commands, and inbox. Does not create commands
-   * and does not call install.
+   * New ids go to Inbox if missing. Inbox is a staging pool — filing
+   * does not remove ids. Gone folders drop the id from catalog, commands,
+   * and inbox. Stamped command files do not fork the map. Does not create
+   * commands and does not call install.
    */
   scan(): Result<ScanResult>;
 
   /** Catalog rows we are SoT for. */
   skills(): SkillRecord[];
+
+  /**
+   * Counts of how often catalog skills were read. Claude logs first.
+   * Missing logs → empty list, not a crash. Collector failure is an error;
+   * scan still works.
+   */
+  usage(): Promise<Result<UsageRow[]>>;
 }

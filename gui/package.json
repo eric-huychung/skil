@@ -1,7 +1,7 @@
 {
-  "name": "contextkit-gui",
+  "name": "skil-gui",
   "version": "0.2.2",
-  "description": "Desktop GUI for ContextKit, sharing CollectionEngine with the CLI",
+  "description": "Desktop GUI for skil, sharing CollectionEngine with the CLI",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
@@ -14,6 +14,7 @@
     "start": "electron-vite preview"
   },
   "dependencies": {
+    "@fontsource/fredoka": "^5.3.0",
     "@fontsource/geist-mono": "^5.3.0",
     "@fontsource/geist-sans": "^5.3.0",
     "@phosphor-icons/react": "^2.1.10",

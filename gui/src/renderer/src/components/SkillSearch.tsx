@@ -1,20 +1,15 @@
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, ArrowSquareOut, ArrowsClockwise, CaretLeft, CaretRight, Check, MagnifyingGlass, Plus } from '@phosphor-icons/react';
+import { ArrowRight, ArrowSquareOut, CaretLeft, CaretRight, Check, MagnifyingGlass, Plus } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
+import { formatInstalls } from '../lib/format-installs';
 import type { BrowseView, Skill } from '../../../shared/ipc';
 
 type AddState = { status: 'success' } | { status: 'error'; message: string };
 
 const BROWSE_DISPLAY_LIMIT = 500;
 const PAGE_SIZE = 25;
-
-function formatInstalls(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
-  return String(value);
-}
 
 function skillLabel(skill: Skill): string {
   return skill.name ?? skill.id;
@@ -118,11 +113,6 @@ export default function SkillSearch() {
     showFromCache(lastBrowseView.current, value);
   }
 
-  async function handleSync() {
-    browseCache.current = {};
-    await loadBrowse(lastBrowseView.current);
-  }
-
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = query.trim();
@@ -190,15 +180,6 @@ export default function SkillSearch() {
         </div>
         <div className="library-heading-actions">
           {results !== null && <span className="library-count">{results.length} available</span>}
-          <button
-            type="button"
-            className={`icon-button ${FOCUS_RING}`}
-            aria-label="Refresh skills"
-            onClick={() => void handleSync()}
-            disabled={isSearching}
-          >
-            <ArrowsClockwise size={16} weight="regular" aria-hidden="true" />
-          </button>
         </div>
       </div>
 

@@ -1,11 +1,12 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Geist, Geist_Mono, Fredoka } from 'next/font/google'
 import { ThemeProvider } from '@/components/theme-provider'
 import './globals.css'
 
 const geistSans = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
+const fredoka = Fredoka({ subsets: ['latin'], variable: '--font-fredoka' })
 
 export const metadata: Metadata = {
   title: 'Skil — Organize your agent skills into workflows',
@@ -47,7 +48,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable}`}
+      className={`${geistSans.variable} ${geistMono.variable} ${fredoka.variable}`}
       suppressHydrationWarning
     >
       <body className="bg-background font-sans antialiased">

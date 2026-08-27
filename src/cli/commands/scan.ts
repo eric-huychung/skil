@@ -9,18 +9,23 @@ export function runScan(engine: ICollectionEngine): CommandOutcome {
     return { message: result.error.message, isError: true };
   }
 
-  const { added, gone, changed } = result.value;
-  if (added.length === 0 && gone.length === 0 && changed.length === 0) {
+  const { added, gone, changed, commandPulls } = result.value;
+  if (added.length === 0 && gone.length === 0 && changed.length === 0 && commandPulls.length === 0) {
     return {
       message:
-        'No skills found. Scan looks for SKILL.md under .cursor/skills, .claude/skills, .windsurf/skills, and .agents/skills. The command map stays; this is pull, not team sync.',
+        'No skills found. Scan looks for SKILL.md under .cursor/skills, .claude/skills, .codex/skills, .github/skills, .agents/skills, and .windsurf/skills. The command map stays; this is pull, not team sync.',
       isError: false,
       isInfo: true,
     };
   }
 
   return {
-    message: [formatGroup('Added', added), formatGroup('Gone', gone), formatGroup('Changed', changed)].join('\n'),
+    message: [
+      formatGroup('Added', added),
+      formatGroup('Gone', gone),
+      formatGroup('Changed', changed),
+      formatPulls(commandPulls),
+    ].join('\n'),
     isError: false,
     isInfo: true,
   };
@@ -42,4 +47,11 @@ function formatGroup(label: string, ids: string[]): string {
     return `${label} (0)`;
   }
   return `${label} (${ids.length})\n  ${ids.join('\n  ')}`;
+}
+
+function formatPulls(pulls: Array<{ ide: string; name: string }>): string {
+  if (pulls.length === 0) {
+    return 'Command pulls (0)';
+  }
+  return `Command pulls (${pulls.length})\n  ${pulls.map((pull) => `${pull.ide}/${pull.name}`).join('\n  ')}`;
 }

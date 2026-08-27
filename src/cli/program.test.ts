@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { CONTEXTKIT_VERSION } from '../index.js';
+import { SKIL_VERSION } from '../index.js';
 import { CollectionEngine } from '../core/collection-engine.js';
 import { InMemoryConfigAdapter } from '../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../adapters/in-memory-fs.js';
@@ -21,8 +21,17 @@ function captureOutput(run: (write: (text: string) => void) => void): string {
   return output;
 }
 
+function helpFor(args: string[]): string {
+  const program = createProgram(buildEngine());
+  program.exitOverride();
+  return captureOutput((writeOut) => {
+    program.configureOutput({ writeOut });
+    expect(() => program.parse([...args, '--help'], { from: 'user' })).toThrow();
+  });
+}
+
 describe('createProgram', () => {
-  it('reports the contextkit version', () => {
+  it('reports the skil version', () => {
     const program = createProgram(buildEngine());
     program.exitOverride();
 
@@ -31,7 +40,7 @@ describe('createProgram', () => {
       expect(() => program.parse(['--version'], { from: 'user' })).toThrow();
     });
 
-    expect(output.trim()).toBe(CONTEXTKIT_VERSION);
+    expect(output.trim()).toBe(SKIL_VERSION);
   });
 
   it('shows help text naming the CLI', () => {
@@ -48,8 +57,24 @@ describe('createProgram', () => {
     expect(output).toContain('inbox');
     expect(output).toContain('delete');
     expect(output).toContain('scan');
+    expect(output).toContain('copy');
+    expect(output).not.toMatch(/\s--ide\b/);
     expect(output.toLowerCase()).not.toContain('staging');
     expect(output.toLowerCase()).not.toContain('collection');
+  });
+
+  it('create, list, and inbox file have no --ide', () => {
+    expect(helpFor(['create'])).not.toMatch(/\s--ide\b/);
+    expect(helpFor(['list'])).not.toMatch(/\s--ide\b/);
+    expect(helpFor(['inbox', 'file'])).not.toMatch(/\s--ide\b/);
+  });
+
+  it('rejects an unknown --to on install before calling the engine', () => {
+    const engine = buildEngine();
+    const program = createProgram(engine);
+    program.exitOverride();
+
+    expect(() => program.parse(['install', 'tdd', '--to', 'nope'], { from: 'user' })).toThrow();
   });
 
   it('exposes skil as the primary bin and keeps contextkit as an alias', () => {

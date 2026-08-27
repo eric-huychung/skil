@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { ICollectionEngine } from '../interfaces/engine.js';
-import type { IFileSystemAdapter, IConfigAdapter, ISkillsAdapter } from '../interfaces/adapters.js';
+import type { IFileSystemAdapter, IConfigAdapter, ISkillsAdapter, IUsageCollector } from '../interfaces/adapters.js';
 import type {
   BrowseView,
   Collection,
   Command,
+  CommandRecord,
   ExportResult,
   IDE,
   ScanResult,
@@ -12,17 +13,22 @@ import type {
   SkillRecord,
   State,
   SyncResult,
+  UsageRow,
 } from '../types/index.js';
 import { err, isOk, ok, type Result } from './result.js';
+import { isClosedSkilStamp, isSkilStamped, parseStampedSkills, writeCommandFile } from './command-file.js';
 
 /** Path to the persisted engine state, relative to the project root. */
 export const STATE_PATH = '.skil/state.json';
 
-/** Pre-rename state file. Loaded only when `.skil/state.json` is missing. */
-export const LEGACY_STATE_PATH = '.contextkit/state.json';
+const LEFTOVER_STATE_PATH = '.contextkit/state.json';
 
-/** Current state schema version. See `State`'s doc comment for the v3 → v4 notes. */
-const STATE_VERSION = '4.0';
+/** Current state schema version. See `State`'s doc comment for the v5 → v6 notes. */
+const STATE_VERSION = '6.0';
+
+const DEFAULT_IDE: IDE = 'cursor';
+
+const ALL_IDES: IDE[] = ['cursor', 'claude', 'codex', 'copilot', 'agents', 'windsurf'];
 
 /** Command name reserved for the Inbox holding list on `State`. */
 const INBOX_NAME = 'inbox';
@@ -33,28 +39,74 @@ function normalizeCommandName(name: string): string {
 }
 
 function commandNotFound(name: string): Error {
-  return new Error(`Command '${name}' not found. Run 'contextkit list' to see available commands.`);
+  return new Error(`Command '${name}' not found. Run 'skil list' to see available commands.`);
 }
 
 /** Skill trees we pull from. We never walk `commands/`. */
-const SKILL_ROOTS = ['.cursor/skills', '.claude/skills', '.windsurf/skills', '.agents/skills'] as const;
+const SKILL_ROOTS = [
+  '.cursor/skills',
+  '.claude/skills',
+  '.codex/skills',
+  '.github/skills',
+  '.agents/skills',
+  '.windsurf/skills',
+] as const;
 
 const SKILL_ROOT_BY_IDE: Record<IDE, string> = {
   cursor: '.cursor/skills',
   claude: '.claude/skills',
-  windsurf: '.windsurf/skills',
+  codex: '.codex/skills',
+  copilot: '.github/skills',
   agents: '.agents/skills',
+  windsurf: '.windsurf/skills',
 };
 
-/** Where we write our command file. Windsurf uses workflows, not commands/. */
-const COMMAND_DIR_BY_IDE: Record<IDE, string> = {
+/**
+ * Project dirs used by `npx skills add --agent`. Cursor, Codex, and Copilot
+ * write `.agents/skills`, not their dock folders. Folder name is the last id
+ * segment.
+ */
+const NPX_PROJECT_SKILL_ROOT: Record<IDE, string> = {
+  cursor: '.agents/skills',
+  claude: '.claude/skills',
+  codex: '.agents/skills',
+  copilot: '.agents/skills',
+  agents: '.agents/skills',
+  windsurf: '.windsurf/skills',
+};
+
+function skillFolderName(skillId: string): string {
+  return skillId.split('/').filter(Boolean).at(-1) ?? skillId;
+}
+
+/**
+ * Where we write our command file. Codex has no project-file mechanism for
+ * commands (custom prompts were removed in codex-cli 0.117.0, and even
+ * before that they only lived in `~/.codex/prompts`, never git-shareable) —
+ * skills only. Copilot writes a VS Code prompt file: real and
+ * project-committed, but only read by classic Copilot Chat (the extension
+ * host), not Copilot's newer autonomous Agent Host.
+ */
+const COMMAND_DIR_BY_IDE: Partial<Record<IDE, string>> = {
   cursor: '.cursor/commands',
   claude: '.claude/commands',
-  windsurf: '.windsurf/workflows',
   agents: '.agents/commands',
+  windsurf: '.windsurf/workflows',
+  copilot: '.github/prompts',
 };
 
-const SKIL_STAMP = 'generated_by: skil';
+/** VS Code only recognizes `.prompt.md` for Copilot; every other dock uses `.md`. */
+const COMMAND_EXTENSION_BY_IDE: Partial<Record<IDE, string>> = {
+  copilot: '.prompt.md',
+};
+
+function commandDir(ide: IDE): string | undefined {
+  return COMMAND_DIR_BY_IDE[ide];
+}
+
+function commandExtension(ide: IDE): string {
+  return COMMAND_EXTENSION_BY_IDE[ide] ?? '.md';
+}
 
 /** Prefix a workspace-relative path with an optional dest root. */
 function underRoot(root: string | undefined, relative: string): string {
@@ -62,11 +114,61 @@ function underRoot(root: string | undefined, relative: string): string {
   return `${root.replace(/\\/g, '/').replace(/\/+$/, '')}/${relative}`;
 }
 
+function commandFilePath(ide: IDE, name: string, dest?: string): string | undefined {
+  const dir = commandDir(ide);
+  if (!dir) return undefined;
+  return underRoot(dest, `${dir}/${name}${commandExtension(ide)}`);
+}
+
+function unstampedConflictError(conflicts: Array<{ name: string; path: string }>): Error {
+  const names = conflicts.map((conflict) => `/${conflict.name}`).join(', ');
+  return new Error(
+    `Command files exist and were not generated by skil (${names}). Re-export with replace to overwrite.`
+  );
+}
+
+function importConflictError(skills: string[], commands: string[], unstamped: string[]): Error {
+  const parts: string[] = [];
+  if (skills.length > 0) {
+    parts.push(`existing skills (${skills.join(', ')})`);
+  }
+  if (commands.length > 0) {
+    parts.push(`existing commands (${commands.map((name) => `/${name}`).join(', ')})`);
+  }
+  if (unstamped.length > 0) {
+    parts.push(`command files that were not generated by skil (${unstamped.map((name) => `/${name}`).join(', ')})`);
+  }
+  return new Error(`Import would overwrite ${parts.join(' and ')}. Re-import with replace to overwrite.`);
+}
+
+function normalizeFsPath(path: string): string {
+  return path.replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+function skillIdFromFolder(folder: string, skillRoot: string): string {
+  const normalized = normalizeFsPath(folder);
+  const marker = `${skillRoot}/`;
+  const index = normalized.lastIndexOf(marker);
+  if (index === -1) {
+    return normalized === skillRoot || normalized.endsWith(`/${skillRoot}`) ? '.' : '';
+  }
+  return normalized.slice(index + marker.length);
+}
+
+/** On-disk command that may still use v4 `skills[]`. */
+interface PersistedCommand {
+  name: string;
+  skills?: string[];
+  membership?: Partial<Record<IDE, string[]>>;
+  createdAt: string;
+  command?: string;
+}
+
 /** On-disk shape that may still use v3 `collections`. */
 interface PersistedState {
   version?: string;
-  commands?: Command[];
-  collections?: Command[];
+  commands?: PersistedCommand[];
+  collections?: PersistedCommand[];
   skills?: SkillRecord[];
   inbox?: string[];
   installedSkills?: Skill[];
@@ -76,9 +178,36 @@ function emptyState(): State {
   return { commands: [], skills: [], installedSkills: [], inbox: [], version: STATE_VERSION };
 }
 
-function normalizeState(raw: PersistedState): State {
+function unionMembership(membership: Partial<Record<IDE, string[]>>): string[] {
+  const seen = new Set<string>();
+  const skills: string[] = [];
+  const order: IDE[] = [DEFAULT_IDE, ...ALL_IDES.filter((ide) => ide !== DEFAULT_IDE)];
+  for (const ide of order) {
+    for (const id of membership[ide] ?? []) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        skills.push(id);
+      }
+    }
+  }
+  return skills;
+}
+
+function toCommandRecord(raw: PersistedCommand): CommandRecord {
+  const skills =
+    raw.membership !== undefined ? unionMembership(raw.membership) : [...(raw.skills ?? [])];
   return {
-    commands: raw.commands ?? raw.collections ?? [],
+    name: raw.name,
+    skills,
+    createdAt: raw.createdAt,
+    ...(raw.command !== undefined ? { command: raw.command } : {}),
+  };
+}
+
+function normalizeState(raw: PersistedState): State {
+  const commands = (raw.commands ?? raw.collections ?? []).map(toCommandRecord);
+  return {
+    commands,
     skills: raw.skills ?? [],
     installedSkills: raw.installedSkills ?? [],
     inbox: raw.inbox ?? [],
@@ -86,113 +215,173 @@ function normalizeState(raw: PersistedState): State {
   };
 }
 
-/** Prefer `.skil/state.json`. Fall back to the old path. Do not copy on load. */
+function toView(record: CommandRecord): Command {
+  return {
+    name: record.name,
+    skills: [...record.skills],
+    createdAt: record.createdAt,
+    ...(record.command !== undefined ? { command: record.command } : {}),
+  };
+}
+
+function cloneCommandRecord(record: CommandRecord): CommandRecord {
+  return {
+    ...record,
+    skills: [...record.skills],
+  };
+}
+
+/** Load `.skil/state.json`. Missing file → empty state. Leftover `.contextkit/state.json` with no `.skil/` file is an error. */
 function loadState(fs: IFileSystemAdapter): State {
   const current = fs.readJSON<PersistedState>(STATE_PATH);
   if (isOk(current)) {
     return normalizeState(current.value);
   }
-  const legacy = fs.readJSON<PersistedState>(LEGACY_STATE_PATH);
-  return isOk(legacy) ? normalizeState(legacy.value) : emptyState();
+  const leftover = fs.readJSON<PersistedState>(LEFTOVER_STATE_PATH);
+  if (isOk(leftover)) {
+    throw new Error(
+      'Found leftover .contextkit/state.json. Move it to .skil/state.json and retry.'
+    );
+  }
+  return emptyState();
 }
 
 /**
- * CollectionEngine is ContextKit's deep module: see ICollectionEngine for the
+ * CollectionEngine is skil's deep module: see ICollectionEngine for the
  * public contract. This class owns state management, validation, and
  * coordination with the injected adapters.
  */
+const NOOP_USAGE: IUsageCollector = {
+  async collect() {
+    return ok([]);
+  },
+};
+
 export class CollectionEngine implements ICollectionEngine {
   private state: State;
+  private writtenPaths: string[] = [];
 
   constructor(
     private readonly fs: IFileSystemAdapter,
     private readonly config: IConfigAdapter,
-    private readonly skillsAdapter: ISkillsAdapter
+    private readonly skillsAdapter: ISkillsAdapter,
+    private readonly usageCollector: IUsageCollector = NOOP_USAGE,
+    private readonly projectRoot: string = process.cwd()
   ) {
     this.state = loadState(this.fs);
     this.mergeExternallyInstalledSkills();
   }
 
-  create(name: string, skillIds: string[], command?: string): Result<Collection> {
+  lastWrittenPaths(): string[] {
+    return [...this.writtenPaths];
+  }
+
+  async usage(): Promise<Result<UsageRow[]>> {
+    const skillIds = this.state.skills.map((skill) => skill.id);
+    const collected = await this.usageCollector.collect({
+      projectRoot: this.projectRoot,
+      skillIds,
+    });
+    if (!isOk(collected)) {
+      return err(collected.error);
+    }
+    const counts = new Map<string, number>();
+    for (const event of collected.value) {
+      counts.set(event.skillId, (counts.get(event.skillId) ?? 0) + 1);
+    }
+    const rows = [...counts.entries()]
+      .map(([skillId, count]) => ({ skillId, count }))
+      .sort((a, b) => b.count - a.count || a.skillId.localeCompare(b.skillId));
+    return ok(rows);
+  }
+
+  create(name: string, skillIds: string[], command?: string, _ide?: IDE): Result<Collection> {
     name = normalizeCommandName(name);
     if (name === INBOX_NAME) {
-      return err(new Error(`'inbox' is not a command. Inbox is a holding list of skill IDs — add with 'contextkit inbox add' and file them onto a named command.`));
-    }
-    if (this.state.commands.some((c) => c.name === name)) {
-      return err(new Error(`Command '${name}' already exists. Choose a different name or run 'contextkit list' to see existing commands.`));
+      return err(new Error(`'inbox' is not a command. Inbox is a holding list of skill IDs — add with 'skil inbox add' and file them onto a named command.`));
     }
 
-    const collection: Collection = {
+    const existing = this.state.commands.find((c) => c.name === name);
+    if (existing) {
+      return err(new Error(`Command '${name}' already exists. Choose a different name or run 'skil list' to see existing commands.`));
+    }
+
+    const record: CommandRecord = {
       name,
-      skills: skillIds,
+      skills: [...skillIds],
       createdAt: new Date().toISOString(),
       ...(command !== undefined ? { command } : {}),
     };
-    this.state.commands.push(collection);
+    this.state.commands.push(record);
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
       this.state.commands.pop();
       return err(new Error(`Failed to save command '${name}': ${persistResult.error.message}`));
     }
 
-    return ok(collection);
+    this.writeThroughExisting([name]);
+    return ok(toView(record));
   }
 
-  addSkill(name: string, skillId: string): Result<Collection> {
+  addSkill(name: string, skillId: string, _ide?: IDE): Result<Collection> {
     name = normalizeCommandName(name);
-    const collection = this.state.commands.find((c) => c.name === name);
-    if (!collection) {
+    const record = this.state.commands.find((c) => c.name === name);
+    if (!record) {
       return err(commandNotFound(name));
     }
-    if (collection.skills.includes(skillId)) {
-      return ok(collection);
+    if (record.skills.includes(skillId)) {
+      return ok(toView(record));
     }
 
-    collection.skills.push(skillId);
+    const snapshot = [...record.skills];
+    record.skills.push(skillId);
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
-      collection.skills.pop();
+      record.skills = snapshot;
       return err(new Error(`Failed to save command '${name}': ${persistResult.error.message}`));
     }
 
-    return ok(collection);
+    this.writeThroughExisting([name]);
+    return ok(toView(record));
   }
 
-  removeSkill(name: string, skillId: string): Result<Collection> {
+  removeSkill(name: string, skillId: string, _ide?: IDE): Result<Collection> {
     name = normalizeCommandName(name);
-    const collection = this.state.commands.find((c) => c.name === name);
-    if (!collection) {
+    const record = this.state.commands.find((c) => c.name === name);
+    if (!record) {
       return err(commandNotFound(name));
     }
 
-    const index = collection.skills.indexOf(skillId);
+    const index = record.skills.indexOf(skillId);
     if (index === -1) {
-      return ok(collection);
+      return ok(toView(record));
     }
 
-    collection.skills.splice(index, 1);
+    const snapshot = [...record.skills];
+    record.skills.splice(index, 1);
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
-      collection.skills.splice(index, 0, skillId);
+      record.skills = snapshot;
       return err(new Error(`Failed to save command '${name}': ${persistResult.error.message}`));
     }
 
-    return ok(collection);
+    this.writeThroughExisting([name]);
+    return ok(toView(record));
   }
 
   getCommand(name: string): Result<string> {
-    const collection = this.state.commands.find((c) => c.name === name);
-    if (!collection) {
-      return err(new Error(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`));
+    const record = this.state.commands.find((c) => c.name === name);
+    if (!record) {
+      return err(new Error(`Collection '${name}' not found. Run 'skil list' to see available collections.`));
     }
-    if (!collection.command) {
-      return err(new Error(`Collection '${name}' has no command defined. Create it with 'contextkit create ${name} --command "<cmd>"'.`));
+    if (!record.command) {
+      return err(new Error(`Collection '${name}' has no command defined. Create it with 'skil create ${name} --command "<cmd>"'.`));
     }
-    return ok(collection.command);
+    return ok(record.command);
   }
 
-  list(): Collection[] {
-    return [...this.state.commands];
+  list(_ide?: IDE): Collection[] {
+    return this.state.commands.map((c) => toView(c));
   }
 
   sync(configPath: string): Result<SyncResult> {
@@ -211,7 +400,7 @@ export class CollectionEngine implements ICollectionEngine {
       .filter((c) => !configNames.has(c.name))
       .map((c) => `Local collection '${c.name}' is not in the config file. Add it to '${configPath}' or remove it locally.`);
 
-    const snapshot = this.state.commands.map((c) => ({ ...c }));
+    const snapshot = this.state.commands.map(cloneCommandRecord);
     const synced: string[] = [];
     for (const [name, skillIds] of Object.entries(configResult.value.collections)) {
       const existing = this.state.commands.find((c) => c.name === name);
@@ -244,6 +433,11 @@ export class CollectionEngine implements ICollectionEngine {
     );
     if (!isOk(result)) {
       return err(result.error);
+    }
+
+    const placed = this.relocateNpxInstall(skillId, targetIDE, opts?.dest);
+    if (!isOk(placed)) {
+      return placed;
     }
 
     const deployPath = underRoot(opts?.dest, `${SKILL_ROOT_BY_IDE[targetIDE]}/${skillId}`);
@@ -303,13 +497,13 @@ export class CollectionEngine implements ICollectionEngine {
     const failures: string[] = [];
 
     for (const name of collectionNames) {
-      const collection = this.state.commands.find((c) => c.name === name);
-      if (!collection) {
-        failures.push(`Collection '${name}' not found. Run 'contextkit list' to see available collections.`);
+      const record = this.state.commands.find((c) => c.name === name);
+      if (!record) {
+        failures.push(`Collection '${name}' not found. Run 'skil list' to see available collections.`);
         continue;
       }
 
-      for (const skillId of collection.skills) {
+      for (const skillId of record.skills) {
         const result = await this.skillsAdapter.convert(skillId, targetIDE);
         if (isOk(result)) {
           succeeded.push(`${name}:${skillId}`);
@@ -325,7 +519,7 @@ export class CollectionEngine implements ICollectionEngine {
   async exportCommand(
     name: string,
     targetIDE: IDE,
-    opts?: { replace?: boolean; dest?: string }
+    opts?: { replace?: boolean; dest?: string; body?: string }
   ): Promise<Result<ExportResult>> {
     name = normalizeCommandName(name);
     const command = this.state.commands.find((c) => c.name === name);
@@ -333,26 +527,36 @@ export class CollectionEngine implements ICollectionEngine {
       return err(commandNotFound(name));
     }
 
-    const path = underRoot(opts?.dest, `${COMMAND_DIR_BY_IDE[targetIDE]}/${name}.md`);
-    const existing = this.fs.readFile(path);
-    if (isOk(existing) && !isSkilStamped(existing.value) && opts?.replace !== true) {
-      return err(
-        new Error(
-          `Command file '${path}' exists and was not generated by skil. Re-export with replace to overwrite.`
-        )
+    const skills = command.skills;
+    const path = commandFilePath(targetIDE, name, opts?.dest);
+    const succeeded: string[] = [];
+    const writtenPaths: string[] = [];
+
+    if (path) {
+      const existing = this.fs.readFile(path);
+      if (isOk(existing) && !isSkilStamped(existing.value) && opts?.replace !== true) {
+        return err(unstampedConflictError([{ name, path }]));
+      }
+
+      const seed = opts?.body ?? (isOk(existing) ? existing.value : undefined);
+      const written = this.fs.writeFile(
+        path,
+        writeCommandFile(name, skills, seed, {
+          reset: opts?.replace === true && opts?.body === undefined,
+        })
       );
+      if (!isOk(written)) {
+        return err(new Error(`Failed to write command file '${path}': ${written.error.message}`));
+      }
+      writtenPaths.push(path);
+      succeeded.push(path);
     }
 
-    const written = this.fs.writeFile(path, renderCommandFile(name, command.skills));
-    if (!isOk(written)) {
-      return err(new Error(`Failed to write command file '${path}': ${written.error.message}`));
-    }
-
-    const succeeded = [path];
+    this.writtenPaths = writtenPaths;
     const failures: string[] = [];
     let copied = false;
 
-    for (const skillId of command.skills) {
+    for (const skillId of skills) {
       const skillFolder = underRoot(opts?.dest, `${SKILL_ROOT_BY_IDE[targetIDE]}/${skillId}`);
       if (isOk(this.fs.readFile(`${skillFolder}/SKILL.md`))) {
         continue;
@@ -392,6 +596,39 @@ export class CollectionEngine implements ICollectionEngine {
     return ok({ succeeded, failures });
   }
 
+  async exportAll(
+    targetIDE: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>> {
+    const commands = this.state.commands;
+    if (commands.length === 0) {
+      return err(new Error('No commands to export'));
+    }
+
+    if (opts?.replace !== true) {
+      const conflicts = this.unstampedConflicts(
+        commands.map((command) => command.name),
+        targetIDE,
+        opts?.dest
+      );
+      if (conflicts.length > 0) {
+        return err(unstampedConflictError(conflicts));
+      }
+    }
+
+    const succeeded: string[] = [];
+    const failures: string[] = [];
+    for (const command of commands) {
+      const result = await this.exportCommand(command.name, targetIDE, opts);
+      if (!isOk(result)) {
+        return result;
+      }
+      succeeded.push(...result.value.succeeded);
+      failures.push(...result.value.failures);
+    }
+    return ok({ succeeded, failures });
+  }
+
   inbox(): string[] {
     return [...this.state.inbox];
   }
@@ -427,55 +664,286 @@ export class CollectionEngine implements ICollectionEngine {
     return ok(this.inbox());
   }
 
-  file(skillId: string, commandName: string): Result<Collection> {
+  deleteSkill(skillId: string): Result<void> {
+    const record = this.state.skills.find((skill) => skill.id === skillId);
+    const filed = this.commandsFiling(skillId);
+    if (!record && !this.state.inbox.includes(skillId) && filed.length === 0) {
+      return ok(undefined);
+    }
+
+    const snapshot = {
+      skills: this.state.skills.map((skill) => ({
+        ...skill,
+        paths: [...skill.paths],
+        deployedTo: skill.deployedTo.map((entry) => ({ ...entry })),
+      })),
+      inbox: [...this.state.inbox],
+      commands: this.state.commands.map(cloneCommandRecord),
+    };
+
+    if (record) {
+      this.state.skills = this.state.skills.filter((skill) => skill.id !== skillId);
+    }
+    this.dropSkillId(skillId);
+
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      this.state.skills = snapshot.skills;
+      this.state.inbox = snapshot.inbox;
+      this.state.commands = snapshot.commands;
+      return err(new Error(`Failed to save after deleting '${skillId}': ${persistResult.error.message}`));
+    }
+
+    const muted: string[] = [];
+    if (record) {
+      for (const folder of record.paths) {
+        if (!skillRootOf(folder)) {
+          continue;
+        }
+        const removed = this.removeSkillFolder(folder);
+        if (!isOk(removed)) {
+          return err(removed.error);
+        }
+        muted.push(...removed.value);
+      }
+    }
+
+    const names = [...new Set(filed.map((entry) => entry.name))];
+    const written = names.length > 0 ? this.writeThroughExisting(names) : [];
+    this.writtenPaths = [...muted, ...written];
+    return ok(undefined);
+  }
+
+  file(skillId: string, commandName: string, _ide?: IDE): Result<Collection> {
     commandName = normalizeCommandName(commandName);
-    const collection = this.state.commands.find((c) => c.name === commandName);
-    if (!collection) {
+    const record = this.state.commands.find((c) => c.name === commandName);
+    if (!record) {
       return err(commandNotFound(commandName));
     }
 
-    const inboxIndex = this.state.inbox.indexOf(skillId);
-    if (inboxIndex === -1) {
+    if (!this.state.inbox.includes(skillId)) {
       return err(new Error(`'${skillId}' is not in Inbox. Add it first, then file it onto a command.`));
     }
 
-    const inboxSnapshot = [...this.state.inbox];
-    const skillsSnapshot = [...collection.skills];
-
-    this.state.inbox.splice(inboxIndex, 1);
-    if (!collection.skills.includes(skillId)) {
-      collection.skills.push(skillId);
+    const skillsSnapshot = [...record.skills];
+    if (!record.skills.includes(skillId)) {
+      record.skills.push(skillId);
     }
 
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
-      this.state.inbox = inboxSnapshot;
-      collection.skills = skillsSnapshot;
+      record.skills = skillsSnapshot;
       return err(new Error(`Failed to save command '${commandName}': ${persistResult.error.message}`));
     }
 
-    return ok(collection);
+    this.writeThroughExisting([commandName]);
+    return ok(toView(record));
   }
 
-  delete(name: string): Result<void> {
+  delete(name: string, _ide?: IDE): Result<void> {
     name = normalizeCommandName(name);
     const index = this.state.commands.findIndex((c) => c.name === name);
     if (index === -1) {
       return err(commandNotFound(name));
     }
 
-    const removed = this.state.commands[index];
-    if (removed === undefined) {
+    const existing = this.state.commands[index];
+    if (!existing) {
       return err(commandNotFound(name));
     }
+
+    const snapshot = cloneCommandRecord(existing);
     this.state.commands.splice(index, 1);
+
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
-      this.state.commands.splice(index, 0, removed);
+      this.state.commands.splice(index, 0, snapshot);
       return err(new Error(`Failed to save after deleting '${name}': ${persistResult.error.message}`));
     }
 
+    this.writeThroughExisting([name]);
     return ok(undefined);
+  }
+
+  async copyTo(
+    name: string,
+    _fromIde: IDE,
+    toIde: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>> {
+    return this.exportCommand(name, toIde, opts);
+  }
+
+  async copyAll(
+    _fromIde: IDE,
+    toIde: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>> {
+    return this.exportAll(toIde, opts);
+  }
+
+  async importFrom(
+    sourceRoot: string,
+    ide: IDE,
+    opts?: { replace?: boolean }
+  ): Promise<Result<ExportResult>> {
+    const root = sourceRoot.replace(/\\/g, '/').replace(/\/+$/, '');
+    if (root === '' || root === '.' || root === './') {
+      return err(new Error('Cannot import a project into itself'));
+    }
+
+    const skillRoot = SKILL_ROOT_BY_IDE[ide];
+    const dir = commandDir(ide);
+    const sourceSkillRoot = underRoot(root, skillRoot);
+
+    const folders = this.fs.findSkillFolders(sourceSkillRoot);
+    if (!isOk(folders)) {
+      return err(folders.error);
+    }
+
+    const sourceSkills: Array<{ id: string; folder: string; hash: string }> = [];
+    for (const folder of folders.value) {
+      const id = skillIdFromFolder(folder, skillRoot);
+      if (id === '') {
+        continue;
+      }
+      const destFolder = `${skillRoot}/${id}`;
+      if (normalizeFsPath(folder) === normalizeFsPath(destFolder)) {
+        return err(new Error('Cannot import a project into itself'));
+      }
+      const contents = this.fs.readFile(`${folder}/SKILL.md`);
+      if (!isOk(contents)) {
+        return err(contents.error);
+      }
+      sourceSkills.push({
+        id,
+        folder,
+        hash: createHash('sha256').update(contents.value, 'utf8').digest('hex'),
+      });
+    }
+
+    const listed = dir ? this.fs.listFiles(underRoot(root, dir)) : ok([]);
+    if (!isOk(listed)) {
+      return err(listed.error);
+    }
+
+    const ext = commandExtension(ide);
+    const sourceCommands: Array<{ name: string; path: string; contents: string; skills: string[] }> = [];
+    for (const path of listed.value) {
+      if (!path.endsWith(ext)) {
+        continue;
+      }
+      const name = path.slice(path.lastIndexOf('/') + 1, -ext.length);
+      if (name === '') {
+        continue;
+      }
+      const contents = this.fs.readFile(path);
+      if (!isOk(contents) || !isSkilStamped(contents.value)) {
+        continue;
+      }
+      sourceCommands.push({
+        name,
+        path,
+        contents: contents.value,
+        skills: parseStampedSkills(contents.value) ?? [],
+      });
+    }
+
+    if (sourceSkills.length === 0 && sourceCommands.length === 0) {
+      return err(new Error(`Nothing to import from ${root} for ${ide}`));
+    }
+
+    const skillConflicts: string[] = [];
+    for (const skill of sourceSkills) {
+      const destFolder = `${skillRoot}/${skill.id}`;
+      const destHash = hashSkillAt(this.fs, destFolder);
+      if (destHash !== undefined && destHash !== skill.hash) {
+        skillConflicts.push(skill.id);
+      }
+    }
+
+    const commandConflicts: string[] = [];
+    const unstamped = this.unstampedConflicts(
+      sourceCommands.map((command) => command.name),
+      ide
+    );
+    const unstampedNames = new Set(unstamped.map((conflict) => conflict.name));
+    for (const command of sourceCommands) {
+      if (unstampedNames.has(command.name)) {
+        continue;
+      }
+      const existing = this.state.commands.find((record) => record.name === command.name);
+      const destSkills = existing?.skills;
+      if (destSkills !== undefined && !listsEqual(destSkills, command.skills)) {
+        commandConflicts.push(command.name);
+      }
+    }
+
+    if (opts?.replace !== true && (skillConflicts.length > 0 || commandConflicts.length > 0 || unstamped.length > 0)) {
+      return err(importConflictError(skillConflicts, commandConflicts, unstamped.map((conflict) => conflict.name)));
+    }
+
+    const succeeded: string[] = [];
+    const failures: string[] = [];
+    const written: string[] = [];
+
+    for (const skill of sourceSkills) {
+      const destFolder = `${skillRoot}/${skill.id}`;
+      const destHash = hashSkillAt(this.fs, destFolder);
+      if (destHash === skill.hash) {
+        continue;
+      }
+      const copied = this.fs.copyDir(skill.folder, destFolder);
+      if (!isOk(copied)) {
+        failures.push(`'${skill.id}': ${copied.error.message}`);
+        continue;
+      }
+      succeeded.push(destFolder);
+      written.push(`${destFolder}/SKILL.md`);
+    }
+
+    for (const command of sourceCommands) {
+      const destPath = commandFilePath(ide, command.name);
+      if (!destPath) {
+        continue;
+      }
+      const writtenFile = this.fs.writeFile(
+        destPath,
+        writeCommandFile(command.name, command.skills, command.contents)
+      );
+      if (!isOk(writtenFile)) {
+        failures.push(`'/${command.name}': ${writtenFile.error.message}`);
+        continue;
+      }
+      succeeded.push(destPath);
+      written.push(destPath);
+    }
+
+    const scanResult = this.scan();
+    if (!isOk(scanResult)) {
+      return scanResult;
+    }
+
+    for (const command of sourceCommands) {
+      const existing = this.state.commands.find((record) => record.name === command.name);
+      if (!existing) {
+        this.state.commands.push({
+          name: command.name,
+          skills: [...command.skills],
+          createdAt: new Date().toISOString(),
+        });
+      } else if (opts?.replace === true) {
+        existing.skills = [...command.skills];
+      }
+    }
+
+    const persistResult = this.persist();
+    if (!isOk(persistResult)) {
+      return err(new Error(`Failed to save import: ${persistResult.error.message}`));
+    }
+
+    this.writtenPaths = [...written, ...this.writtenPaths];
+    return ok({ succeeded, failures });
   }
 
   scan(): Result<ScanResult> {
@@ -511,30 +979,21 @@ export class CollectionEngine implements ICollectionEngine {
     const snapshot = {
       skills: this.state.skills.map((record) => ({ ...record, paths: [...record.paths], deployedTo: [...record.deployedTo] })),
       inbox: [...this.state.inbox],
-      commands: this.state.commands.map((command) => ({ ...command, skills: [...command.skills] })),
+      commands: this.state.commands.map(cloneCommandRecord),
     };
 
     const previous = new Map(this.state.skills.map((record) => [record.id, record]));
-    const filed = new Set(this.state.commands.flatMap((command) => command.skills));
     const added: string[] = [];
     const changed: string[] = [];
     const nextSkills: SkillRecord[] = [];
+    const matchedPrevious = new Set<string>();
+    const matchedFound = new Set<string>();
 
     for (const [id, seen] of found) {
       const prev = previous.get(id);
-      if (!prev) {
-        added.push(id);
-        nextSkills.push({
-          id,
-          hash: seen.hash,
-          paths: seen.paths,
-          deployedTo: [],
-          source: 'local',
-        });
-        if (!filed.has(id) && !this.state.inbox.includes(id)) {
-          this.state.inbox.push(id);
-        }
-      } else {
+      if (prev) {
+        matchedPrevious.add(id);
+        matchedFound.add(id);
         if (prev.hash !== seen.hash) {
           changed.push(id);
         }
@@ -546,19 +1005,59 @@ export class CollectionEngine implements ICollectionEngine {
       }
     }
 
-    const gone: string[] = [];
-    for (const prev of this.state.skills) {
-      if (found.has(prev.id)) {
+    const unmatchedPrev = this.state.skills.filter((record) => !matchedPrevious.has(record.id));
+    const unmatchedFound = [...found.entries()].filter(([id]) => !matchedFound.has(id));
+    const renameMap = new Map<string, string>();
+
+    for (const prev of unmatchedPrev) {
+      const renameIndex = unmatchedFound.findIndex(([, seen]) => seen.hash === prev.hash);
+      if (renameIndex === -1) {
         continue;
       }
-      gone.push(prev.id);
-      this.state.inbox = this.state.inbox.filter((entry) => entry !== prev.id);
-      for (const command of this.state.commands) {
-        command.skills = command.skills.filter((skillId) => skillId !== prev.id);
+      const renamed = unmatchedFound.splice(renameIndex, 1)[0];
+      if (!renamed) {
+        continue;
+      }
+      const [newId, seen] = renamed;
+      matchedPrevious.add(prev.id);
+      renameMap.set(prev.id, newId);
+      this.renameSkillId(prev.id, newId);
+      nextSkills.push({
+        ...prev,
+        id: newId,
+        hash: seen.hash,
+        paths: seen.paths,
+      });
+    }
+
+    const filed = new Set(this.state.commands.flatMap((command) => command.skills));
+
+    for (const [id, seen] of unmatchedFound) {
+      added.push(id);
+      nextSkills.push({
+        id,
+        hash: seen.hash,
+        paths: seen.paths,
+        deployedTo: [],
+        source: 'local',
+      });
+      if (!filed.has(id) && !this.state.inbox.includes(id)) {
+        this.state.inbox.push(id);
       }
     }
 
+    const gone: string[] = [];
+    for (const prev of this.state.skills) {
+      if (matchedPrevious.has(prev.id) || nextSkills.some((record) => record.id === prev.id)) {
+        continue;
+      }
+      gone.push(prev.id);
+      this.dropSkillId(prev.id);
+    }
+
     this.state.skills = nextSkills;
+
+    const commandPulls = this.pullStampedCommands(gone, renameMap);
 
     const persistResult = this.persist();
     if (!isOk(persistResult)) {
@@ -568,11 +1067,258 @@ export class CollectionEngine implements ICollectionEngine {
       return err(new Error(`Failed to save scan: ${persistResult.error.message}`));
     }
 
-    return ok({ added, gone, changed });
+    this.writeThroughAfterScan(gone);
+    return ok({ added, gone, changed, commandPulls });
   }
 
   skills(): SkillRecord[] {
     return [...this.state.skills];
+  }
+
+  private dropSkillId(id: string): void {
+    this.state.inbox = this.state.inbox.filter((entry) => entry !== id);
+    for (const command of this.state.commands) {
+      command.skills = command.skills.filter((skillId) => skillId !== id);
+    }
+  }
+
+  private commandsFiling(skillId: string): Array<{ name: string }> {
+    return this.state.commands
+      .filter((command) => command.skills.includes(skillId))
+      .map((command) => ({ name: command.name }));
+  }
+
+  /**
+   * Deletes this skill’s files under `folder`, leaves nested skill
+   * folders, then prunes empty parents up to the IDE skills root.
+   */
+  private removeSkillFolder(folder: string): Result<string[]> {
+    const nested = this.fs.findSkillFolders(folder);
+    if (!isOk(nested)) {
+      return nested;
+    }
+    const keep = nested.value.filter((path) => path !== folder);
+
+    const files = this.fs.listAllFiles(folder);
+    if (!isOk(files)) {
+      return files;
+    }
+
+    const muted: string[] = [];
+    for (const file of files.value) {
+      if (keep.some((skillDir) => file === `${skillDir}/SKILL.md` || file.startsWith(`${skillDir}/`))) {
+        continue;
+      }
+      const removed = this.fs.removeFile(file);
+      if (!isOk(removed)) {
+        return removed;
+      }
+      muted.push(file);
+    }
+
+    const root = skillRootOf(folder);
+    const candidates = new Set<string>(muted.map(parentDir).filter((dir) => dir !== ''));
+    let dir: string | undefined = folder;
+    while (dir && root && dir !== root) {
+      candidates.add(dir);
+      dir = parentDir(dir);
+    }
+
+    const deepestFirst = [...candidates].sort((a, b) => b.length - a.length);
+    for (const emptyDir of deepestFirst) {
+      if (!root || emptyDir === root || !emptyDir.startsWith(`${root}/`)) {
+        continue;
+      }
+      const remaining = this.fs.listAllFiles(emptyDir);
+      if (!isOk(remaining) || remaining.value.length > 0) {
+        continue;
+      }
+      const removed = this.fs.removeDir(emptyDir);
+      if (!isOk(removed)) {
+        return removed;
+      }
+      muted.push(emptyDir);
+    }
+
+    return ok(muted);
+  }
+
+  private renameSkillId(fromId: string, toId: string): void {
+    this.state.inbox = this.state.inbox.map((entry) => (entry === fromId ? toId : entry));
+    for (const command of this.state.commands) {
+      command.skills = command.skills.map((skillId) => (skillId === fromId ? toId : skillId));
+    }
+  }
+
+  /**
+   * Warn when a stamp's `skills:` disagrees with the map. Do not adopt
+   * stamp ids into the map. Rename-map is applied so a renamed catalog
+   * id does not look like a mismatch.
+   */
+  private pullStampedCommands(_gone: string[], renameMap: Map<string, string>): Array<{ ide: IDE; name: string }> {
+    const pulls: Array<{ ide: IDE; name: string }> = [];
+
+    for (const ide of ALL_IDES) {
+      const dir = commandDir(ide);
+      if (!dir) {
+        continue;
+      }
+      const listed = this.fs.listFiles(dir);
+      if (!isOk(listed)) {
+        continue;
+      }
+
+      const ext = commandExtension(ide);
+      for (const path of listed.value) {
+        if (!path.endsWith(ext)) {
+          continue;
+        }
+        const name = path.slice(path.lastIndexOf('/') + 1, -ext.length);
+        if (name === '') {
+          continue;
+        }
+        const contents = this.fs.readFile(path);
+        if (!isOk(contents) || !isSkilStamped(contents.value)) {
+          continue;
+        }
+        const parsed = parseStampedSkills(contents.value);
+        if (parsed === null) {
+          continue;
+        }
+        const remapped = parsed.map((id) => renameMap.get(id) ?? id);
+        const record = this.state.commands.find((command) => command.name === name);
+        const current = record?.skills ?? [];
+        if (listsEqual(current, remapped)) {
+          continue;
+        }
+        pulls.push({ ide, name });
+      }
+    }
+
+    return pulls;
+  }
+
+  /**
+   * Rewrite existing stamps for `names` on every dock. Refreshes
+   * frontmatter and `## Skills`; keeps Goal/Sequence/Rules. Skips
+   * missing files (no new stamp until export) and unstamped files.
+   * Removes our stamp when the command is gone from the map.
+   */
+  writeThroughExisting(names: string[], dest?: string): string[] {
+    const written: string[] = [];
+    for (const ide of ALL_IDES) {
+      const dir = commandDir(ide);
+      if (!dir) {
+        continue;
+      }
+      for (const name of names) {
+        const path = commandFilePath(ide, name, dest);
+        if (!path) {
+          continue;
+        }
+        const existing = this.fs.readFile(path);
+        if (!isOk(existing)) {
+          continue;
+        }
+        if (!isSkilStamped(existing.value)) {
+          continue;
+        }
+
+        const record = this.state.commands.find((command) => command.name === name);
+        if (!record) {
+          const removed = this.fs.removeFile(path);
+          if (isOk(removed)) {
+            written.push(path);
+          }
+          continue;
+        }
+
+        const result = this.fs.writeFile(path, writeCommandFile(name, record.skills, existing.value));
+        if (isOk(result)) {
+          written.push(path);
+        }
+      }
+    }
+    this.writtenPaths = written;
+    return written;
+  }
+
+  /**
+   * After scan: rewrite existing stamps when gone-id cleanup changed the
+   * map. Skip when the stamp already matches, or when it disagrees with
+   * extra ids that are still in the catalog (warn-only; user exports to
+   * refresh).
+   */
+  writeThroughAfterScan(gone: string[] = []): void {
+    const written: string[] = [];
+    const goneSet = new Set(gone);
+
+    for (const ide of ALL_IDES) {
+      const dir = commandDir(ide);
+      if (!dir) {
+        continue;
+      }
+      const listed = this.fs.listFiles(dir);
+      if (!isOk(listed)) {
+        continue;
+      }
+
+      const ext = commandExtension(ide);
+      for (const path of listed.value) {
+        if (!path.endsWith(ext)) {
+          continue;
+        }
+        const contents = this.fs.readFile(path);
+        if (!isOk(contents) || !isSkilStamped(contents.value)) {
+          continue;
+        }
+        const name = path.slice(path.lastIndexOf('/') + 1, -ext.length);
+        const record = this.state.commands.find((command) => command.name === name);
+        if (!record) {
+          continue;
+        }
+        const stampSkills = parseStampedSkills(contents.value) ?? [];
+        const current = record.skills;
+        if (listsEqual(current, stampSkills) && isClosedSkilStamp(contents.value)) {
+          continue;
+        }
+        const extras = stampSkills.filter((id) => !current.includes(id));
+        const extrasAreGone = extras.length > 0 && extras.every((id) => goneSet.has(id));
+        const missingOnStamp = current.some((id) => !stampSkills.includes(id));
+        if (!extrasAreGone && !missingOnStamp && extras.length > 0) {
+          continue;
+        }
+        written.push(...this.writeThroughExisting([name]));
+      }
+    }
+    this.writtenPaths = written;
+  }
+
+  /**
+   * `npx skills add --agent cursor` lands in `.agents/skills/<short-name>`.
+   * Move that folder to this IDE's skills tree under the market id so
+   * scan does not treat the id as gone and strip it from the command.
+   */
+  private relocateNpxInstall(skillId: string, targetIDE: IDE, dest?: string): Result<void> {
+    const deployPath = underRoot(dest, `${SKILL_ROOT_BY_IDE[targetIDE]}/${skillId}`);
+    if (isOk(this.fs.readFile(`${deployPath}/SKILL.md`))) {
+      return ok(undefined);
+    }
+
+    const npxFolder = underRoot(dest, `${NPX_PROJECT_SKILL_ROOT[targetIDE]}/${skillFolderName(skillId)}`);
+    if (npxFolder === deployPath || !isOk(this.fs.readFile(`${npxFolder}/SKILL.md`))) {
+      return ok(undefined);
+    }
+
+    const copied = this.fs.copyDir(npxFolder, deployPath);
+    if (!isOk(copied)) {
+      return err(new Error(`Failed to place skill '${skillId}' in ${deployPath}: ${copied.error.message}`));
+    }
+    const removed = this.fs.removeDir(npxFolder);
+    if (!isOk(removed)) {
+      return err(new Error(`Failed to remove stray skill folder '${npxFolder}': ${removed.error.message}`));
+    }
+    return ok(undefined);
   }
 
   private recordLocalDeploy(skillId: string, targetIDE: IDE, dest: string): void {
@@ -594,6 +1340,25 @@ export class CollectionEngine implements ICollectionEngine {
     };
   }
 
+  private unstampedConflicts(
+    names: string[],
+    ide: IDE,
+    dest?: string
+  ): Array<{ name: string; path: string }> {
+    const conflicts: Array<{ name: string; path: string }> = [];
+    for (const name of names) {
+      const path = commandFilePath(ide, name, dest);
+      if (!path) {
+        continue;
+      }
+      const existing = this.fs.readFile(path);
+      if (isOk(existing) && !isSkilStamped(existing.value)) {
+        conflicts.push({ name, path });
+      }
+    }
+    return conflicts;
+  }
+
   /** Writes state to disk. Returns an error Result if the write fails; callers must check it rather than assume the mutation was saved. */
   private persist(): Result<void> {
     this.state.version = STATE_VERSION;
@@ -602,7 +1367,7 @@ export class CollectionEngine implements ICollectionEngine {
 
   /**
    * Picks up skills already installed by external tooling (e.g. a bare
-   * `npx skills add` run outside ContextKit) so state stays in sync.
+   * `npx skills add` run outside skil) so state stays in sync.
    * In-memory only: persisted on the next mutation, not on construction.
    */
   private mergeExternallyInstalledSkills(): void {
@@ -616,12 +1381,26 @@ export class CollectionEngine implements ICollectionEngine {
   }
 }
 
+function listsEqual(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
 function catalogId(folder: string, root: string): string {
   if (folder === root) {
     return '.';
   }
   const prefix = `${root}/`;
   return folder.startsWith(prefix) ? folder.slice(prefix.length) : folder;
+}
+
+function skillRootOf(path: string): (typeof SKILL_ROOTS)[number] | undefined {
+  return SKILL_ROOTS.find((root) => path === root || path.startsWith(`${root}/`));
+}
+
+function parentDir(path: string): string {
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  const index = normalized.lastIndexOf('/');
+  return index <= 0 ? '' : normalized.slice(0, index);
 }
 
 function cloneSkillRecord(record: SkillRecord | undefined): SkillRecord | undefined {
@@ -652,27 +1431,4 @@ function upsertDeploy(
     return [...existing, entry];
   }
   return existing.map((deploy, i) => (i === index ? entry : deploy));
-}
-
-function isSkilStamped(contents: string): boolean {
-  const match = contents.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match?.[1]) {
-    return false;
-  }
-  return new RegExp(`^${SKIL_STAMP}\\s*$`, 'm').test(match[1]);
-}
-
-function renderCommandFile(name: string, skills: string[]): string {
-  const skillLines =
-    skills.length === 0 ? 'skills: []' : `skills:\n${skills.map((id) => `  - ${id}`).join('\n')}`;
-  return `---
-name: /${name}
-${skillLines}
-${SKIL_STAMP}
-generated_at: ${new Date().toISOString()}
----
-
-1. Use the skills listed in frontmatter when they apply.
-2. Do not invent extra required steps.
-`;
 }

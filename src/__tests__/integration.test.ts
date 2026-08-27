@@ -15,7 +15,7 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
 
   beforeEach(() => {
     originalCwd = process.cwd();
-    tmpDir = mkdtempSync(join(tmpdir(), 'contextkit-integration-'));
+    tmpDir = mkdtempSync(join(tmpdir(), 'skil-integration-'));
     // CollectionEngine resolves its state path relative to cwd,
     // matching how the real CLI is invoked from within a project root.
     process.chdir(tmpDir);
@@ -41,7 +41,7 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
     ]);
   });
 
-  it('loads a leftover .contextkit/state.json and does not copy it until the next persist', () => {
+  it('throws when only leftover .contextkit/state.json exists', () => {
     mkdirSync(join(tmpDir, '.contextkit'), { recursive: true });
     writeFileSync(
       join(tmpDir, '.contextkit', 'state.json'),
@@ -51,16 +51,10 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
       })
     );
 
-    const loaded = buildEngine();
-
-    expect(loaded.list().map((c) => c.name)).toEqual(['frontend']);
+    expect(() => buildEngine()).toThrow(
+      'Found leftover .contextkit/state.json. Move it to .skil/state.json and retry.'
+    );
     expect(existsSync(join(tmpDir, '.skil', 'state.json'))).toBe(false);
-
-    loaded.create('backend', []);
-
-    expect(existsSync(join(tmpDir, '.skil', 'state.json'))).toBe(true);
-    const persisted = JSON.parse(readFileSync(join(tmpDir, '.skil', 'state.json'), 'utf-8'));
-    expect(persisted.commands.map((c: { name: string }) => c.name)).toEqual(['frontend', 'backend']);
   });
 
   it('reloads persisted state when a new engine instance is constructed', () => {

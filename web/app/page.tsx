@@ -3,6 +3,7 @@ import { Hero } from '@/components/landing/hero'
 import { SupportedTools } from '@/components/landing/supported-tools'
 import { HowItWorks } from '@/components/landing/how-it-works'
 import { ProductPreview } from '@/components/landing/product-preview'
+import { Discover } from '@/components/landing/discover'
 import { FeatureGrid } from '@/components/landing/feature-grid'
 import { CliInstall } from '@/components/landing/cli-install'
 import { FooterCta } from '@/components/landing/footer-cta'
@@ -17,6 +18,7 @@ export default function LandingPage() {
         <SupportedTools />
         <HowItWorks />
         <ProductPreview />
+        <Discover />
         <FeatureGrid />
         <CliInstall />
         <FooterCta />

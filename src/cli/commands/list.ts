@@ -20,7 +20,7 @@ export function runList(engine: ICollectionEngine): CommandOutcome {
 export function registerListCommand(program: Command, engine: ICollectionEngine): void {
   program
     .command('list')
-    .description('List all commands')
+    .description('List commands on the project map')
     .action(() => {
       printOutcome(runList(engine));
     });

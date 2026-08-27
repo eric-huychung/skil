@@ -25,3 +25,7 @@ tasks/
 
 # ui examples
 ui-example/
+.env*
+
+# vendor clone kept locally for reference only, not part of this project
+skills-manager-main/
