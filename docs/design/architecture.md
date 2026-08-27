@@ -110,6 +110,7 @@ interface SkilEngine {
   removeSkill(name: string, skillId: string, ide?: IDE): Result<Command>
   copyTo(name: string, fromIde: IDE, toIde: IDE, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>
   copyAll(fromIde: IDE, toIde: IDE, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>
+  importFrom(sourceRoot: string, ide: IDE, opts?: { replace?: boolean }): Promise<Result<ExportResult>>
   install(skillId: string, targetIDE: IDE, opts?: { dest?: string }): Promise<Result<SkillRecord>>
   exportCommand(name: string, targetIDE: IDE, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>
   exportAll(targetIDE: IDE, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>
@@ -139,6 +140,7 @@ interface SkilEngine {
 - **Stamped** command file for an IDE ≠ that IDE's membership → **that IDE's disk wins** on pull. Report it once (`ScanResult.commandPulls`). Do not overwrite the other three IDEs. No silent 3-way merge.
 - Write-through: file / unfile / create / delete on Cursor rewrite **Cursor** stamped files only. Other IDEs stay until Copy / Export.
 - Copy (`copyTo` / `copyAll`) sets dest membership from source, writes the dest stamped file, and deploys missing skill folders (same rules as export). Unstamped dest file needs `replace: true`.
+- Import (`importFrom`) copies one IDE's skill folders and stamped command files from another project folder into this one. New ids add on top. Different dest `SKILL.md`, an existing command name on that IDE, or an unstamped dest command file needs `replace: true`. Same-hash skills are left alone. Unstamped source commands, other IDEs, and source Inbox / `state.json` are ignored. Does not bind the source folder.
 - Export writes **our** command file for that IDE's membership, then ensures filed skills exist in that IDE's skills dir. Dest folders that already have `SKILL.md` are left alone. Local folders are copied; Discover-only ids go through `install`. If a command file exists and is not stamped by us, refuse unless `replace: true` — no skill deploy in that case.
 - Install writes a skill folder into that IDE's skills dir and records the deploy. It does not write command files.
 
@@ -228,40 +230,87 @@ Verbs:
 
 Mutating command verbs take `--ide` (default `cursor` so old scripts still hit the migrated Cursor list). Unknown IDE is rejected before the engine.
 
-Bin is `skil`. `contextkit` is an alias of the same entry. Help and product-loop errors say **command**, not collection. Engine method is `file` (was `fileToCollection`). `Collection` remains a type alias. GUI chrome says Commands. Window/title says skil.
+Bin is `skil`. `contextkit` is an alias of the same entry. Help and product-loop errors say **command**, not collection. Engine method is `file` (was `fileToCollection`). `Collection` remains a type alias. GUI chrome says Commands. Window/title says skil. Renderer bridge is `window.skil`.
 
 ### 6. GUI (Thin)
 
 Same engine. No business logic in React.
 
-**Connect:** folder picker (already on Sync). No login. Discover works with no folder. Scan needs a connected repo (or CLI cwd). Install/export/copy can write to a picked dest without binding. Window title and brand say **skil**.
+**Connect:** folder picker on Sync (`pickProjectFolder` = dialog + bind). No login. Discover, Inbox, and Commands work with no folder. Scan needs a connected repo (or CLI cwd). Header shows the bound path and a Re-scan icon only after connect; with no folder the header is empty. Window title and brand say **skil**.
+
+**Session bind (GUI main):** `projectRoot` is session-only. `pickProjectFolder` opens a dialog then `bindProjectFolder`. `bindProjectFolder(path)` is `createEngine(path)` + DiskWatch, no second dialog. `pickDestinationFolder` is dest-only and does not bind.
 
 **Tabs:**
-- **Inbox** — one global staging pool (scan + Discover adds), re-scan, install from Inbox. Filing onto a command does not remove the id. Not per IDE.
+- **Inbox** — one global staging pool (scan + Discover adds), install from Inbox. Filing onto a command does not remove the id. Not per IDE. No Scan control; it listens to `onScan`.
 - **Commands** — one tab. Landing is four IDE cards (Cursor / Claude / Windsurf / Agents) with command + unique skill counts. Click a card to open that IDE's workspace (list + detail). Create / file / delete / install apply to that IDE. **Copy to** is dest chips plus Copy / Copy all — writes stamped file + missing skill folders. Back returns to the cards. Do **not** add four IDE tabs.
-- **Discover** — skills.sh browse/search, Add → Inbox (does not install)
-- **Sync** — pick / change folder only. Not a live merge. No per-IDE `state.json`.
+- **Discover** — skills.sh browse/search, Add → Inbox (does not install). No project re-scan control.
+- **Sync** — pick / change folder, plus **Import** (another project, one IDE). Not a live merge. No per-IDE `state.json`. Re-scan is not on this card.
 
-After pick, the GUI calls `scan()` once. Inbox is a rail tab above Commands. Scan without a folder opens a modal explaining it needs a connected project. Re-scan is the Scan button on Inbox. Show gone ids and `commandPulls` from the last scan result (`role="status"`). Do not auto-create commands from skill folders. Discover Add is unchanged (still no install).
+After pick, the GUI calls `scan()` once. Inbox is a rail tab above Commands. Re-scan is the header icon next to the path (hidden until a folder is bound). Inbox still shows gone ids and `commandPulls` from the last scan (`role="status"`). Do not auto-create commands from skill folders. Discover Add is unchanged (still no install).
 
-**Install:** Inbox matches Discover (search + 25-per-page list). A download icon opens an IDE menu; picking an IDE calls `bridge.install(skillId, ide)` → `engine.install`. Same icon-then-pick on filed skills. Progress, success, and failure open a modal. Failure keeps a short `role="alert"`; the full message is in collapsed Details. No connected folder → dest picker, then `install(..., { dest })`. Discover does not grow an Install control.
+**Install:** Inbox matches Discover (search + 25-per-page list). A download icon opens an IDE menu; picking an IDE calls `bridge.install(skillId, ide)` → `engine.install`. Same icon-then-pick on filed skills. Progress, success, and failure open a modal. Failure keeps a short `role="alert"`; the full message is in collapsed Details. No connected folder → dest picker, then `install(..., { dest })` without binding. Discover does not grow an Install control.
 
-**Copy (Commands):** from the open IDE workspace, dest chips pick the other IDE, then Copy (selected command) or Copy all. Calls `copyTo` / `copyAll`. Same stamp / replace / missing-skill rules as export. Unstamped existing dest file shows a Replace confirm.
+**Copy (Commands):** from the open IDE workspace, dest chips pick the other IDE, then Copy (selected command) or Copy all. Calls `copyTo` / `copyAll`. Same stamp / replace / missing-skill rules as export. Unstamped existing dest file shows a Replace confirm. No connected folder → dest picker, write there, do **not** bind.
 
-**Export (Commands):** still available as push of the **current IDE's** membership (Save / export). Writes the command file, then copies local filed skills the target IDE is missing (or `install` for Discover-only ids). Dest skill folders already present are left alone. Loading / success / failure is a modal; failure details stay collapsed. Unstamped existing command file shows a Replace confirm. IDE picker stays enabled with no folder; Export then picks a dest and calls `exportCommand(..., { dest })` without binding the session.
+**Export (Commands):** push of the **current IDE's** membership. Save is a download icon in the Commands heading (not Re-scan). Writes the command file, then copies local filed skills the target IDE is missing (or `install` for Discover-only ids). Dest skill folders already present are left alone. Loading / success / failure is a modal; failure details stay collapsed. Unstamped existing command file shows a Replace confirm. IDE picker stays enabled with no folder. First Save with no session: `pickDestinationFolder` → `exportAll({ dest })` on the current (userData) engine → `bindProjectFolder(dest)` → `scan()`. Header path + Re-scan and Sync then show that folder. Export **before** bind so sketched commands are not wiped by `createEngine`. Later Saves use the bound root (no second picker). Re-scan (header) is pull; Save is push. They are not the same control.
+
+**Import (Sync):** purple **Import** on Sync, disabled until a folder is bound. Modal: format chips (default Cursor), recent folders except current, or Choose folder (`pickDestinationFolder`, does not bind). Calls `importFrom(sourceRoot, ide)`. New skills and stamped commands add on top. Conflicts (different dest `SKILL.md`, existing command name, unstamped dest file) show Replace, then `replace: true`. Does not switch the connected project. Does not copy market Inbox. Commands **Import** stays same-project, other IDE (`copyAll`).
 
 **Watcher:** GUI main starts `DiskWatch` after folder pick (four `skills/` dirs plus command/workflow dirs). Debounce ~500ms, mute our writes ~1s, skip `.git`. Flush calls `scan()` (which write-throughs existing stamps) then mutes `lastWrittenPaths()`. Not a live 3-way merge. Not a CLI daemon.
 
+### 7. Market Index sync (Discover backend)
+
+**Status: Phase 1 (sync core) shipped. Not wired to a real store, API, or UI yet.** Full spec: `tasks/plan.md`; task breakdown: `tasks/todo.md`.
+
+Discover today calls `SkillsAdapter.search` / `.browse` live against skills.sh. The **market index** is a separate, precomputed alternative: a curated Supabase copy of skills.sh (~20k rows), nested **role → category (field) → top 30 skills by installs**, refreshed on a schedule instead of hit live. It is not the engine catalog (`skills[]` in `.skil/state.json`) — always say **market index**, never "engine."
+
+**Module boundary (pure logic, store/client both injected — same DI pattern as the engine):**
+
+```typescript
+interface MarketStore {           // src/backend/market-store.ts
+  upsertRole(role: MarketRole): Promise<Result<void>>
+  upsertField(field: MarketField): Promise<Result<void>>
+  listActiveFields(): Promise<Result<MarketField[]>>
+  upsertListing(listing: MarketListingInput, seenAt: string): Promise<Result<void>>
+  getHash(id: string): Promise<Result<string | null>>
+  setDetail(id: string, detail: MarketDetailInput): Promise<Result<void>>
+  markInactiveBefore(seenAt: string): Promise<Result<void>>
+  setFieldShelf(fieldSlug: string, rankedSkillIds: string[]): Promise<Result<void>>
+  listShelves(): Promise<Result<ShelfRole[]>>
+}
+
+interface MarketSkillsClient {    // src/backend/market-client.ts
+  listPage(cursor?: string): Promise<Result<MarketListingPage>>
+  getSkill(id: string): Promise<Result<MarketSkillDetail>>
+  getAudit(id: string): Promise<Result<MarketAudit>>
+  searchSkills(q: string, opts: { limit: number }): Promise<Result<MarketSearchResult[]>>
+}
+
+class MarketSync {                // src/backend/market-sync.ts
+  crawlListing(): Promise<Result<CrawlListingResult>>       // page until no nextCursor; queue ids with no hash
+  hydrateDetails(ids: string[]): Promise<Result<HydrateDetailsResult>>  // description + hash; same hash = no-op
+  syncListing(): Promise<Result<CrawlListingResult>>         // crawlListing, then markInactiveBefore — only on full success
+  refreshActiveFields(): Promise<Result<RefreshShelvesResult>>  // per active field: search q, drop duplicates, rank by installs, cap at shelf_size
+}
+```
+
+`InMemoryMarketStore` backs tests today (`src/backend/in-memory-market-store.ts`). `SupabaseMarketStore` (Task 7, not built) will implement the same interface against four tables — see `tasks/plan.md` "Data". `src/backend/market-seed.ts` holds the v1 seed: 4 roles / 20 fields (not a schema cap; new rows in `market_roles` / `market_fields` are picked up by `listActiveFields` with no code change). `src/backend/parse-skill-description.ts` trims a SKILL.md's YAML `description` to ≤500 chars for the search field.
+
+**Why separate from the engine:** the market index has its own store (Supabase, not `.skil/state.json`), its own sync loop (cron, not scan), and no per-IDE membership concept. It only feeds Discover's read path; it does not touch `SkillsAdapter`, the catalog, or Inbox.
+
+**Not yet built:** `SupabaseMarketStore` + migration (Task 7), first-fill script (Task 8), `GET /api/market/{shelves,search,preview}` (Tasks 9–11), Landing + GUI Discover nesting by role/category (Tasks 12–13), weekly Vercel Cron (Task 14). Until those land, Discover keeps its current live All-time/Trending + search UX unchanged.
+
 ## User Flow
 
-1. **Connect a repo.** No login.
+1. **Connect a repo (optional).** No login. Skip and still use Discover / Inbox / Commands; first Save can pick a folder and bind it.
 2. **Scan** `.cursor` / `.claude` / `.windsurf` / `.agents` — **skills** (catalog + Inbox) and **stamped command files** (that IDE's membership).
 3. **Inventory.** Scanned and Discover ids sit in one Inbox. They stay there after filing.
 4. **Organize on an IDE.** Open the Cursor card. Create `/build`, file `tdd` onto it. Cursor membership saves. Claude's `/build` is unchanged (or absent).
 5. **Copy to Claude.** Writes Claude membership, Claude's stamped file, and missing skill folders.
 6. **Discover → Inbox → file onto a command → install** writes the skill into that IDE's skills dir.
 7. **Export** (explicit, current IDE): write **our** command file and deploy filed skills that IDE is missing. Do not touch their old `/build.md` unless they opt in to replace. Do not overwrite dest skill folders.
-8. **Re-scan / watcher** = refresh skills + stamped lists. Each IDE's disk wins that IDE only.
+8. **Import** (Sync): copy one IDE's skills and stamped commands from another project into this folder. Add on top; warn and replace on conflict. Bound folder stays. Market inbox is not copied.
+9. **Re-scan / watcher** = refresh skills + stamped lists. Each IDE's disk wins that IDE only.
 
 ## Data Model
 
@@ -341,11 +390,22 @@ generated_by: skil
 generated_at: 2026-08-22T23:00:00.000Z
 ---
 
-1. Use the skills listed in frontmatter when they apply.
-2. Do not invent extra required steps.
+## Goal
+<!-- Describe what this command is for. -->
+
+## Sequence
+<!-- Ordered must-follow steps. Skills below are extras, not extra phases. -->
+
+## Rules
+<!-- Constraints the agent must not break. -->
+
+## Skills
+When they apply, read and follow:
+- `tdd`
+- `design`
 ```
 
-Stamp = `generated_by: skil` in frontmatter. If the target file exists and lacks that stamp, `exportCommand` / `copyTo` / write-through skip the file (map may still update) unless `replace: true`. If it is our file, we may rewrite frontmatter `skills:` and keep a short stub body (v1 does not merge their edits).
+Stamp = `generated_by: skil` in frontmatter. If the target file exists and lacks that stamp, `exportCommand` / `copyTo` / write-through skip the file (map may still update) unless `replace: true`. If it is our file, we rewrite frontmatter `skills:` and `## Skills`. Goal / Sequence / Rules (everything above `## Skills`) stay unless `replace: true` or the body is still the old numbered stub / untouched starter.
 
 ### Listing `Skill` (Discover)
 
@@ -401,6 +461,12 @@ This **reverses** the 2026-08-24 "one map, not four memberships" decision.
 
 **Rationale:** A command file that lists `tdd` is useless in Claude if `.claude/skills/tdd` is missing. Copy is the share action. Export remains push of the current IDE.
 
+### Import is cross-project, one IDE
+
+**Decision:** `importFrom(sourceRoot, ide, { replace? })` reads that IDE's skill tree and stamped command files from another folder and writes them into the bound project. New folders and command names add on top. Dest `SKILL.md` with a different hash, an existing command name on that IDE, or an unstamped dest command file requires `replace: true`. Same-hash skills are skipped. Source Inbox / `state.json` / unstamped commands / other IDEs are ignored. GUI Sync Import does not bind the source.
+
+**Rationale:** Copying `.cursor` between repos is common. Silent paste hijacks stamps. Explicit Import with the same Replace confirm as Commands is the product action. Path ids stay; we do not mint a second `tdd`. Market inbox is already app-global — do not copy it.
+
 ### Install is push-to-an-IDE
 
 **Decision:** `install(skillId, targetIDE)` writes the folder into that IDE's skills dir and appends `deployedTo`. Filing can happen before or after; the recommended flow is file then install.
@@ -409,9 +475,9 @@ This **reverses** the 2026-08-24 "one map, not four memberships" decision.
 
 ### Watcher is scan, not live merge
 
-**Decision:** Watch the four skills dirs and the four command/workflow dirs. Debounce ~500ms. Mute paths we just wrote for ~1s. Skip `.git`. Then scan + write-through IDEs that already have a stamped file. Skip rewrite when the stamp already matches membership (including a stamp just adopted from disk). Gone-id cleanup that changed the list still rewrites. After a successful scan, GUI main notifies the window so lists refresh. Explicit Scan remains for connect / nothing-changed-on-disk.
+**Decision:** Watch the four skills dirs and the four command/workflow dirs. Debounce ~500ms. Mute paths we just wrote for ~1s. Skip `.git`. Then scan + write-through IDEs that already have a stamped file. Skip rewrite when the stamp already matches membership (including a stamp just adopted from disk). Gone-id cleanup that changed the list still rewrites. After a successful scan, GUI main notifies the window so lists refresh. Explicit Re-scan remains in the header (connect / nothing-changed-on-disk).
 
-**Rationale:** Explicit Scan is too easy to skip. A 3-way merge of map + disk + body edits is the next-phase trap. Disk wins that IDE; we tell them once.
+**Rationale:** Explicit Re-scan is too easy to skip. A 3-way merge of map + disk + body edits is the next-phase trap. Disk wins that IDE; we tell them once.
 
 ### Project-local, no login
 
@@ -419,22 +485,22 @@ This **reverses** the 2026-08-24 "one map, not four memberships" decision.
 
 ### Leftovers stay leftover
 
-`sync`, `run`, skillsmith `export`/`convert` remain in the tree until a cleanup task. They are not the product. Do not build Phase 8 `importFromIDE` or Phase 9 "export = fetch then convert."
+`sync`, `run`, skillsmith `export`/`convert` remain in the tree until a cleanup task. They are not the product. Do not build Phase 8 import that upserts a command named `cursor` / `claude`. Cross-project `importFrom` on Sync is in. Do not build Phase 9 "export = fetch then convert."
 
 ## Test Strategy
 
-**Unit (70%)** — engine: scan reconcile, per-IDE file/create/delete, copyTo isolation, gone ids, export stamp/replace, install deploy record, scan disk-wins one IDE. Adapters mocked.
+**Unit (70%)** — engine: scan reconcile, per-IDE file/create/delete, copyTo isolation, importFrom add/replace, gone ids, export stamp/replace, install deploy record, scan disk-wins one IDE. Adapters mocked.
 
 **Integration (20%)** — CLI with in-memory engine; temp-dir FS for walk + hash + stamped pull; DiskWatch debounce/mute with fake clock.
 
 **E2E (10%)** — GUI with real engine, fake adapters: connect → scan → open Claude card → empty or pulled list → Copy to Claude → Cursor list unchanged.
 
 **Agreed seams**
-1. Engine: `scan`, `list(ide)`, `file` / `create` / `delete` with `ide`, `copyTo` / `copyAll`, `install`, `exportCommand`, inbox
+1. Engine: `scan`, `list(ide)`, `file` / `create` / `delete` with `ide`, `copyTo` / `copyAll`, `importFrom`, `install`, `exportCommand`, inbox
 2. `IFileSystemAdapter.findSkillFolders` / `readFile` / `writeFile`
 3. `ISkillsAdapter.install(skillId, targetIDE)`
 4. CLI `scan` / `list --ide` / `copy` / `install` / `export`
-5. GUI via the bridge (IDE cards → workspace, Copy dest chips, `onScan`)
+5. GUI via the bridge (header Re-scan, Save bind-after-dest, IDE cards → workspace, Copy dest chips, `onScan`)
 6. DiskWatch: debounce, mute, skip `.git`
 
 **Not seams:** concatenating `.cursor/skills` in a standalone test if `findSkillFolders` already takes that root; `createEngine` wiring; asserting the persisted `membership` object from the GUI.
@@ -470,23 +536,27 @@ Atomic JSON write. Schema version on every persist. v4 → v5 on load, no rewrit
 ## Open Questions
 
 1. One skill on many commands **on the same IDE** — the map allows it (`addSkill` / a second file). GUI this phase files from Inbox only.
-2. npm package name is still `contextkit`. Bins are `skil` and `contextkit`. Publish-as-`skil` can wait if the name is taken.
+2. npm package name is `skil`. Bins are `skil` and `contextkit` (alias). Publish to npm as `skil` when ready.
 3. After we rewrite a stamped file, do we preserve a user-edited body? v1 no. Revisit if people use export as a round-trip editor.
 4. Team YAML sync — keep or delete. Not in this loop.
 5. `--ide` default `cursor` vs required flag. Shipped default `cursor` (Phase 13). Revisit if people want a required flag.
 
 ## Decision Log
 
+- **Market index sync core (2026-08-26, Phase 1 of `tasks/plan.md`, shipped):** `MarketStore` / `InMemoryMarketStore`, `MarketSkillsClient` seam, `MarketSync` (`crawlListing`, `hydrateDetails`, `syncListing`, `refreshActiveFields`), `parseSkillDescription`, and the v1 seed (4 roles / 20 fields). All pure logic against injected store + client — no Supabase, no real skills.sh HTTP wiring, no API routes, no UI yet. See "Market Index sync (Discover backend)" above.
+- **Sync Import from another project (2026-08-26):** Bound folder required. Purple Import on Sync opens recents (except current) + Choose folder + format chips. `importFrom` copies that IDE's skill folders and stamped commands into this project. Add on top; Replace confirm on dest skill-body / command-name / unstamped-file conflicts. Does not bind source. Does not copy market inbox. Commands Import remains same-project `copyAll`.
+- **Header Re-scan; Save binds (2026-08-25):** Re-scan sits next to the header path only when a project is bound. Discover / Inbox / Sync do not show a scan icon. Commands Save is a download icon (push). First Save with no folder picks a dest, exports, then `bindProjectFolder` so header and Sync get that path. Copy and install dest picks still do not bind. Re-scan = pull; Save = push.
 - **Commands landing is IDE cards (2026-08-24):** One Commands tab. Overview cards show command + unique skill counts. Click opens that IDE's workspace. Copy bar is dest chips + Copy / Copy all. Not a Format dropdown. Still not four tabs.
 - **Per-IDE command membership (2026-08-24, Phase 13, shipped):** One Inbox + one `skills[]`. Commands store `membership` by IDE. IDE cards on Commands, not four tabs. Copy writes dest stamped file + missing skills. Write-through is per IDE. Stamped pull: that IDE's disk wins; other IDEs untouched. Watcher after write-through. Reverses "one shared membership, prompt when Cursor and Claude disagree." Schema is v5 (`commands[].membership`); v4 `skills[]` loads as Cursor.
 - **Not this phase (2026-08-24):** SQLite / eval library, stamps on `SKILL.md`, live 3-way merge, per-IDE Inbox.
 - **README matches the loop (2026-08-22, Task 40):** User-facing README documents scan → Inbox → file → install and/or export. Primary bin is `skil`. No one-click install from Discover, no import-from-IDE, no skillsmith export, no team YAML / `run` / linter as product. Architecture + PRD stay the spec; README stays the loop.
 - **No leftover state fallback (2026-08-24):** Only `.skil/state.json`. If that is missing and `.contextkit/state.json` is present, throw: move the file. CLI prints the message and exits; GUI folder pick shows an error and does not bind.
-- **State path and bin are skil (2026-08-22, Task 39):** Persist `.skil/state.json`. Bins: `skil` + `contextkit` alias. API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`. GUI title/brand say skil. Engine class and IPC stay `CollectionEngine` / `window.contextkit`.
+- **GitHub / npm / GUI identity is skil (2026-08-24):** Repo is `eric-huychung/skil`. Package name is `skil` (GUI workspace `skil-gui`). IPC and renderer bridge are `skil:*` / `window.skil`. `contextkit` bin and `CONTEXTKIT_API_URL` remain aliases. Leftover `.contextkit/state.json` is still an error (move it).
+- **State path and bin are skil (2026-08-22, Task 39):** Persist `.skil/state.json`. Bins: `skil` + `contextkit` alias. API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`. GUI title/brand say skil. Engine class stays `CollectionEngine`.
 - **Product is skil; groupings are commands (2026-08-22):** ContextKit / collections were the old names. User-facing language is skil + command. Engine class may stay `CollectionEngine` until a rename task. State target: `.skil/state.json`.
 - **Inbox is a staging pool (2026-08-24):** Filing onto a command does not drop the id from Inbox. Scan still adds new ids. Gone folders still drop the id. `file()` and GUI `addSkill` both keep the id.
 - **One catalog, IDE picker on Commands (updated 2026-08-24):** No per-IDE `state.json`, no IDE tabs. Membership is per IDE inside one file. Install/export/copy `--to` / IDE cards on Commands is how you see and push a specific tree.
-- **Watcher after write-through (2026-08-24, shipped):** Explicit Scan remains (connect / nothing changed on disk). Write-through for GUI edits on the active IDE. Light watcher (debounce / mute / skip `.git`) is scan + write-through, not a live merge. Successful scan notifies the GUI to refresh. Unchanged stamps are not rewritten.
+- **Watcher after write-through (2026-08-24, shipped):** Explicit Re-scan remains in the header (connect / nothing changed on disk). Write-through for GUI edits on the active IDE. Light watcher (debounce / mute / skip `.git`) is scan + write-through, not a live merge. Successful scan notifies the GUI to refresh. Unchanged stamps are not rewritten.
 - **Map + inbox + deploy, not folder trees (2026-08-22):** Commands are named id lists per IDE. Skills stay where they are on disk. Inbox is the staging pool (scan + Discover).
 - **Pull = scan skills + stamped commands; push = install / copy / write our command file (2026-08-22, updated 2026-08-24):** Re-scan is not a live merge. We do not parse unstamped `commands/`.
 - **No SkillScanner adapter (2026-08-22):** Grow `IFileSystemAdapter`. Two FS adapters already make the seam real.
@@ -500,7 +570,8 @@ Atomic JSON write. Schema version on every persist. v4 → v5 on load, no rewrit
 - **Install agent flag lives in the adapter (2026-08-22, Task 34):** `ISkillsAdapter.install(skillId, targetIDE)`. Real adapter runs `npx skills add <id> --agent <name>` with cwd = project root. Claude is `claude-code`; our `agents` IDE uses vercel's `universal`. In-memory adapter records `(skillId, ide)`. Convert unchanged.
 - **Export deploys missing skills (2026-08-23):** `exportCommand` is async. After the stamped command file, each filed skill is skipped if dest has `SKILL.md`, copied from a local catalog path, or `install`ed if there is no local folder. GUI Export uses the same Inbox install modal (loading / success / failure; details collapsed). Export icon sits under delete; Target IDE is above From Inbox. From Inbox filters as you type and pages at 10.
 - **CLI/GUI export is our stamped file (2026-08-22, Task 38):** `skil export <command> --to <ide> [--replace]` and GUI Export call `exportCommand`. Help says this is our template, not skillsmith convert. Unstamped existing file shows a Replace confirm. Leftover `engine.export` (convert-all) stays in the tree unused by CLI/GUI.
-- **exportCommand writes our stamped file (2026-08-22, Task 37):** `exportCommand(name, targetIDE, { replace? })` writes markdown with `name`, `skills`, `generated_by: skil`, `generated_at`, and a short stub body. Unstamped existing file → error unless `replace: true`. Stamped files may be rewritten. Does not call `convert`. Windsurf path is `.windsurf/workflows/<name>.md` (Cascade workflows). Cursor / Claude use `commands/`. Agents has no documented command dir; we write `.agents/commands/<name>.md` next to `.agents/skills/`.
+- **Command body is Goal / Sequence / Rules + managed Skills (2026-08-25):** First write fills those headings with one-line comments and a `## Skills` list from membership. Re-export / write-through refresh frontmatter and `## Skills` only. `--replace` resets the comments. Old numbered stubs upgrade on the next write.
+- **exportCommand writes our stamped file (2026-08-22, Task 37):** `exportCommand(name, targetIDE, { replace? })` writes markdown with `name`, `skills`, `generated_by: skil`, `generated_at`, and the command body above. Unstamped existing file → error unless `replace: true`. Does not call `convert`. Windsurf path is `.windsurf/workflows/<name>.md` (Cascade workflows). Cursor / Claude use `commands/`. Agents has no documented command dir; we write `.agents/commands/<name>.md` next to `.agents/skills/`.
 - **GUI install on Commands (2026-08-22, Task 36):** Inbox and filed skills pick an IDE and call `bridge.install(skillId, ide)` → engine. Error is a visible alert, not `sr-only`. Disabled until a folder is connected. Discover Add stays Inbox-only and does not grow Install. IDE picker includes `agents`.
 - **GUI chrome says Commands (2026-08-22, Task 33):** Tab, headings, create/delete/export copy, and empty states say command. Filenames (`CollectionList.tsx`) and the `Collection` type alias stay. Discover Add is still Inbox-only.
 - **Inbox install is icon-then-pick (2026-08-23):** No standing IDE dropdown. Download icon opens a menu (cursor / claude / windsurf / agents). Inbox layout matches Discover: search filters the pool, Scan is an icon.
@@ -519,6 +590,7 @@ Atomic JSON write. Schema version on every persist. v4 → v5 on load, no rewrit
 7. Export / write-through will not clobber an unstamped `/build.md` without `--replace` or overwrite an existing dest skill folder.
 8. CLI and GUI share the engine. Zero catalog logic in React. IDE cards on Commands, not four tabs.
 9. DiskWatch: two events inside 500ms become one scan; muted paths are ignored; `.git` is skipped.
+10. Import from another project on Sync adds missing skills/commands; conflicts warn then replace; bound folder and other IDEs stay.
 
 ## Not this phase
 
@@ -535,3 +607,4 @@ Atomic JSON write. Schema version on every persist. v4 → v5 on load, no rewrit
 - PRD: `docs/requirements/prd.md`
 - User-facing loop: `README.md`
 - Phase tasks: `tasks/todo2.md` Phase 13, `tasks/plan.md`
+- Market index (Discover backend) plan + tasks: `tasks/plan.md`, `tasks/todo.md`

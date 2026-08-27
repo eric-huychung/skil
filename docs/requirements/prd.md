@@ -12,7 +12,7 @@ Developers accumulate AI skills as folders (`SKILL.md`) across Cursor, Claude, W
 - **Commands** = named groups of skill ids **per IDE**. Those are the SDLC knobs. `/build` can be Cursor `[tdd, design]` and Claude `[tdd]`. Skills sit under them **in the app**, not as a folder tree.
 - **Inbox** = one global staging pool (scanned locals + Discover adds). Filing onto a command does not remove the id. Not per IDE.
 - **Pull** = scan skills + stamped command files (that IDE's disk wins). Not unstamped `commands/`.
-- **Push** = install a skill into an IDE skills dir, Copy to another IDE, and/or write **our** command template (`skills:` + short steps + stamps) and deploy filed skills that IDE is missing.
+- **Push** = install a skill into an IDE skills dir, Copy to another IDE, and/or write **our** command template (`skills:` + Goal/Sequence/Rules comments + `## Skills` + stamps) and deploy filed skills that IDE is missing.
 
 We are **not** SoT for skill file contents.  
 We **are** SoT for: which skills exist here, hashes, where we deployed them, and which skills sit on which command **for which IDE**.
@@ -23,14 +23,15 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 
 ## User Flow
 
-1. **Connect a repo.** No login.
+1. **Connect a repo (optional).** No login. Skip and still use Discover / Inbox / Commands; first Save can pick a folder and bind it.
 2. **Scan** `.cursor` / `.claude` / `.windsurf` / `.agents` — skills (catalog + Inbox) and stamped command files (per-IDE membership). Skill = folder with `SKILL.md` (nested ok).
 3. **Show the inventory.** Scanned and Discover ids sit in one Inbox and stay there after filing.
 4. **Organize on an IDE:** Open the Cursor card. Create `/build`, drop `tdd` on it. Cursor membership saves. Claude is unchanged.
 5. **Copy to Claude** (one command or all): dest membership + stamped file + missing skill folders.
 6. **Discover → Inbox → file onto a command → install** writes the skill into that IDE's skills dir.
 7. **Export** (explicit, current IDE): generate **our** command file and deploy filed skills that IDE is missing. Do not touch their old `/build.md` unless they opt in to replace. Do not overwrite dest skill folders.
-8. **Re-scan / light watcher** = refresh skills + stamped lists. Each IDE's disk wins that IDE only. Map does not copy the winner onto the other three.
+8. **Import** (Sync): copy one IDE's skills and stamped commands from another project into this folder. Add on top; warn then replace on conflict. Bound folder stays. Market inbox is not copied.
+9. **Re-scan / light watcher** = refresh skills + stamped lists. Each IDE's disk wins that IDE only. Map does not copy the winner onto the other three.
 
 ## User Stories
 
@@ -44,7 +45,7 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 8. As a developer, I want Discover (all-time / trending / typed search) without a folder, so I can browse before I connect
 9. As a developer, I want Add from Discover to land in Inbox and not download, so install is a later choice
 10. As a developer, I want to install a skill into a chosen IDE's skills dir, so push is explicit
-11. As a developer, I want export to write **skil's** command file (`skills:` + short steps + stamps) and put filed skills in that IDE if they are missing, so the command is usable there
+11. As a developer, I want export to write **skil's** command file (`skills:` + Goal/Sequence/Rules comments + `## Skills` + stamps) and put filed skills in that IDE if they are missing, so the command is usable there
 12. As a developer, I want export / copy to refuse an unstamped existing `/build.md` unless I say replace, so my old command text is safe
 13. As a developer, I want re-scan to keep other IDEs' lists and drop ids whose folders are gone, so the inventory is honest
 14. As a developer using several IDEs, I want one catalog and Inbox, and **per-IDE command lists**, so Cursor `/build` can differ from Claude `/build` without four tabs or four `state.json` files
@@ -53,7 +54,8 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 17. As a visual user, I want a GUI to connect, scan, pick an IDE on Commands, file, copy, install, and export, so I am not stuck in the terminal
 18. As a developer, I want search and browse without my own skills.sh API key
 19. As a developer, I want an empty search to show all-time and trending, so I can browse without inventing a query
-20. As a developer, I want a light disk watcher after write-through, so I do not have to hit Scan for every edit (debounce, mute our writes, skip `.git`)
+20. As a developer, I want a light disk watcher after write-through, so I do not have to hit Re-scan for every edit (debounce, mute our writes, skip `.git`)
+21. As a developer, I want to import skills and stamped commands from another project on Sync, so I do not copy-paste folders by hand
 
 ## Implementation Decisions
 
@@ -70,8 +72,16 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 2. **FileSystemAdapter** — state JSON plus walk/read/write for `SKILL.md` discovery and command-file output.
 3. **SkillsAdapter** — search, browse, install. Convert/skillsmith is leftover. Product export is engine `exportCommand`, not skillsmith.
 4. **CLI** — parse and print.
-5. **GUI** — bind to the engine. Commands / Discover / folder pick. IDE cards on Commands (click into a workspace).
+5. **GUI** — bind to the engine. Header path + Re-scan when connected. Commands / Discover / Inbox / folder pick. IDE cards on Commands (click into a workspace).
 6. **DiskWatch** — debounce / mute / skip `.git`. Calls scan + write-through. Not a second deep module.
+
+### Market index (Discover backend, separate track — in progress)
+
+Discover's browse/search today hits skills.sh live via `SkillsAdapter`. A **market index** — a curated Supabase copy (~20k skills), nested role → category → top 30 by installs — is being built as its own module (`MarketStore`, `MarketSync`, `MarketSkillsClient`; not the engine catalog). Full spec: `tasks/plan.md`; tasks: `tasks/todo.md`; module boundary: `docs/design/architecture.md` "Market Index sync (Discover backend)".
+
+**Shipped:** sync core (listing crawl, detail hydrate, inactive reconciliation, shelf refresh) against an in-memory store — pure logic, fully tested, nothing user-visible yet.
+
+**Not shipped:** Supabase persistence, `GET /api/market/*`, and the Landing/GUI role→category browsing this enables. Discover's current live All-time/Trending + search UX is unchanged until those land — see "Not in this phase" below.
 
 ### Data Model
 
@@ -96,9 +106,9 @@ v4 `commands[].skills` loads as Cursor membership. Other IDEs fill in via Copy o
 - **Inbox is not a command.** Reserved name. `create inbox` errors. One Inbox, not per IDE.
 - **Command names have no leading slash.** `create /build` stores `build`. UI may still show `/build`.
 - **CLI help/errors and GUI chrome say command, not collection.**
-- **Connect scans once.** Pick folder puts new skill ids in Inbox and pulls stamped command lists. The Scan button is re-scan. Click without a folder explains it needs a connected project.
+- **Connect scans once.** Pick folder (Sync) puts new skill ids in Inbox and pulls stamped command lists. Header shows the path and Re-scan only after a folder is bound. No folder → no header path, no Re-scan; Discover / Inbox / Commands still work.
 - **Scan does not create `/cursor` or `/claude`.** That would be the folder tree again.
-- **We do not scan unstamped `commands/` (or Windsurf `workflows/`).** Stamped files are ours: pull adopts `skills:` for **that IDE**. Write on Copy / Export / write-through. Stamp is `generated_by: skil`. Unstamped existing files need replace.
+- **We do not scan unstamped `commands/` (or Windsurf `workflows/`).** Stamped files are ours: pull adopts `skills:` for **that IDE**. Write on Copy / Export / write-through. Stamp is `generated_by: skil`. Unstamped existing files need replace. Stamped re-writes refresh frontmatter + `## Skills`; Goal / Sequence / Rules stay unless `replace` is true.
 - **Command-file paths:** cursor / claude / agents use `commands/<name>.md` under their root. Windsurf uses `.windsurf/workflows/<name>.md`.
 - **No version pinning.** Catalog hash is content identity, not a lockfile.
 - **Team YAML sync is leftover.** Not in this loop. No `.skil.yml` this phase.
@@ -107,7 +117,7 @@ v4 `commands[].skills` loads as Cursor membership. Other IDEs fill in via Copy o
 - **Inbox is a staging pool.** Filing does not remove the id. `remove` from a command does not remove it from Inbox either. Gone folders drop the id from both.
 - **One state file, per-IDE lists.** Commands landing is IDE cards; click opens that list. No tab-per-IDE, no `.cursor/.skil/state.json`.
 - **Write-through is per IDE.** File / unfile / create / delete on Cursor rewrite Cursor stamped files only.
-- **Light watcher after write-through.** Disk edits: watcher scans and the GUI refreshes (debounce ~500ms, mute our writes ~1s, skip `.git`). Explicit Scan remains for connect / nothing changed on disk. Unchanged stamps are not rewritten. Not a live 3-way merge. GUI main starts/stops `DiskWatch` after folder pick.
+- **Light watcher after write-through.** Disk edits: watcher scans and the GUI refreshes (debounce ~500ms, mute our writes ~1s, skip `.git`). Explicit Re-scan remains in the header for connect / nothing changed on disk. Unchanged stamps are not rewritten. Not a live 3-way merge. GUI main starts/stops `DiskWatch` after folder pick.
 
 ### CLI
 
@@ -128,15 +138,15 @@ API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 
 ### GUI
 
-- Window and brand say skil. Connect folder (Sync tab). No login.
-- Inbox tab (above Commands): Discover-like list (25 per page), search the staging pool, re-scan icon, install from Inbox. Filing does not remove ids. One Inbox for all IDEs.
-- Commands tab: landing is four IDE cards (counts, click to open). List/detail = that IDE. Create, file from Inbox, delete, install filed, export, **Copy to** dest chips (one command or all). Do not add four tabs.
-- Discover: All time / Trending, typed search, Add → Inbox, details from listing fields
-- Discover does not require a folder. Scan needs a connected repo. Install, copy, and export can pick a dest folder without binding the session
-- Scan click without a folder opens a modal explaining why. Pick folder scans once; the Scan icon on Inbox is re-scan. Watcher also scans after debounce.
-- Install: download icon, then pick IDE (cursor / claude / windsurf / agents), call `engine.install(skillId, ide)`. Inbox or Commands. Loading / success / failure is a modal. Failure alert is short; full error is collapsed Details. No connected folder → dest folder picker, then install there
-- Copy on Commands: dest chips pick the other IDE, then Copy / Copy all, call `engine.copyTo` / `copyAll`. Writes dest stamped file and deploys missing skills. Unstamped dest file shows Replace.
-- Export on Commands: push the **open IDE workspace**, call `engine.exportCommand` / `exportAll`. Writes our stamped command file and deploys filed skills that IDE is missing (copy local; install Discover-only; skip dest that already exists). Loading / success / failure is a modal; failure details stay collapsed. Unstamped existing command file shows a Replace confirm (`replace: true`).
+- Window and brand say skil. Connect folder (Sync tab). No login. Header shows the bound path and Re-scan only after connect. Purple **Import** on Sync (disabled until connected) copies one IDE's skills and stamped commands from a recent folder or a chosen folder. Does not bind. Format chips default to Cursor. Conflicts warn then replace. Market inbox is not copied.
+- Inbox tab (above Commands): Discover-like list (25 per page), search the staging pool, install from Inbox. Filing does not remove ids. One Inbox for all IDEs. No Scan icon; Inbox refreshes from `onScan`.
+- Commands tab: landing is four IDE cards (counts, click to open). List/detail = that IDE. Create, file from Inbox, delete, install filed, export (download icon on Save), **Copy to** dest chips (one command or all). Do not add four tabs.
+- Discover: All time / Trending, typed search, Add → Inbox, details from listing fields. No project re-scan control.
+- Discover / Inbox / Commands do not require a folder. Scan needs a connected repo (header Re-scan, Sync pick, or CLI cwd).
+- Pick folder on Sync scans once and binds. Header Re-scan is the explicit pull after that. Watcher also scans after debounce. There is no Scan-without-folder modal.
+- Install: download icon, then pick IDE (cursor / claude / windsurf / agents), call `engine.install(skillId, ide)`. Inbox or Commands. Loading / success / failure is a modal. Failure alert is short; full error is collapsed Details. No connected folder → dest folder picker, then install there (does not bind)
+- Copy on Commands: dest chips pick the other IDE, then Copy / Copy all, call `engine.copyTo` / `copyAll`. Writes dest stamped file and deploys missing skills. Unstamped dest file shows Replace. No connected folder → dest picker, write there, do not bind
+- Export on Commands: push the **open IDE workspace** via the Save download icon, call `engine.exportCommand` / `exportAll`. Writes our stamped command file and deploys filed skills that IDE is missing (copy local; install Discover-only; skip dest that already exists). Loading / success / failure is a modal; failure details stay collapsed. Unstamped existing command file shows a Replace confirm (`replace: true`). No connected folder → dest picker, export, then bind that folder so header and Sync show it. Later Saves use the bound root.
 - Discover Add still does not install and does not grow an Install control
 - Gone ids and stamped-file pulls from the last scan show as a status banner
 - No typed skill-id fields in the GUI (CLI can still take ids)
@@ -149,7 +159,7 @@ API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 - Do not require a real IDE to assert command-file contents
 - DiskWatch tests use a fake clock (debounce / mute), not a real chokidar run
 
-**Modules to test:** engine (scan, per-IDE file, copy isolation, gone, install record, export stamp, disk-wins one IDE); FS walk; install adapter; CLI handlers; GUI via the bridge; DiskWatch debounce/mute.
+**Modules to test:** engine (scan, per-IDE file, copy isolation, importFrom add/replace, gone, install record, export stamp, disk-wins one IDE); FS walk; install adapter; CLI handlers; GUI via the bridge; DiskWatch debounce/mute.
 
 ## Out of Scope
 
@@ -176,14 +186,12 @@ API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 ### Deferred
 
 - Cross-platform GUI polish beyond macOS-first
-- npm package rename from `contextkit` to `skil` if the name is free
-- Preserving user edits on re-export of a stamped file
 - One skill filed onto many commands from the GUI
 - Public command-template packs
 
 ## Open Questions
 
-- Is `skil` free as an npm *package* name? The bin alias already ships.
+- Package name in this repo is `skil`. Confirm the name is free on npm before publish.
 - Should mutating CLI verbs require `--ide`, or keep default `cursor`? Shipped default `cursor` (Phase 13). Revisit if people want a required flag.
 
 ### Success Metrics
