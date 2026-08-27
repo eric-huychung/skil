@@ -28,7 +28,8 @@ export interface MarketListingInput {
   slug: string;
   source: string;
   installs: number;
-  installUrl: string;
+  /** Nullable: some real skills.sh listing rows omit this (see 0002 migration). */
+  installUrl: string | null;
   url: string;
 }
 
@@ -56,4 +57,20 @@ export interface ShelfRole {
   slug: string;
   label: string;
   fields: ShelfField[];
+}
+
+/** One row from `MarketStore.searchListings`: list fields only, same shape as `ShelfSkill` minus rank (search has no rank concept). */
+export interface MarketSearchRow {
+  id: string;
+  name: string;
+  installs: number;
+}
+
+/** One row from `MarketStore.getListing`: preview's non-live fields (installs/urls come from the stored index; SKILL.md/audit are fetched live). */
+export interface MarketListingDetail {
+  id: string;
+  name: string;
+  installs: number;
+  url: string;
+  installUrl: string | null;
 }

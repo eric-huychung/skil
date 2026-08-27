@@ -120,12 +120,53 @@ No extra phases.
     expect(written).toContain('<!-- Describe what this command is for. -->');
     expect(written).not.toContain('Ship the checkout flow.');
   });
+
+  it('rewrites a stamp that lost its closing fence without keeping ## name or stub comments', () => {
+    const written = writeCommandFile(
+      'plan',
+      [
+        'productivity/diagram-maker',
+        'philosophy/tdd',
+        'design/codebase-design',
+        'design/to-tasks',
+      ],
+      BROKEN_PLAN_STAMP
+    );
+
+    expect(written).toMatch(/^---\nname: \/plan\n/);
+    expect(written).toContain('\n---\n');
+    expect(written).not.toContain('## name:');
+    expect(written).toContain('Turn the spec into architecture and a small task list.');
+    expect(written).not.toContain('<!-- Describe what this command is for. -->');
+  });
 });
+
+const BROKEN_PLAN_STAMP = `---
+
+## name: /plan
+
+skills:
+
+- productivity/diagram-maker
+- philosophy/tdd
+- design/codebase-design
+- design/to-tasks
+generated_by: skil
+generated_at: 2026-08-26T05:49:28.896Z
+
+## Goal
+
+Turn the spec into architecture and a small task list.
+`;
 
 describe('isSkilStamped', () => {
   it('is true only when frontmatter has generated_by: skil', () => {
     expect(isSkilStamped(stamp('## Goal\n'))).toBe(true);
     expect(isSkilStamped('# their old /build\n')).toBe(false);
+  });
+
+  it('is true when a skil stamp lost its closing fence', () => {
+    expect(isSkilStamped(BROKEN_PLAN_STAMP)).toBe(true);
   });
 });
 
@@ -136,5 +177,14 @@ describe('parseStampedSkills', () => {
 
   it('returns null for an unstamped file', () => {
     expect(parseStampedSkills('# their old /build\n')).toBeNull();
+  });
+
+  it('reads skills from a skil stamp that lost its closing fence', () => {
+    expect(parseStampedSkills(BROKEN_PLAN_STAMP)).toEqual([
+      'productivity/diagram-maker',
+      'philosophy/tdd',
+      'design/codebase-design',
+      'design/to-tasks',
+    ]);
   });
 });

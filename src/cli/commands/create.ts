@@ -1,8 +1,6 @@
 import type { Command } from 'commander';
 import type { ICollectionEngine } from '../../interfaces/engine.js';
 import { isOk } from '../../core/result.js';
-import type { IDE } from '../../types/index.js';
-import { ideOption } from '../ides.js';
 import { printOutcome, type CommandOutcome } from '../output.js';
 
 /** Parses a comma-separated skill ID list, trimming whitespace and dropping empties. */
@@ -17,10 +15,9 @@ export function runCreate(
   engine: ICollectionEngine,
   name: string,
   skillIds: string[],
-  command?: string,
-  ide: IDE = 'cursor'
+  command?: string
 ): CommandOutcome {
-  const result = engine.create(name, skillIds, command, ide);
+  const result = engine.create(name, skillIds, command);
   if (!isOk(result)) {
     return { message: result.error.message, isError: true };
   }
@@ -35,11 +32,10 @@ export function runCreate(
 export function registerCreateCommand(program: Command, engine: ICollectionEngine): void {
   program
     .command('create <name>')
-    .description('Create a new command on an IDE (leading / is stripped: /build → build)')
+    .description('Create a new command (leading / is stripped: /build → build)')
     .option('--skills <ids>', 'comma-separated skill IDs', '')
-    .option('--command <cmd>', 'shell command template, runnable later via "contextkit run"')
-    .addOption(ideOption())
-    .action((name: string, options: { skills: string; command?: string; ide: IDE }) => {
-      printOutcome(runCreate(engine, name, parseSkillIds(options.skills), options.command, options.ide));
+    .option('--command <cmd>', 'shell command template, runnable later via "skil run"')
+    .action((name: string, options: { skills: string; command?: string }) => {
+      printOutcome(runCreate(engine, name, parseSkillIds(options.skills), options.command));
     });
 }

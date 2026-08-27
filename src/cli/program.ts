@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import type { ICollectionEngine } from '../interfaces/engine.js';
-import { CONTEXTKIT_VERSION } from '../index.js';
+import { SKIL_VERSION } from '../index.js';
 import { registerCreateCommand } from './commands/create.js';
 import { registerListCommand } from './commands/list.js';
 import { registerSearchCommand } from './commands/search.js';
@@ -15,6 +15,7 @@ import { registerInboxCommand } from './commands/inbox.js';
 import { registerDeleteCommand } from './commands/delete.js';
 import { registerScanCommand } from './commands/scan.js';
 import { registerCopyCommand } from './commands/copy.js';
+import { registerUsageCommand } from './commands/usage.js';
 
 /**
  * Builds the skil CLI program. Commands are thin: they parse args,
@@ -27,7 +28,7 @@ export function createProgram(engine: ICollectionEngine): Command {
   program
     .name('skil')
     .description('skil: map + inbox + skill deploy. Group skills onto commands, then install or export.')
-    .version(CONTEXTKIT_VERSION);
+    .version(SKIL_VERSION);
 
   registerCreateCommand(program, engine);
   registerListCommand(program, engine);
@@ -43,6 +44,7 @@ export function createProgram(engine: ICollectionEngine): Command {
   registerDeleteCommand(program, engine);
   registerScanCommand(program, engine);
   registerCopyCommand(program, engine);
+  registerUsageCommand(program, engine);
 
   return program;
 }

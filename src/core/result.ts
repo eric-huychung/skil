@@ -1,7 +1,7 @@
 /**
  * Result<T> represents the outcome of an operation that can fail.
  *
- * Business logic in ContextKit never throws for expected failure cases
+ * Business logic in skil never throws for expected failure cases
  * (e.g. "collection not found"). Instead it returns a Result, forcing
  * callers to explicitly handle both the success and error paths.
  *

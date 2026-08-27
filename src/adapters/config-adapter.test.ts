@@ -10,7 +10,7 @@ describe('ConfigAdapter', () => {
   let adapter: ConfigAdapter;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'contextkit-config-'));
+    tmpDir = mkdtempSync(join(tmpdir(), 'skil-config-'));
     adapter = new ConfigAdapter();
   });
 

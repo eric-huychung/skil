@@ -1,35 +1,27 @@
 ---
-name: deploy
-description: Deploy to production environment
+name: /deploy
+skills:
+  - productivity/git-guardrail
+  - productivity/git-workflow
+generated_by: skil
+generated_at: 2026-08-27T03:49:43.705Z
 ---
 
-# Deploy Phase
+## Goal
+Cut a shippable release. Keep main deployable.
 
-Production deployment with validation and rollback readiness.
+## Sequence
+1. Confirm tests and build are green. No secrets in the diff.
+2. Version: breaking → major, additive → minor, fix → patch.
+3. Write a human changelog (Added / Fixed / …). Tag the release.
+4. Stop. Don't push unless they say so.
 
-## Process
+## Rules
+- Never force-push, reset --hard, or git clean.
+- Changelog is for consumers, not a git log dump.
+- Don't mix formatting with the release.
 
-When invoked with `/deploy`:
-
-1. **Read git-workflow skill** (`.cursor/skills/productivity/git-workflow/SKILL.md`)
-   - Version bump matches the change (breaking → major, additive → minor, fix → patch)
-   - Tag the release; changelog is curated for consumers, not a dumped commit log
-   - Checkpoint: version, tag, and changelog agree
-
-2. **Read git-guardrail skill** (`.cursor/skills/productivity/git-guardrail/SKILL.md`)
-   - Do not run blocked git operations (push, force push, reset --hard, clean -f, branch -D)
-   - Set up hooks if the user wants them; otherwise just follow the blocked list
-   - Checkpoint: this deploy does not need a destructive git command
-
-<!-- 3. **Run pre-deploy-checks skill** - validate readiness
-   - Checkpoint: All checks passing? -->
-
-<!-- 4. **Run deployment skill** - deploy to production
-   - Checkpoint: Deployment successful? -->
-
-<!-- 5. **Run smoke-tests skill** - validate production health
-   - Checkpoint: Production stable? -->
-
-## Output
-
-Live production deployment with monitoring and rollback capability.
+## Skills
+When they apply, read and follow:
+- `productivity/git-guardrail`
+- `productivity/git-workflow`

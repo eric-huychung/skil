@@ -1,5 +1,5 @@
 import type { Result } from '../core/result.js';
-import type { BrowseView, Config, IDE, Skill } from '../types/index.js';
+import type { BrowseView, Config, IDE, Skill, UsageEvent } from '../types/index.js';
 
 /**
  * Wraps project-local I/O: JSON state, SKILL.md discovery, and utf-8 files.
@@ -115,4 +115,12 @@ export interface ISkillsAdapter {
 
   /** Returns skills already installed, read from local tooling state. */
   getInstalled(): Skill[];
+}
+
+/**
+ * Counts skill reads from IDE logs. In-memory in tests; Claude session
+ * JSONL in prod. Not a second deep module.
+ */
+export interface IUsageCollector {
+  collect(opts: { projectRoot: string; skillIds: string[] }): Promise<Result<UsageEvent[]>>;
 }

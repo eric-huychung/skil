@@ -1,12 +1,14 @@
 import type { IDE } from '../../../shared/ipc';
 
-export const SKILL_SOURCES = ['.cursor', '.claude', '.windsurf', '.agents'] as const;
+export const SKILL_SOURCES = ['.cursor', '.claude', '.codex', '.github', '.agents', '.windsurf'] as const;
 
 export type SkillSourceFolder = (typeof SKILL_SOURCES)[number];
 
 export const SOURCE_BY_IDE: Record<IDE, SkillSourceFolder> = {
   cursor: '.cursor',
   claude: '.claude',
+  codex: '.codex',
+  copilot: '.github',
   windsurf: '.windsurf',
   agents: '.agents',
 };
@@ -28,6 +30,11 @@ export function countSkillsBySource(
 export function skillCountForIde(skills: Array<{ paths: string[] }>, ide: IDE): number {
   const source = SOURCE_BY_IDE[ide];
   return skills.filter((skill) => skillIsUnderSource(skill.paths, source)).length;
+}
+
+/** Unique skills filed onto an IDE's commands. Independent of disk catalog. */
+export function filedSkillCount(collections: Array<{ skills: string[] }>): number {
+  return new Set(collections.flatMap((collection) => collection.skills)).size;
 }
 
 export function formatScannedAt(date: Date | null): string {

@@ -40,9 +40,11 @@
   --success: #10b981;
   --emerald: var(--success);
 
-  /* Kiro-style word hover: dark purple-grey chip, squared corners */
-  --hover: oklch(0.24 0.03 var(--brand-hue));
-  --hover-foreground: oklch(0.96 0.002 var(--brand-hue));
+  /* Light hover: same light gray as the path pill / muted chips, not a dark invert */
+  --hover: var(--muted);
+  --hover-foreground: var(--foreground);
+  --import-hover-fill: var(--muted);
+  --import-hover-foreground: var(--foreground);
 
   --surface: var(--background);
   --surface-raised: rgb(var(--glass-bg-strong));
@@ -55,6 +57,7 @@
 
   --font-sans: 'Geist', system-ui, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, monospace;
+  --font-display: var(--font-fredoka, 'Fredoka'), system-ui, sans-serif;
 }
 
 .dark {
@@ -91,6 +94,8 @@
 
   --hover: oklch(0.24 0.03 var(--brand-hue));
   --hover-foreground: oklch(0.96 0.002 var(--brand-hue));
+  --import-hover-fill: oklch(1 0 0);
+  --import-hover-foreground: oklch(0.19 0.03 var(--brand-hue));
 
   --surface: var(--background);
   --surface-raised: rgb(var(--glass-bg-strong));
@@ -100,4 +105,16 @@
   --line: rgb(var(--glass-border));
   --line-strong: color-mix(in srgb, var(--foreground) 18%, transparent);
   --highlight: var(--brand);
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 0.9;
+  text-transform: uppercase;
+  color: var(--background);
+  -webkit-text-stroke: 1.55px var(--foreground);
+  paint-order: stroke fill;
 }

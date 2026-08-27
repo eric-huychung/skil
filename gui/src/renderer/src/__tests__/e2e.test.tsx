@@ -17,7 +17,6 @@ describe('GUI workflow (real engine)', () => {
 
     renderWithProviders(<App />);
     await screen.findByTitle(DEFAULT_TEST_PROJECT_ROOT);
-    await userEvent.click(screen.getByRole('button', { name: 'Open Cursor workspace' }));
 
     await waitFor(() => expect(screen.getByText('No commands yet')).toBeInTheDocument());
     expect(engine.list()).toHaveLength(0);
@@ -37,7 +36,6 @@ describe('GUI workflow (real engine)', () => {
     expect(engine.skills()).toEqual([]);
 
     await userEvent.click(screen.getByRole('tab', { name: 'Commands' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Open Cursor workspace' }));
     const detail = await screen.findByRole('region', { name: 'Command frontend details' });
     await userEvent.click(within(detail).getByRole('button', { name: 'Add obra/react-patterns to frontend' }));
 
@@ -45,21 +43,19 @@ describe('GUI workflow (real engine)', () => {
     expect(engine.inbox()).toEqual(['obra/react-patterns']);
     expect(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Back to IDEs' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Open Windsurf workspace' }));
-    await waitFor(() => expect(screen.getByText('No commands yet')).toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: 'Import' }));
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Import all from Cursor' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Pick format:/ }));
+    await userEvent.click(screen.getByRole('menuitemradio', { name: 'Claude Code' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Imported' })).toHaveTextContent(
-      'Imported all from Cursor in test-project'
+    expect(await screen.findByRole('dialog', { name: 'Exported' })).toHaveTextContent(
+      'Exported all commands to Claude Code in test-project'
     );
-    const written = fs.readFile('.windsurf/workflows/frontend.md');
+    const written = fs.readFile('.claude/commands/frontend.md');
     expect(isOk(written)).toBe(true);
     if (isOk(written)) {
       expect(written.value).toContain('generated_by: skil');
     }
-    expect(engine.skills()[0]?.deployedTo.map((row) => row.ide)).toEqual(['windsurf']);
+    expect(engine.skills()[0]?.deployedTo.map((row) => row.ide)).toEqual(['claude']);
     expect(engine.list()).toHaveLength(1);
   });
 

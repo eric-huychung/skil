@@ -3,6 +3,7 @@ import { CollectionEngine } from './core/collection-engine.js';
 import { RealFileSystemAdapter } from './adapters/real-fs-adapter.js';
 import { ConfigAdapter } from './adapters/config-adapter.js';
 import { SkillsAdapter } from './adapters/skills-adapter.js';
+import { ClaudeUsageCollector } from './adapters/claude-usage-collector.js';
 import { getApiBaseUrl } from './config/website.js';
 
 /**
@@ -19,6 +20,8 @@ export function createEngine(projectRoot: string = process.cwd()): ICollectionEn
   return new CollectionEngine(
     new RealFileSystemAdapter(projectRoot),
     new ConfigAdapter(),
-    new SkillsAdapter(getApiBaseUrl(), projectRoot)
+    new SkillsAdapter(getApiBaseUrl(), projectRoot),
+    new ClaudeUsageCollector(),
+    projectRoot
   );
 }

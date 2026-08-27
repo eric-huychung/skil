@@ -8,7 +8,7 @@ import './styles/globals.css';
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
     <ThemeProvider>
-      <BridgeProvider bridge={window.contextkit}>
+      <BridgeProvider bridge={window.skil}>
         <App />
       </BridgeProvider>
     </ThemeProvider>

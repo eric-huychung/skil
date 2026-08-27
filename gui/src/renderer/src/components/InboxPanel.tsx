@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowRight, ArrowsClockwise, CaretLeft, CaretRight, MagnifyingGlass } from '@phosphor-icons/react';
+import { ArrowRight, CaretLeft, CaretRight, MagnifyingGlass, Trash } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
-import type { ScanResult } from '../../../shared/ipc';
-import { InstallSkill } from './InstallSkill';
-import { StatusDialog } from './StatusDialog';
+import { groupInboxSkills } from '../lib/skill-sources';
+import type { ScanResult, SkillRecord } from '../../../shared/ipc';
 
 const PAGE_SIZE = 25;
 
@@ -24,21 +23,30 @@ function matchesQuery(skillId: string, query: string): boolean {
 export default function InboxPanel() {
   const bridge = useBridge();
   const [inbox, setInbox] = useState<string[] | null>(null);
+  const [catalog, setCatalog] = useState<SkillRecord[]>([]);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   const [canScan, setCanScan] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [scanBlocked, setScanBlocked] = useState(false);
   const [lastScan, setLastScan] = useState<ScanResult | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    setInbox(await bridge.listInbox());
+    const [nextInbox, nextCatalog] = await Promise.all([bridge.listInbox(), bridge.listSkills()]);
+    setInbox(nextInbox);
+    setCatalog(nextCatalog);
   }, [bridge]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    return bridge.onScan((result) => {
+      setLastScan(result);
+      void refresh();
+    });
+  }, [bridge, refresh]);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,30 +58,39 @@ export default function InboxPanel() {
     };
   }, [bridge]);
 
-  const handleScan = useCallback(async () => {
-    if (!canScan) {
-      setScanBlocked(true);
-      return;
-    }
-    setScanError(null);
-    setScanning(true);
-    const result = await bridge.scan();
-    setScanning(false);
-    if (!result.ok) {
-      setScanError(result.error.message);
-      return;
-    }
-    setLastScan(result.value);
-    await refresh();
-  }, [bridge, canScan, refresh]);
-
   const matches = useMemo(
     () => (inbox ?? []).filter((skillId) => matchesQuery(skillId, query)),
     [inbox, query]
   );
-  const pageCount = matches.length > 0 ? Math.ceil(matches.length / PAGE_SIZE) : 0;
+  const groups = useMemo(() => groupInboxSkills(matches, catalog), [matches, catalog]);
+  const ordered = useMemo(() => groups.flatMap((group) => group.skills), [groups]);
+  const pageCount = ordered.length > 0 ? Math.ceil(ordered.length / PAGE_SIZE) : 0;
   const safePage = pageCount === 0 ? 0 : Math.min(page, pageCount - 1);
-  const visible = matches.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const visibleStart = safePage * PAGE_SIZE;
+  const visibleIds = ordered.slice(visibleStart, visibleStart + PAGE_SIZE);
+  const visibleSet = new Set(visibleIds);
+  const visibleGroups = groups
+    .map((group) => ({ ...group, skills: group.skills.filter((id) => visibleSet.has(id)) }))
+    .filter((group) => group.skills.length > 0);
+
+  const pendingRecord = pendingDelete ? catalog.find((skill) => skill.id === pendingDelete) : undefined;
+  const pendingPaths = pendingRecord?.paths ?? [];
+  const pendingNested = pendingDelete
+    ? catalog.filter((skill) => skill.id.startsWith(`${pendingDelete}/`)).map((skill) => skill.id)
+    : [];
+
+  useEffect(() => {
+    if (!pendingDelete) return;
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setPendingDelete(null);
+        setDeleteError(null);
+      }
+    }
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [pendingDelete]);
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -82,6 +99,23 @@ export default function InboxPanel() {
   function handleQueryChange(value: string) {
     setQuery(value);
     setPage(0);
+  }
+
+  function closeDelete() {
+    setPendingDelete(null);
+    setDeleteError(null);
+  }
+
+  async function handleDelete() {
+    if (!pendingDelete) return;
+    setDeleteError(null);
+    const result = await bridge.deleteSkill(pendingDelete);
+    if (!result.ok) {
+      setDeleteError(result.error.message);
+      return;
+    }
+    setPendingDelete(null);
+    await refresh();
   }
 
   return (
@@ -96,15 +130,6 @@ export default function InboxPanel() {
         </div>
         <div className="library-heading-actions">
           {inbox !== null && <span className="library-count">{inbox.length} skills</span>}
-          <button
-            type="button"
-            className={`icon-button ${FOCUS_RING}`}
-            onClick={() => void handleScan()}
-            disabled={scanning}
-            aria-label="Scan"
-          >
-            <ArrowsClockwise size={16} weight="regular" aria-hidden="true" />
-          </button>
         </div>
       </div>
 
@@ -124,12 +149,6 @@ export default function InboxPanel() {
         </label>
       </form>
 
-      {!canScan && <p className="muted-copy scan-hint">Connect a project folder to scan</p>}
-      {scanError && (
-        <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {scanError}
-        </p>
-      )}
       {lastScan && lastScan.gone.length > 0 && (
         <p role="status" aria-atomic="true" className="scan-gone">
           {goneMessage(lastScan.gone)}
@@ -147,23 +166,41 @@ export default function InboxPanel() {
             ? 'No unfiled skills'
             : 'No unfiled skills. Add from Discover, or connect a folder and scan.'}
         </p>
-      ) : visible.length === 0 ? (
+      ) : visibleGroups.length === 0 ? (
         <p className="muted-copy">No matching skills</p>
       ) : (
         <>
-          <ul className="skill-list">
-            {visible.map((skillId, index) => (
-              <li className="library-skill" key={skillId}>
-                <span className="skill-rank">{safePage * PAGE_SIZE + index + 1}</span>
-                <div className="skill-info">
-                  <div className="skill-name">{skillId}</div>
-                </div>
-                <div className="skill-actions">
-                  <InstallSkill skillId={skillId} instance="inbox" />
-                </div>
-              </li>
+          <div className="command-stages inbox-groups">
+            {visibleGroups.map((group) => (
+              <div className="command-stage" key={group.key}>
+                <p className="stage-label">{group.label}</p>
+                <ul className="skill-list">
+                  {group.skills.map((skillId) => {
+                    const rank = visibleStart + visibleIds.indexOf(skillId) + 1;
+                    return (
+                      <li className="library-skill library-skill-static" key={skillId}>
+                        <span className="skill-rank">{rank}</span>
+                        <div className="skill-info">
+                          <div className="skill-name">{skillId}</div>
+                        </div>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${skillId}`}
+                          className={`delete-card ${FOCUS_RING}`}
+                          onClick={() => {
+                            setDeleteError(null);
+                            setPendingDelete(skillId);
+                          }}
+                        >
+                          <Trash size={16} weight="regular" aria-hidden="true" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
           {pageCount > 1 && (
             <nav aria-label="Pages" className="page-row">
               <button
@@ -192,18 +229,49 @@ export default function InboxPanel() {
         </>
       )}
 
-      {scanBlocked && (
-        <StatusDialog
-          eyebrow="Scan"
-          title="Connect a folder"
-          kind="error"
-          closeLabel="Close scan status"
-          onClose={() => setScanBlocked(false)}
-        >
-          <p role="alert" className="muted-copy text-destructive">
-            Scan reads SKILL.md folders from a connected project. Connect a folder on the Sync tab first.
-          </p>
-        </StatusDialog>
+      {pendingDelete && (
+        <div className="modal-backdrop" role="presentation" onClick={closeDelete}>
+          <div
+            className="help-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-skill-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">Inbox</p>
+            <h2 id="delete-skill-title">Delete {pendingDelete}?</h2>
+            {pendingPaths.length > 0 ? (
+              <>
+                <p className="muted-copy">
+                  This removes the skill from disk. Cannot be undone. Nested skills in the same folder stay.
+                </p>
+                <ul className="skill-delete-paths">
+                  {pendingPaths.map((path) => (
+                    <li key={path}>{path}</li>
+                  ))}
+                </ul>
+                {pendingNested.length > 0 && (
+                  <p className="muted-copy">Keeping {pendingNested.join(', ')}</p>
+                )}
+              </>
+            ) : (
+              <p className="muted-copy">Not on disk. This only drops it from Inbox.</p>
+            )}
+            {deleteError && (
+              <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {deleteError}
+              </p>
+            )}
+            <div className="modal-actions">
+              <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={closeDelete}>
+                Cancel
+              </button>
+              <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={() => void handleDelete()}>
+                Delete skill
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   );

@@ -49,12 +49,13 @@ describe('landing page', () => {
     expect(landing).not.toMatch(/href=["']\/app["']/);
     expect(landing).toContain('Download for Mac');
     expect(landing).toContain('Open app');
-    expect(landing).toContain('github.com/eric-huychung/context_kit');
+    expect(landing).toContain('github.com/eric-huychung/skil');
   });
 
   it('shows a wordmark and beta in the header, not the logo chip', () => {
     const header = readWeb('components/landing/site-nav.tsx');
     expect(header).toContain('Skil');
+    expect(header).toContain('wordmark');
     expect(header).toContain('BETA');
     expect(header).not.toContain('logo-chip');
     expect(header).not.toContain("from '@/components/brand/logo'");
@@ -93,6 +94,9 @@ describe('landing page', () => {
     expect(webGlobals).not.toContain('--color-brand:');
     expect(guiGlobals).toContain("import '../../../../../public/brand.css'");
     expect(guiGlobals).toContain("import '../../../../../public/theme.css'");
+    const theme = readFileSync(join(publicDir, 'theme.css'), 'utf-8');
+    expect(theme).toContain('.wordmark');
+    expect(theme).toContain('-webkit-text-stroke');
   });
 
   it('static-exports so Vercel can keep serving the site next to api/', () => {

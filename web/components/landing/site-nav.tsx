@@ -8,7 +8,7 @@ export function SiteNav() {
     <header className="glass-nav fixed inset-x-0 top-0 z-50">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2">
-          <span className="font-sans text-[1.375rem] font-semibold tracking-tight">Skil</span>
+          <span className="wordmark">Skil</span>
           <Badge
             variant="secondary"
             className="hidden rounded-full text-[10px] font-medium tracking-wide sm:inline-flex"
@@ -29,6 +29,12 @@ export function SiteNav() {
             className="rounded-[var(--radius-hover)] px-3 py-1.5 transition-colors hover:bg-[var(--hover)] hover:text-[var(--hover-foreground)]"
           >
             Product
+          </a>
+          <a
+            href="#discover"
+            className="rounded-[var(--radius-hover)] px-3 py-1.5 transition-colors hover:bg-[var(--hover)] hover:text-[var(--hover-foreground)]"
+          >
+            Discover
           </a>
           <a
             href="#features"

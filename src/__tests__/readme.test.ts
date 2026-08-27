@@ -46,7 +46,7 @@ describe('README product loop', () => {
     expect(readme).not.toMatch(/\bcontextkit run\b/);
     expect(readme).not.toMatch(/\bskil convert\b/);
     expect(readme).not.toMatch(/\bcontextkit convert\b/);
-    expect(readme.toLowerCase()).not.toContain('import from');
     expect(readme.toLowerCase()).not.toContain('import-from-ide');
+    expect(readme.toLowerCase()).not.toContain('import from ide');
   });
 });

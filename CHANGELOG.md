@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to ContextKit are documented here. Versions follow [Semantic Versioning](https://semver.org/) (0.x minors may include breaking CLI changes).
+All notable changes to skil are documented here. Versions follow [Semantic Versioning](https://semver.org/) (0.x minors may include breaking CLI changes).
 
 ## [Unreleased]
 
@@ -14,6 +14,9 @@ All notable changes to ContextKit are documented here. Versions follow [Semantic
 - `skil` CLI bin (keeps `contextkit` as an alias)
 
 ### Changed
+- GUI Re-scan lives next to the header path when a project is connected, not on Discover / Inbox / Sync. Commands Save uses a download icon; a first save with no project binds that folder so Sync and the header pick it up.
+- Stamped command files now ship Goal / Sequence / Rules as one-line comments plus a managed `## Skills` list. Re-export and write-through refresh membership only; `--replace` resets the comments. Old numbered stubs upgrade on the next write.
+- GitHub repo, npm package (`skil`), GUI package (`skil-gui`), and `window.skil` bridge. `contextkit` stays a CLI bin alias; `CONTEXTKIT_API_URL` stays an env fallback.
 - v4 `commands[].skills` loads as Cursor membership. Same name on another IDE adds that IDE's list; it is not "already exists".
 - GUI Commands landing is IDE cards (counts, click into a workspace). Copy to is dest chips, not a Format dropdown.
 - Stamped command pull: that IDE's disk wins (`commandPulls`); other IDEs are left alone.

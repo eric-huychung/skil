@@ -1,5 +1,4 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isErr, isOk } from './result.js';
@@ -7,7 +6,48 @@ import { CollectionEngine, STATE_PATH } from './collection-engine.js';
 import { InMemoryConfigAdapter } from '../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../adapters/in-memory-skills.js';
+import { InMemoryUsageCollector } from '../adapters/in-memory-usage.js';
 import { RealFileSystemAdapter } from '../adapters/real-fs-adapter.js';
+import type { IDE } from '../types/index.js';
+
+/**
+ * `npx skills add --agent` project dirs (vercel-labs/skills). Cursor, Codex,
+ * and Copilot dump into `.agents/skills`, not their dock folders. Folder
+ * name is the last id segment.
+ */
+function npxProjectSkillRoot(ide: IDE): string {
+  switch (ide) {
+    case 'cursor':
+    case 'agents':
+    case 'codex':
+    case 'copilot':
+      return '.agents/skills';
+    case 'claude':
+      return '.claude/skills';
+    case 'windsurf':
+      return '.windsurf/skills';
+  }
+}
+
+class NpxLayoutSkillsAdapter extends InMemorySkillsAdapter {
+  constructor(private readonly disk: InMemoryFileSystemAdapter) {
+    super();
+  }
+
+  override async install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }) {
+    const result = await super.install(skillId, targetIDE, opts);
+    if (!isOk(result)) {
+      return result;
+    }
+    const shortName = skillId.split('/').filter(Boolean).at(-1) ?? skillId;
+    const prefix = opts?.cwd ? `${opts.cwd.replace(/\\/g, '/').replace(/\/+$/, '')}/` : '';
+    this.disk.writeFile(
+      `${prefix}${npxProjectSkillRoot(targetIDE)}/${shortName}/SKILL.md`,
+      `# ${shortName}\n`
+    );
+    return result;
+  }
+}
 
 describe('CollectionEngine', () => {
   let fs: InMemoryFileSystemAdapter;
@@ -276,6 +316,54 @@ describe('CollectionEngine', () => {
         expect(persisted.value.commands).toHaveLength(1);
       }
     });
+
+    it('persists v6 skills[] with no membership', () => {
+      engine.create('build', ['tdd', 'design']);
+
+      const persisted = fs.readJSON<{
+        version: string;
+        commands: Array<{ name: string; skills?: string[]; membership?: unknown }>;
+      }>(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.version).toBe('6.0');
+        expect(persisted.value.commands).toEqual([
+          expect.objectContaining({ name: 'build', skills: ['tdd', 'design'] }),
+        ]);
+        expect(persisted.value.commands[0]?.membership).toBeUndefined();
+      }
+      expect(engine.list()).toEqual([expect.objectContaining({ name: 'build', skills: ['tdd', 'design'] })]);
+    });
+
+    it('loads v5 membership as a union with cursor first', () => {
+      fs.writeJSON(STATE_PATH, {
+        commands: [
+          {
+            name: 'build',
+            membership: { cursor: ['tdd'], claude: ['tdd', 'design'], agents: ['ui'] },
+            createdAt: '2024-01-01T00:00:00.000Z',
+          },
+        ],
+        skills: [],
+        inbox: [],
+        version: '5.0',
+      });
+      const loaded = new CollectionEngine(fs, config, skills);
+
+      expect(loaded.list()).toEqual([
+        { name: 'build', skills: ['tdd', 'design', 'ui'], createdAt: '2024-01-01T00:00:00.000Z' },
+      ]);
+      const persisted = fs.readJSON<{ version: string; commands: Array<{ membership?: unknown }> }>(STATE_PATH);
+      expect(isOk(persisted)).toBe(true);
+      if (isOk(persisted)) {
+        expect(persisted.value.version).toBe('5.0');
+        expect(persisted.value.commands[0]?.membership).toEqual({
+          cursor: ['tdd'],
+          claude: ['tdd', 'design'],
+          agents: ['ui'],
+        });
+      }
+    });
   });
 
   describe('sync', () => {
@@ -492,7 +580,7 @@ describe('CollectionEngine', () => {
         expect(written.value).toContain('- obra/react-patterns');
       }
       expect(isOk(fs.readFile('/tmp/other-project/.cursor/commands/build.md'))).toBe(true);
-      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
       expect(engine.list()).toEqual([expect.objectContaining({ name: 'build' })]);
     });
 
@@ -542,6 +630,7 @@ describe('CollectionEngine', () => {
 
     it('keeps a customized Goal when filing a skill onto a stamped command', async () => {
       engine.create('build', ['tdd']);
+      await engine.exportCommand('build', 'cursor');
       const stamp = fs.readFile('.cursor/commands/build.md');
       expect(isOk(stamp)).toBe(true);
       if (isOk(stamp)) {
@@ -567,6 +656,7 @@ describe('CollectionEngine', () => {
 
     it('resets Goal, Sequence, and Rules when replace is set on a stamped file', async () => {
       engine.create('build', ['tdd']);
+      await engine.exportCommand('build', 'cursor');
       const stamp = fs.readFile('.cursor/commands/build.md');
       expect(isOk(stamp)).toBe(true);
       if (isOk(stamp)) {
@@ -600,10 +690,11 @@ describe('CollectionEngine', () => {
       if (isErr(missing)) {
         expect(missing.error.message).toContain("Command 'missing' not found");
       }
-      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
 
       const exported = await engine.exportCommand('/build', 'cursor');
       expect(isOk(exported)).toBe(true);
+      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
       expect(fs.readFile('.claude/commands/build.md')).toEqual({ ok: true, value: '# keep me\n' });
       expect(fs.readFile('.windsurf/workflows/build.md')).toEqual({
         ok: true,
@@ -688,6 +779,38 @@ describe('CollectionEngine', () => {
       }
       expect(skills.getInstalls()).toEqual([{ skillId: 'obra/react-patterns', ide: 'claude' }]);
     });
+
+    it('exports filed skills to Codex without a command file', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      engine.scan();
+      engine.create('build', ['tdd']);
+
+      const result = await engine.exportCommand('build', 'codex');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.succeeded).toEqual(['.codex/skills/tdd']);
+        expect(result.value.failures).toEqual([]);
+      }
+      expect(fs.readFile('.codex/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
+      expect(isErr(fs.readFile('.codex/commands/build.md'))).toBe(true);
+    });
+
+    it('exports a VS Code prompt file and filed skills to Copilot', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      engine.scan();
+      engine.create('build', ['tdd']);
+
+      const result = await engine.exportCommand('build', 'copilot');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.succeeded).toEqual(['.github/prompts/build.prompt.md', '.github/skills/tdd']);
+        expect(result.value.failures).toEqual([]);
+      }
+      expect(fs.readFile('.github/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
+      expect(isOk(fs.readFile('.github/prompts/build.prompt.md'))).toBe(true);
+    });
   });
 
   describe('exportAll', () => {
@@ -732,7 +855,7 @@ describe('CollectionEngine', () => {
         expect(refused.error.message).toMatch(/not generated by skil|replace/i);
         expect(refused.error.message).toMatch(/\/testing/);
       }
-      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
       expect(fs.readFile('.cursor/commands/testing.md')).toEqual({
         ok: true,
         value: '# their old /testing\n',
@@ -807,8 +930,34 @@ describe('CollectionEngine', () => {
       }
       expect(isOk(fs.readFile('/tmp/other-project/.cursor/commands/build.md'))).toBe(true);
       expect(isOk(fs.readFile('/tmp/other-project/.cursor/commands/testing.md'))).toBe(true);
-      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
       expect(engine.list().map((c) => c.name)).toEqual(['build', 'testing']);
+    });
+  });
+
+  describe('market skill export (npx layout)', () => {
+    it('keeps a Discover skill on the Cursor command after save, in .cursor not .agents', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, config, npx);
+
+      engine.addToInbox('vercel-labs/skills/find-skills');
+      engine.create('build', []);
+      engine.file('vercel-labs/skills/find-skills', 'build', 'cursor');
+
+      const exported = await engine.exportAll('cursor');
+      expect(isOk(exported)).toBe(true);
+
+      engine.scan();
+
+      expect(engine.list()[0]?.skills).toEqual(['vercel-labs/skills/find-skills']);
+      const commandFile = fs.readFile('.cursor/commands/build.md');
+      expect(isOk(commandFile)).toBe(true);
+      if (isOk(commandFile)) {
+        expect(commandFile.value).toContain('vercel-labs/skills/find-skills');
+      }
+      expect(isOk(fs.readFile('.cursor/skills/vercel-labs/skills/find-skills/SKILL.md'))).toBe(true);
+      expect(isErr(fs.readFile('.agents/skills/find-skills/SKILL.md'))).toBe(true);
+      expect(isErr(fs.readFile('.agents/commands/build.md'))).toBe(true);
     });
   });
 
@@ -866,6 +1015,67 @@ describe('CollectionEngine', () => {
       expect(record?.deployedTo).toEqual([
         expect.objectContaining({ ide: 'claude', path: '.claude/skills/tdd' }),
       ]);
+    });
+
+    it('installs to Codex under .codex/skills and records deployedTo', async () => {
+      const result = await engine.install('obra/x', 'codex');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.paths).toEqual(['.codex/skills/obra/x']);
+        expect(result.value.deployedTo).toEqual([
+          expect.objectContaining({ ide: 'codex', path: '.codex/skills/obra/x' }),
+        ]);
+      }
+      expect(isErr(fs.readFile('.codex/commands/obra/x.md'))).toBe(true);
+    });
+
+    it('installs to Copilot under .github/skills and records deployedTo', async () => {
+      const result = await engine.install('obra/x', 'copilot');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.paths).toEqual(['.github/skills/obra/x']);
+        expect(result.value.deployedTo).toEqual([
+          expect.objectContaining({ ide: 'copilot', path: '.github/skills/obra/x' }),
+        ]);
+      }
+    });
+
+    it('places a Cursor install under .cursor/skills and removes the vercel .agents dump', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, config, npx);
+
+      const result = await engine.install('obra/react-patterns', 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      expect(isOk(fs.readFile('.cursor/skills/obra/react-patterns/SKILL.md'))).toBe(true);
+      expect(isErr(fs.readFile('.agents/skills/react-patterns/SKILL.md'))).toBe(true);
+      expect(engine.skills()[0]?.paths).toEqual(['.cursor/skills/obra/react-patterns']);
+    });
+
+    it('places an agents install under .agents/skills', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, config, npx);
+
+      const result = await engine.install('obra/react-patterns', 'agents');
+
+      expect(isOk(result)).toBe(true);
+      expect(isOk(fs.readFile('.agents/skills/obra/react-patterns/SKILL.md'))).toBe(true);
+      expect(engine.skills()[0]?.paths).toEqual(['.agents/skills/obra/react-patterns']);
+    });
+
+    it('places Codex and Copilot installs in their dock folders after a vercel .agents dump', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, config, npx);
+
+      await engine.install('obra/x', 'codex');
+      expect(isOk(fs.readFile('.codex/skills/obra/x/SKILL.md'))).toBe(true);
+      expect(isErr(fs.readFile('.agents/skills/x/SKILL.md'))).toBe(true);
+
+      await engine.install('obra/y', 'copilot');
+      expect(isOk(fs.readFile('.github/skills/obra/y/SKILL.md'))).toBe(true);
+      expect(isErr(fs.readFile('.agents/skills/y/SKILL.md'))).toBe(true);
     });
 
     it('upserts deployedTo when the same skill is installed to a second IDE', async () => {
@@ -1255,8 +1465,30 @@ describe('CollectionEngine', () => {
       expect(engine.skills()).toEqual([
         expect.objectContaining({ id: 'tdd', paths: ['.cursor/skills/tdd'] }),
         expect.objectContaining({ id: 'ui', paths: ['.claude/skills/ui'] }),
-        expect.objectContaining({ id: 'lint', paths: ['.windsurf/skills/lint'] }),
         expect.objectContaining({ id: 'review', paths: ['.agents/skills/review'] }),
+        expect.objectContaining({ id: 'lint', paths: ['.windsurf/skills/lint'] }),
+      ]);
+    });
+
+    it('finds skills under .codex/skills', () => {
+      fs.writeFile('.codex/skills/tdd/SKILL.md', '# tdd\n');
+
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.skills()).toEqual([
+        expect.objectContaining({ id: 'tdd', paths: ['.codex/skills/tdd'] }),
+      ]);
+    });
+
+    it('finds skills under .github/skills', () => {
+      fs.writeFile('.github/skills/tdd/SKILL.md', '# tdd\n');
+
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.skills()).toEqual([
+        expect.objectContaining({ id: 'tdd', paths: ['.github/skills/tdd'] }),
       ]);
     });
 
@@ -1367,9 +1599,8 @@ describe('CollectionEngine', () => {
       expect(engine.skills().map((record) => record.id)).toEqual(['testing']);
     });
 
-    it('lets a stamped Claude command file win for Claude only', () => {
+    it('does not adopt stamp extra ids into the map', () => {
       engine.create('build', ['tdd']);
-      engine.create('build', ['tdd'], undefined, 'claude');
       fs.writeFile(
         '.claude/commands/build.md',
         `---
@@ -1392,13 +1623,28 @@ generated_at: 2026-08-24T00:00:00.000Z
       if (isOk(result)) {
         expect(result.value.commandPulls).toEqual([{ ide: 'claude', name: 'build' }]);
       }
-      expect(engine.list('claude').find((command) => command.name === 'build')?.skills).toEqual(['tdd', 'design']);
-      expect(engine.list('cursor').find((command) => command.name === 'build')?.skills).toEqual(['tdd']);
+      expect(engine.list().find((command) => command.name === 'build')?.skills).toEqual(['tdd']);
       const claudeStamp = fs.readFile('.claude/commands/build.md');
       expect(isOk(claudeStamp)).toBe(true);
       if (isOk(claudeStamp)) {
         expect(claudeStamp.value).toContain('generated_at: 2026-08-24T00:00:00.000Z');
+        expect(claudeStamp.value).toContain('- design');
       }
+    });
+
+    it('unions the same hash in two docks into one catalog row', () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      fs.writeFile('.claude/skills/tdd/SKILL.md', '# tdd\n');
+
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.skills()).toEqual([
+        expect.objectContaining({
+          id: 'tdd',
+          paths: ['.cursor/skills/tdd', '.claude/skills/tdd'],
+        }),
+      ]);
     });
   });
 
@@ -1477,21 +1723,20 @@ generated_at: 2026-08-24T00:00:00.000Z
       expect(engine.skills()).toEqual([]);
     });
 
-    it('unfiles the id from every IDE and rewrites stamps', () => {
+    it('unfiles the id and rewrites existing stamps', async () => {
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
       fs.writeFile('.cursor/skills/design/SKILL.md', '# design\n');
       engine.scan();
       engine.create('build', []);
-      engine.file('tdd', 'build', 'cursor');
-      engine.file('design', 'build', 'cursor');
-      engine.create('build', [], undefined, 'claude');
-      engine.file('tdd', 'build', 'claude');
+      engine.file('tdd', 'build');
+      engine.file('design', 'build');
+      await engine.exportCommand('build', 'cursor');
+      await engine.exportCommand('build', 'claude');
 
       const result = engine.deleteSkill('tdd');
 
       expect(isOk(result)).toBe(true);
-      expect(engine.list('cursor')[0]?.skills).toEqual(['design']);
-      expect(engine.list('claude')[0]?.skills).toEqual([]);
+      expect(engine.list()[0]?.skills).toEqual(['design']);
       const cursorStamp = fs.readFile('.cursor/commands/build.md');
       expect(isOk(cursorStamp)).toBe(true);
       if (isOk(cursorStamp)) {
@@ -1542,7 +1787,7 @@ generated_at: 2026-08-24T00:00:00.000Z
     });
 
     it('prunes empty parent directories on a real disk', () => {
-      const tmpDir = mkdtempSync(join(tmpdir(), 'skil-delete-'));
+      const tmpDir = mkdtempSync(join(process.cwd(), 'tmp-skil-delete-'));
       try {
         const realFs = new RealFileSystemAdapter(tmpDir);
         const realEngine = new CollectionEngine(realFs, new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
@@ -1560,20 +1805,44 @@ generated_at: 2026-08-24T00:00:00.000Z
     });
   });
 
-  describe('per-IDE membership', () => {
-    it('files onto Cursor /build without changing Claude /build', () => {
-      engine.create('build', []);
-      engine.create('build', ['design'], undefined, 'claude');
-      engine.addToInbox('tdd');
+  describe('one command list', () => {
+    it('create twice is already exists', () => {
+      engine.create('build', ['tdd']);
 
-      const result = engine.file('tdd', 'build', 'cursor');
+      const result = engine.create('build', ['design'], undefined, 'claude');
 
-      expect(isOk(result)).toBe(true);
-      expect(engine.list('cursor').find((command) => command.name === 'build')?.skills).toEqual(['tdd']);
-      expect(engine.list('claude').find((command) => command.name === 'build')?.skills).toEqual(['design']);
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain("Command 'build' already exists");
+      }
+      expect(engine.list()).toEqual([expect.objectContaining({ name: 'build', skills: ['tdd'] })]);
     });
 
-    it('loads v4 skills[] as Cursor membership', () => {
+    it('file and removeSkill update the one list; Inbox is unchanged', () => {
+      engine.create('build', []);
+      engine.addToInbox('tdd');
+      engine.addToInbox('design');
+
+      const filed = engine.file('tdd', 'build', 'cursor');
+      expect(isOk(filed)).toBe(true);
+      expect(engine.list()[0]?.skills).toEqual(['tdd']);
+      expect(engine.inbox()).toEqual(['tdd', 'design']);
+
+      engine.removeSkill('build', 'tdd', 'claude');
+      expect(engine.list()[0]?.skills).toEqual([]);
+      expect(engine.inbox()).toEqual(['tdd', 'design']);
+    });
+
+    it('delete drops the command for the whole project', () => {
+      engine.create('build', ['tdd']);
+
+      const result = engine.delete('build', 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.list()).toEqual([]);
+    });
+
+    it('loads v4 skills[] as the project list', () => {
       fs.writeJSON(STATE_PATH, {
         commands: [{ name: 'build', skills: ['tdd'], createdAt: '2024-01-01T00:00:00.000Z' }],
         skills: [],
@@ -1582,47 +1851,25 @@ generated_at: 2026-08-24T00:00:00.000Z
       });
       const loaded = new CollectionEngine(fs, config, skills);
 
-      expect(loaded.list('cursor')).toEqual([
+      expect(loaded.list()).toEqual([
         { name: 'build', skills: ['tdd'], createdAt: '2024-01-01T00:00:00.000Z' },
       ]);
-      expect(loaded.list('claude')).toEqual([]);
-    });
-
-    it('create on Claude adds membership when Cursor already has the name', () => {
-      engine.create('build', ['tdd']);
-
-      const result = engine.create('build', ['design'], undefined, 'claude');
-
-      expect(isOk(result)).toBe(true);
-      expect(engine.list('cursor')[0]?.skills).toEqual(['tdd']);
-      expect(engine.list('claude')[0]?.skills).toEqual(['design']);
-    });
-
-    it('delete drops Cursor membership and leaves Claude', () => {
-      engine.create('build', ['tdd']);
-      engine.create('build', ['design'], undefined, 'claude');
-
-      const result = engine.delete('build', 'cursor');
-
-      expect(isOk(result)).toBe(true);
-      expect(engine.list('cursor')).toEqual([]);
-      expect(engine.list('claude')[0]?.skills).toEqual(['design']);
     });
   });
 
   describe('copyTo', () => {
-    it('copies Cursor membership to Claude without rewriting the Cursor stamp', async () => {
+    it('writes the same list to Claude without rewriting a Cursor stamp', async () => {
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
       engine.scan();
       engine.create('build', ['tdd']);
+      await engine.exportCommand('build', 'cursor');
       const cursorStamp = fs.readFile('.cursor/commands/build.md');
       expect(isOk(cursorStamp)).toBe(true);
 
       const result = await engine.copyTo('build', 'cursor', 'claude');
 
       expect(isOk(result)).toBe(true);
-      expect(engine.list('claude')[0]?.skills).toEqual(['tdd']);
-      expect(engine.list('cursor')[0]?.skills).toEqual(['tdd']);
+      expect(engine.list()[0]?.skills).toEqual(['tdd']);
       const claudeFile = fs.readFile('.claude/commands/build.md');
       expect(isOk(claudeFile)).toBe(true);
       if (isOk(claudeFile)) {
@@ -1633,6 +1880,22 @@ generated_at: 2026-08-24T00:00:00.000Z
       expect(after).toEqual(cursorStamp);
     });
 
+    it('writes the same skills list to Claude with a default command body', async () => {
+      engine.create('build', ['tdd']);
+
+      const result = await engine.copyTo('build', 'cursor', 'claude');
+
+      expect(isOk(result)).toBe(true);
+      const written = fs.readFile('.claude/commands/build.md');
+      expect(isOk(written)).toBe(true);
+      if (isOk(written)) {
+        expect(written.value).toContain('generated_by: skil');
+        expect(written.value).toContain('- tdd');
+        expect(written.value).toContain('<!-- Describe what this command is for. -->');
+      }
+      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+    });
+
     it('refuses an unstamped dest file unless replace is true', async () => {
       engine.create('build', ['tdd']);
       fs.writeFile('.claude/commands/build.md', '# leftover\n');
@@ -1640,20 +1903,37 @@ generated_at: 2026-08-24T00:00:00.000Z
       const refused = await engine.copyTo('build', 'cursor', 'claude');
 
       expect(isErr(refused)).toBe(true);
-      expect(engine.list('claude')).toEqual([]);
+      expect(engine.list()[0]?.skills).toEqual(['tdd']);
       expect(fs.readFile('.claude/commands/build.md')).toEqual({ ok: true, value: '# leftover\n' });
 
       const replaced = await engine.copyTo('build', 'cursor', 'claude', { replace: true });
       expect(isOk(replaced)).toBe(true);
-      expect(engine.list('claude')[0]?.skills).toEqual(['tdd']);
+      const written = fs.readFile('.claude/commands/build.md');
+      expect(isOk(written)).toBe(true);
+      if (isOk(written)) {
+        expect(written.value).toContain('generated_by: skil');
+        expect(written.value).toContain('tdd');
+        expect(written.value).not.toContain('# leftover');
+      }
     });
   });
 
   describe('write-through', () => {
-    it('files on Cursor rewrite Cursor stamps and do not write Claude', () => {
+    it('does not create a stamp until export', () => {
       engine.create('build', []);
       engine.addToInbox('tdd');
       engine.file('tdd', 'build', 'cursor');
+
+      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(isErr(fs.readFile('.claude/commands/build.md'))).toBe(true);
+    });
+
+    it('files rewrite existing stamps on every dock with the same list', async () => {
+      engine.create('build', []);
+      await engine.exportCommand('build', 'cursor');
+      await engine.exportCommand('build', 'claude');
+      engine.addToInbox('tdd');
+      engine.file('tdd', 'build');
 
       const cursorFile = fs.readFile('.cursor/commands/build.md');
       expect(isOk(cursorFile)).toBe(true);
@@ -1661,23 +1941,24 @@ generated_at: 2026-08-24T00:00:00.000Z
         expect(cursorFile.value).toContain('tdd');
         expect(cursorFile.value).toContain('generated_by: skil');
       }
-      expect(isErr(fs.readFile('.claude/commands/build.md'))).toBe(true);
-    });
-
-    it('delete Cursor /build removes our Cursor stamp and leaves Claude', () => {
-      engine.create('build', ['tdd']);
-      engine.create('build', ['design'], undefined, 'claude');
-      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
-      expect(isOk(fs.readFile('.claude/commands/build.md'))).toBe(true);
-
-      engine.delete('build', 'cursor');
-
-      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
       const claudeFile = fs.readFile('.claude/commands/build.md');
       expect(isOk(claudeFile)).toBe(true);
       if (isOk(claudeFile)) {
-        expect(claudeFile.value).toContain('design');
+        expect(claudeFile.value).toContain('tdd');
       }
+    });
+
+    it('delete removes our stamps on every dock', async () => {
+      engine.create('build', ['tdd']);
+      await engine.exportCommand('build', 'cursor');
+      await engine.exportCommand('build', 'claude');
+      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(isOk(fs.readFile('.claude/commands/build.md'))).toBe(true);
+
+      engine.delete('build');
+
+      expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      expect(isErr(fs.readFile('.claude/commands/build.md'))).toBe(true);
     });
 
     it('leaves an unstamped Cursor command file alone', () => {
@@ -1687,11 +1968,14 @@ generated_at: 2026-08-24T00:00:00.000Z
       engine.file('design', 'build', 'cursor');
 
       expect(fs.readFile('.cursor/commands/build.md')).toEqual({ ok: true, value: '# leftover\n' });
-      expect(engine.list('cursor')[0]?.skills).toEqual(['tdd', 'design']);
+      expect(engine.list()[0]?.skills).toEqual(['tdd', 'design']);
     });
 
-    it('does not rewrite a stamp on scan when membership is unchanged', () => {
+    it('does not rewrite a stamp on scan when the map is unchanged', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      engine.scan();
       engine.create('build', ['tdd']);
+      await engine.exportCommand('build', 'cursor');
       const before = fs.readFile('.cursor/commands/build.md');
 
       engine.scan();
@@ -1700,13 +1984,14 @@ generated_at: 2026-08-24T00:00:00.000Z
       expect(engine.lastWrittenPaths()).toEqual([]);
     });
 
-    it('rewrites a stamp on scan when gone-id cleanup changed membership', () => {
+    it('rewrites a stamp on scan when gone-id cleanup changed the list', async () => {
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
       fs.writeFile('.cursor/skills/design/SKILL.md', '# design\n');
       engine.scan();
       engine.create('build', []);
       engine.file('tdd', 'build');
       engine.file('design', 'build');
+      await engine.exportCommand('build', 'cursor');
       fs.removeFile('.cursor/skills/design/SKILL.md');
 
       const result = engine.scan();
@@ -1720,6 +2005,306 @@ generated_at: 2026-08-24T00:00:00.000Z
         expect(stamp.value).toContain('tdd');
         expect(stamp.value).not.toMatch(/^\s*-\s*design\s*$/m);
       }
+    });
+  });
+
+  describe('importFrom', () => {
+    const SOURCE = '/tmp/other-project';
+
+    function sourceFile(relative: string, contents: string): void {
+      fs.writeFile(`${SOURCE}/${relative}`, contents);
+    }
+
+    function stampedCommand(name: string, skillIds: string[], goal = 'from the other project'): string {
+      const skillLines =
+        skillIds.length === 0 ? 'skills: []' : `skills:\n${skillIds.map((id) => `  - ${id}`).join('\n')}`;
+      return `---
+name: /${name}
+${skillLines}
+generated_by: skil
+generated_at: 2026-08-24T00:00:00.000Z
+---
+
+## Goal
+${goal}
+`;
+    }
+
+    it('copies missing skills and stamped commands onto this project', async () => {
+      sourceFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      sourceFile('.cursor/commands/build.md', stampedCommand('build', ['tdd']));
+      sourceFile('.claude/skills/ui/SKILL.md', '# ui\n');
+      sourceFile('.claude/commands/review.md', stampedCommand('review', ['ui']));
+
+      const result = await engine.importFrom(SOURCE, 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      expect(fs.readFile('.cursor/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
+      expect(engine.inbox()).toEqual(['tdd']);
+      expect(engine.list().find((command) => command.name === 'build')?.skills).toEqual(['tdd']);
+      expect(isErr(fs.readFile('.claude/skills/ui/SKILL.md'))).toBe(true);
+      expect(engine.list().map((command) => command.name)).toEqual(['build']);
+      const destStamp = fs.readFile('.cursor/commands/build.md');
+      expect(isOk(destStamp)).toBe(true);
+      if (isOk(destStamp)) {
+        expect(destStamp.value).toContain('from the other project');
+      }
+    });
+
+    it('imports a skil command whose frontmatter lost the closing fence', async () => {
+      sourceFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      sourceFile('.cursor/commands/research.md', stampedCommand('research', ['tdd']));
+      sourceFile(
+        '.cursor/commands/plan.md',
+        `---
+
+## name: /plan
+
+skills:
+
+- productivity/diagram-maker
+- philosophy/tdd
+- design/codebase-design
+- design/to-tasks
+generated_by: skil
+generated_at: 2026-08-26T05:49:28.896Z
+
+## Goal
+
+Turn the spec into architecture and a small task list.
+`
+      );
+
+      const result = await engine.importFrom(SOURCE, 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.list().map((command) => command.name).sort()).toEqual(['plan', 'research']);
+      expect(engine.list().find((command) => command.name === 'plan')?.skills).toEqual([
+        'productivity/diagram-maker',
+        'philosophy/tdd',
+        'design/codebase-design',
+        'design/to-tasks',
+      ]);
+      const dest = fs.readFile('.cursor/commands/plan.md');
+      expect(isOk(dest)).toBe(true);
+      if (isOk(dest)) {
+        expect(dest.value).toMatch(/^---\nname: \/plan\n/);
+        expect(dest.value).toContain('\n---\n');
+        expect(dest.value).not.toContain('## name:');
+        expect(dest.value).toContain('Turn the spec into architecture and a small task list.');
+        expect(dest.value).not.toContain('<!-- Describe what this command is for. -->');
+      }
+    });
+
+    it('heals a broken dest stamp on replace import instead of pasting ## name into the body', async () => {
+      engine.create('plan', ['tdd']);
+      sourceFile(
+        '.cursor/commands/plan.md',
+        `---
+
+## name: /plan
+
+skills:
+
+- philosophy/tdd
+generated_by: skil
+generated_at: 2026-08-26T05:49:28.896Z
+
+## Goal
+
+Turn the spec into architecture and a small task list.
+`
+      );
+
+      const result = await engine.importFrom(SOURCE, 'cursor', { replace: true });
+
+      expect(isOk(result)).toBe(true);
+      const dest = fs.readFile('.cursor/commands/plan.md');
+      expect(isOk(dest)).toBe(true);
+      if (isOk(dest)) {
+        expect(dest.value).toMatch(/^---\nname: \/plan\n/);
+        expect(dest.value).not.toContain('## name:');
+        expect(dest.value).toContain('Turn the spec into architecture and a small task list.');
+        expect(dest.value).not.toContain('<!-- Describe what this command is for. -->');
+      }
+    });
+
+    it('does not adopt a stamp that is not on the map', () => {
+      fs.writeFile(
+        '.cursor/commands/plan.md',
+        `---
+
+## name: /plan
+
+skills:
+
+- philosophy/tdd
+generated_by: skil
+generated_at: 2026-08-26T05:49:28.896Z
+
+## Goal
+
+Turn the spec into architecture and a small task list.
+`
+      );
+
+      const scanned = engine.scan();
+
+      expect(isOk(scanned)).toBe(true);
+      expect(engine.list()).toEqual([]);
+      const dest = fs.readFile('.cursor/commands/plan.md');
+      expect(isOk(dest)).toBe(true);
+      if (isOk(dest)) {
+        expect(dest.value).toContain('## name: /plan');
+      }
+    });
+
+    it('ignores unstamped source commands and source inbox state', async () => {
+      sourceFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      sourceFile('.cursor/commands/planning.md', '# leftover\n');
+      fs.writeJSON(`${SOURCE}/.skil/state.json`, {
+        version: '5.0',
+        commands: [],
+        skills: [],
+        inbox: ['obra/react-patterns'],
+      });
+
+      const result = await engine.importFrom(SOURCE, 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.inbox()).toEqual(['tdd']);
+      expect(engine.list()).toEqual([]);
+      expect(isErr(fs.readFile('.cursor/commands/planning.md'))).toBe(true);
+    });
+
+    it('errors when dest already has a different skill body unless replace is set', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# dest tdd\n');
+      engine.scan();
+      sourceFile('.cursor/skills/tdd/SKILL.md', '# source tdd\n');
+
+      const blocked = await engine.importFrom(SOURCE, 'cursor');
+
+      expect(isErr(blocked)).toBe(true);
+      if (isErr(blocked)) {
+        expect(blocked.error.message).toMatch(/tdd/);
+        expect(blocked.error.message).toMatch(/replace/i);
+      }
+      expect(fs.readFile('.cursor/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# dest tdd\n' });
+
+      const replaced = await engine.importFrom(SOURCE, 'cursor', { replace: true });
+
+      expect(isOk(replaced)).toBe(true);
+      expect(fs.readFile('.cursor/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# source tdd\n' });
+    });
+
+    it('leaves a same-hash dest skill alone and still adds new skills', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      engine.scan();
+      sourceFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      sourceFile('.cursor/skills/design/SKILL.md', '# design\n');
+
+      const result = await engine.importFrom(SOURCE, 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      expect(fs.readFile('.cursor/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
+      expect(fs.readFile('.cursor/skills/design/SKILL.md')).toEqual({ ok: true, value: '# design\n' });
+      expect(engine.inbox().sort()).toEqual(['design', 'tdd']);
+    });
+
+    it('errors when dest already has the command unless replace is set', async () => {
+      engine.create('build', ['design']);
+      sourceFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      sourceFile('.cursor/commands/build.md', stampedCommand('build', ['tdd']));
+
+      const blocked = await engine.importFrom(SOURCE, 'cursor');
+
+      expect(isErr(blocked)).toBe(true);
+      if (isErr(blocked)) {
+        expect(blocked.error.message).toMatch(/build/);
+      }
+      expect(engine.list()[0]?.skills).toEqual(['design']);
+
+      const replaced = await engine.importFrom(SOURCE, 'cursor', { replace: true });
+
+      expect(isOk(replaced)).toBe(true);
+      expect(engine.list()[0]?.skills).toEqual(['tdd']);
+    });
+
+    it('refuses an unstamped dest command file unless replace is set', async () => {
+      fs.writeFile('.cursor/commands/build.md', '# leftover\n');
+      sourceFile('.cursor/commands/build.md', stampedCommand('build', []));
+
+      const blocked = await engine.importFrom(SOURCE, 'cursor');
+
+      expect(isErr(blocked)).toBe(true);
+      if (isErr(blocked)) {
+        expect(blocked.error.message).toMatch(/not generated by skil/);
+      }
+      expect(fs.readFile('.cursor/commands/build.md')).toEqual({ ok: true, value: '# leftover\n' });
+
+      const replaced = await engine.importFrom(SOURCE, 'cursor', { replace: true });
+
+      expect(isOk(replaced)).toBe(true);
+      const dest = fs.readFile('.cursor/commands/build.md');
+      expect(isOk(dest)).toBe(true);
+      if (isOk(dest)) {
+        expect(dest.value).toContain('generated_by: skil');
+      }
+    });
+
+    it('errors when the source has no skills or stamped commands', async () => {
+      sourceFile('.cursor/commands/planning.md', '# leftover\n');
+
+      const result = await engine.importFrom(SOURCE, 'cursor');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toMatch(/nothing to import/i);
+      }
+    });
+
+    it('errors when sourceRoot is this project', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+
+      const result = await engine.importFrom('.', 'cursor');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toMatch(/itself/i);
+      }
+    });
+  });
+
+  describe('usage', () => {
+    it('aggregates two collector events for a catalog skill as count 2', async () => {
+      const usage = new InMemoryUsageCollector();
+      usage.seed([
+        { skillId: 'tdd', source: 'claude' },
+        { skillId: 'tdd', source: 'claude' },
+      ]);
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      engine = new CollectionEngine(fs, config, skills, usage);
+      engine.scan();
+
+      expect(await engine.usage()).toEqual({
+        ok: true,
+        value: [{ skillId: 'tdd', count: 2 }],
+      });
+    });
+
+    it('returns a collector error and still lets scan run', async () => {
+      const usage = new InMemoryUsageCollector();
+      usage.setCollectError(new Error('log unreadable'));
+      engine = new CollectionEngine(fs, config, skills, usage);
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+
+      const result = await engine.usage();
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('log unreadable');
+      }
+      expect(isOk(engine.scan())).toBe(true);
+      expect(engine.inbox()).toEqual(['tdd']);
     });
   });
 });

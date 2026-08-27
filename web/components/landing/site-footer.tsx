@@ -9,7 +9,7 @@ export function SiteFooter() {
           <Logo
             chipClassName="size-6 rounded-md"
             markClassName="size-4"
-            wordmarkClassName="text-sm font-medium"
+            wordmarkClassName="text-[1.15rem] [-webkit-text-stroke-width:1.15px]"
           />
         </Link>
         <p className="text-sm text-muted-foreground">

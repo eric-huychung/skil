@@ -47,7 +47,7 @@ export function Logo({
         <LogoMark className={cn('size-5', markClassName)} />
       </span>
       {withWordmark && (
-        <span className={cn('font-sans text-base font-semibold tracking-tight', wordmarkClassName)}>Skil</span>
+        <span className={cn('wordmark', wordmarkClassName)}>Skil</span>
       )}
     </span>
   );

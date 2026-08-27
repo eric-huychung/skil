@@ -1,0 +1,6 @@
+{"type":"user","message":{"content":"run tests"}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the tdd skill."},{"type":"tool_use","id":"1","name":"Read","input":{"file_path":"/tmp/skil-usage/.claude/skills/tdd/SKILL.md"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"2","name":"Read","input":{"file_path":"/tmp/skil-usage/.claude/skills/tdd/SKILL.md"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"3","name":"Read","input":{"file_path":"/tmp/skil-usage/README.md"}}]}}
+not-json
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"4","name":"Bash","input":{"command":"npm test"}}]}}

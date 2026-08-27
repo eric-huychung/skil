@@ -15,7 +15,7 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
 
   beforeEach(() => {
     originalCwd = process.cwd();
-    tmpDir = mkdtempSync(join(tmpdir(), 'contextkit-integration-'));
+    tmpDir = mkdtempSync(join(tmpdir(), 'skil-integration-'));
     // CollectionEngine resolves its state path relative to cwd,
     // matching how the real CLI is invoked from within a project root.
     process.chdir(tmpDir);
@@ -37,7 +37,7 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
 
     const persisted = JSON.parse(readFileSync(join(tmpDir, '.skil', 'state.json'), 'utf-8'));
     expect(persisted.commands).toEqual([
-      expect.objectContaining({ name: 'frontend', membership: { cursor: ['react-patterns'] } }),
+      expect.objectContaining({ name: 'frontend', skills: ['react-patterns'] }),
     ]);
   });
 
@@ -88,7 +88,7 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
     expect(engine.list().map((c) => c.name)).toEqual(['frontend']);
     const persisted = JSON.parse(readFileSync(join(tmpDir, '.skil', 'state.json'), 'utf-8'));
     expect(persisted.commands).toEqual([
-      expect.objectContaining({ name: 'frontend', membership: { cursor: ['react-patterns'] } }),
+      expect.objectContaining({ name: 'frontend', skills: ['react-patterns'] }),
     ]);
   });
 });

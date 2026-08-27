@@ -2,16 +2,20 @@ import type { Result } from '../core/result.js';
 import type {
   MarketDetailInput,
   MarketField,
+  MarketListingDetail,
   MarketListingInput,
   MarketRole,
+  MarketSearchRow,
   ShelfRole,
 } from './market-types.js';
 
 export type {
   MarketDetailInput,
   MarketField,
+  MarketListingDetail,
   MarketListingInput,
   MarketRole,
+  MarketSearchRow,
   ShelfField,
   ShelfRole,
   ShelfSkill,
@@ -58,4 +62,14 @@ export interface MarketStore {
 
   /** Roles → fields → skills by rank, `skills.length` \<= that field's `shelfSize`. Inactive roles/fields omitted. */
   listShelves(): Promise<Result<ShelfRole[]>>;
+
+  /**
+   * Searches name + description across the full index (not just shelved
+   * skills). Inactive rows are excluded. `opts.limit` is the caller's
+   * already-clamped 1-50 cap. Ranked by installs descending.
+   */
+  searchListings(q: string, opts: { limit: number }): Promise<Result<MarketSearchRow[]>>;
+
+  /** One listing's stored fields for preview, or `null` if `id` is unknown. Description/hash are omitted — preview fetches SKILL.md live instead. */
+  getListing(id: string): Promise<Result<MarketListingDetail | null>>;
 }

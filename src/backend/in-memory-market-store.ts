@@ -3,8 +3,10 @@ import type { MarketStore } from './market-store.js';
 import type {
   MarketDetailInput,
   MarketField,
+  MarketListingDetail,
   MarketListingInput,
   MarketRole,
+  MarketSearchRow,
   ShelfField,
   ShelfRole,
 } from './market-types.js';
@@ -100,6 +102,28 @@ export class InMemoryMarketStore implements MarketStore {
         label: field.label,
         skills: this.skillsForField(field),
       }));
+  }
+
+  async searchListings(q: string, opts: { limit: number }): Promise<Result<MarketSearchRow[]>> {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const matches = [...this.skills.values()]
+      .filter((row) => !row.inactive)
+      .filter((row) => {
+        const haystack = `${row.name} ${row.description ?? ''}`.toLowerCase();
+        return words.every((word) => haystack.includes(word));
+      })
+      .sort((a, b) => b.installs - a.installs)
+      .slice(0, opts.limit);
+
+    return ok(matches.map((row) => ({ id: row.id, name: row.name, installs: row.installs })));
+  }
+
+  async getListing(id: string): Promise<Result<MarketListingDetail | null>> {
+    const row = this.skills.get(id);
+    if (!row) {
+      return ok(null);
+    }
+    return ok({ id: row.id, name: row.name, installs: row.installs, url: row.url, installUrl: row.installUrl });
   }
 
   private skillsForField(field: MarketField): ShelfField['skills'] {

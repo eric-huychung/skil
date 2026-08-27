@@ -132,22 +132,22 @@
 
     <rect x="50" y="168" width="200" height="80" rx="4" class="node neutral" />
     <text x="150" y="200" text-anchor="middle" class="label">CLI</text>
-    <text x="150" y="220" text-anchor="middle" class="small">scan list copy --ide</text>
-    <text x="150" y="236" text-anchor="middle" class="small">install / export</text>
+    <text x="150" y="220" text-anchor="middle" class="small">scan · list · copy</text>
+    <text x="150" y="236" text-anchor="middle" class="small">install / export --to &lt;dock&gt;</text>
 
     <rect x="290" y="168" width="200" height="80" rx="4" class="node neutral" />
     <text x="390" y="200" text-anchor="middle" class="label">GUI</text>
-    <text x="390" y="220" text-anchor="middle" class="small">IDE cards</text>
-    <text x="390" y="236" text-anchor="middle" class="small">Copy to Claude</text>
+    <text x="390" y="220" text-anchor="middle" class="small">one Commands list</text>
+    <text x="390" y="236" text-anchor="middle" class="small">Install/Export/Copy pick dock</text>
 
     <line x1="30" y1="268" x2="510" y2="268" class="seam" />
     <text x="30" y="286" class="small" fill="#10b981" font-weight="600">Seam: CLI / GUI call engine only</text>
 
     <rect x="150" y="300" width="280" height="128" rx="4" class="node process" />
     <text x="290" y="332" text-anchor="middle" class="label">CollectionEngine</text>
-    <text x="290" y="352" text-anchor="middle" class="small">scan · list(ide) · file(ide)</text>
+    <text x="290" y="352" text-anchor="middle" class="small">scan · list · file (no dock)</text>
     <text x="290" y="368" text-anchor="middle" class="small">copyTo · install · export</text>
-    <text x="290" y="392" text-anchor="middle" class="small">catalog · inbox · membership</text>
+    <text x="290" y="392" text-anchor="middle" class="small">catalog · inbox · one command list</text>
     <text x="290" y="408" text-anchor="middle" class="small">stamps · gone ids · write-through</text>
 
     <line x1="130" y1="448" x2="450" y2="448" class="seam" />
@@ -193,17 +193,17 @@
     <rect x="720" y="300" width="340" height="96" rx="4" class="node storage" />
     <text x="890" y="332" text-anchor="middle" class="label">.skil/state.json</text>
     <text x="890" y="352" text-anchor="middle" class="small">inbox[]  ·  skills[]  (one catalog)</text>
-    <text x="890" y="370" text-anchor="middle" class="small">commands[].membership by IDE</text>
-    <text x="890" y="388" text-anchor="middle" class="small">no per-IDE state file</text>
+    <text x="890" y="370" text-anchor="middle" class="small">commands[].skills  (one list, v6)</text>
+    <text x="890" y="388" text-anchor="middle" class="small">no per-dock state file</text>
 
     <rect x="720" y="452" width="340" height="248" rx="4" class="node neutral" />
     <text x="890" y="484" text-anchor="middle" class="label">Depth rules</text>
-    <text x="744" y="512" class="small">Callers pass ide. They get { name, skills }.</text>
-    <text x="744" y="530" class="small">Membership map stays inside the engine.</text>
-    <text x="744" y="556" class="small">Write-through: Cursor edit writes Cursor files.</text>
-    <text x="744" y="574" class="small">Copy / Export start another IDE.</text>
-    <text x="744" y="600" class="small">Stamped pull: that IDE disk wins.</text>
-    <text x="744" y="618" class="small">Other three lists stay put.</text>
+    <text x="744" y="512" class="small">Mutate verbs skip dock. They get { name, skills }.</text>
+    <text x="744" y="530" class="small">The one command list stays inside the engine.</text>
+    <text x="744" y="556" class="small">Write-through: rewrites stamps already on a dock.</text>
+    <text x="744" y="574" class="small">Copy / Export push to another dock.</text>
+    <text x="744" y="600" class="small">Stamped mismatch just warns (commandPulls).</text>
+    <text x="744" y="618" class="small">No adopt into map. No silent merge.</text>
     <text x="744" y="644" class="small">Inbox and catalog stay global.</text>
     <text x="744" y="662" class="small">Watcher calls scan, not a 3-way merge.</text>
   </svg>

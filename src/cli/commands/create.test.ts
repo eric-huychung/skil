@@ -69,14 +69,14 @@ describe('runCreate', () => {
     expect(engine.list()[0]?.command).toBe('npm run dev');
   });
 
-  it('creates a command on Claude without replacing Cursor', () => {
+  it('rejects a second create of the same name', () => {
     const engine = buildEngine();
     engine.create('build', ['tdd']);
 
-    const outcome = runCreate(engine, 'build', ['design'], undefined, 'claude');
+    const outcome = runCreate(engine, 'build', ['design']);
 
-    expect(outcome.isError).toBe(false);
-    expect(engine.list('cursor')[0]?.skills).toEqual(['tdd']);
-    expect(engine.list('claude')[0]?.skills).toEqual(['design']);
+    expect(outcome.isError).toBe(true);
+    expect(outcome.message).toContain("Command 'build' already exists");
+    expect(engine.list()[0]?.skills).toEqual(['tdd']);
   });
 });

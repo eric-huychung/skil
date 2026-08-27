@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countSkillsBySource, formatScannedAt, groupInboxSkills, skillCountForIde } from './skill-sources';
+import { countSkillsBySource, filedSkillCount, formatScannedAt, groupInboxSkills, skillCountForIde } from './skill-sources';
 
 describe('countSkillsBySource', () => {
   it('counts each catalog skill under every IDE folder it was found in', () => {
@@ -12,8 +12,10 @@ describe('countSkillsBySource', () => {
     ).toEqual([
       { source: '.cursor', count: 2 },
       { source: '.claude', count: 1 },
-      { source: '.windsurf', count: 1 },
+      { source: '.codex', count: 0 },
+      { source: '.github', count: 0 },
       { source: '.agents', count: 0 },
+      { source: '.windsurf', count: 1 },
     ]);
   });
 
@@ -25,6 +27,13 @@ describe('countSkillsBySource', () => {
       )
     ).toBe(2);
     expect(skillCountForIde([{ paths: ['.cursor/skills/tdd'] }], 'windsurf')).toBe(0);
+  });
+});
+
+describe('filedSkillCount', () => {
+  it('counts unique skills filed onto commands, not disk catalog', () => {
+    expect(filedSkillCount([{ skills: ['tdd'] }, { skills: ['tdd', 'ui'] }])).toBe(2);
+    expect(filedSkillCount([{ skills: [] }])).toBe(0);
   });
 });
 

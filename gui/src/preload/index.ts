@@ -1,16 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC_CHANNELS, type ContextKitBridge } from '../shared/ipc.js';
+import { IPC_CHANNELS, type SkilBridge, type ScanResult } from '../shared/ipc.js';
 
-const bridge: ContextKitBridge = {
+const bridge: SkilBridge = {
   listCollections: (ide) => ipcRenderer.invoke(IPC_CHANNELS.listCollections, ide),
   createCollection: (name, skillIds, ide) =>
     ipcRenderer.invoke(IPC_CHANNELS.createCollection, name, skillIds, ide),
   removeSkillFromCollection: (name, skillId, ide) =>
     ipcRenderer.invoke(IPC_CHANNELS.removeSkillFromCollection, name, skillId, ide),
-  exportCommand: (name, targetIDE, opts) => ipcRenderer.invoke(IPC_CHANNELS.exportCommand, name, targetIDE, opts),
   exportAll: (targetIDE, opts) => ipcRenderer.invoke(IPC_CHANNELS.exportAll, targetIDE, opts),
-  copyTo: (name, fromIde, toIde, opts) => ipcRenderer.invoke(IPC_CHANNELS.copyTo, name, fromIde, toIde, opts),
-  copyAll: (fromIde, toIde, opts) => ipcRenderer.invoke(IPC_CHANNELS.copyAll, fromIde, toIde, opts),
+  importFrom: (sourceRoot, ide, opts) => ipcRenderer.invoke(IPC_CHANNELS.importFrom, sourceRoot, ide, opts),
   searchSkills: (query) => ipcRenderer.invoke(IPC_CHANNELS.searchSkills, query),
   browseSkills: (view) => ipcRenderer.invoke(IPC_CHANNELS.browseSkills, view),
   listInbox: () => ipcRenderer.invoke(IPC_CHANNELS.listInbox),
@@ -20,9 +18,23 @@ const bridge: ContextKitBridge = {
   deleteCollection: (name, ide) => ipcRenderer.invoke(IPC_CHANNELS.deleteCollection, name, ide),
   pickProjectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.pickProjectFolder),
   pickDestinationFolder: () => ipcRenderer.invoke(IPC_CHANNELS.pickDestinationFolder),
+  bindProjectFolder: (path) => ipcRenderer.invoke(IPC_CHANNELS.bindProjectFolder, path),
   getProjectRoot: () => ipcRenderer.invoke(IPC_CHANNELS.getProjectRoot),
+  listRecentFolders: () => ipcRenderer.invoke(IPC_CHANNELS.listRecentFolders),
+  removeRecentFolder: (path) => ipcRenderer.invoke(IPC_CHANNELS.removeRecentFolder, path),
   scan: () => ipcRenderer.invoke(IPC_CHANNELS.scan),
-  install: (skillId, targetIDE, opts) => ipcRenderer.invoke(IPC_CHANNELS.install, skillId, targetIDE, opts),
+  onScan: (listener) => {
+    const wrapped = (_event: unknown, result: ScanResult) => listener(result);
+    ipcRenderer.on(IPC_CHANNELS.scanDidRun, wrapped);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.scanDidRun, wrapped);
+    };
+  },
+  deleteSkill: (skillId) => ipcRenderer.invoke(IPC_CHANNELS.deleteSkill, skillId),
+  usage: () => ipcRenderer.invoke(IPC_CHANNELS.usage),
+  marketShelves: () => ipcRenderer.invoke(IPC_CHANNELS.marketShelves),
+  marketSearch: (query) => ipcRenderer.invoke(IPC_CHANNELS.marketSearch, query),
+  marketPreview: (id) => ipcRenderer.invoke(IPC_CHANNELS.marketPreview, id),
 };
 
-contextBridge.exposeInMainWorld('contextkit', bridge);
+contextBridge.exposeInMainWorld('skil', bridge);

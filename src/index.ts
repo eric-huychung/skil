@@ -1,6 +1,6 @@
-export const CONTEXTKIT_VERSION = '0.2.1';
+export const SKIL_VERSION = '0.2.1';
 
-// Public API surface for consumers embedding ContextKit's engine directly
+// Public API surface for consumers embedding skil's engine directly
 // (currently: the GUI's Electron main process). CLI commands import from
 // specific module paths instead; this barrel exists for external embedders.
 export { CollectionEngine, STATE_PATH } from './core/collection-engine.js';

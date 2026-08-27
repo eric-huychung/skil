@@ -13,7 +13,7 @@ export function runScan(engine: ICollectionEngine): CommandOutcome {
   if (added.length === 0 && gone.length === 0 && changed.length === 0 && commandPulls.length === 0) {
     return {
       message:
-        'No skills found. Scan looks for SKILL.md under .cursor/skills, .claude/skills, .windsurf/skills, and .agents/skills. The command map stays; this is pull, not team sync.',
+        'No skills found. Scan looks for SKILL.md under .cursor/skills, .claude/skills, .codex/skills, .github/skills, .agents/skills, and .windsurf/skills. The command map stays; this is pull, not team sync.',
       isError: false,
       isInfo: true,
     };

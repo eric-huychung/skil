@@ -1,8 +1,9 @@
 /** Where a skill originated from. */
 export type SkillSource = 'skills.sh' | 'github' | 'local';
 
-/** IDEs skil can scan and push to. */
-export type IDE = 'cursor' | 'claude' | 'windsurf' | 'agents';
+/** Docks skil can scan and push to. Product language is dock; `IDE` stays until a rename. */
+export type IDE = 'cursor' | 'claude' | 'codex' | 'copilot' | 'agents' | 'windsurf';
+export type Dock = IDE;
 
 /** Leaderboard views proxied from skills.sh. */
 export type BrowseView = 'all-time' | 'trending';
@@ -27,31 +28,43 @@ export interface Skill {
   url?: string;
 }
 
-/** Persisted command: membership is per IDE. Not returned to callers. */
+/** Persisted command: one skills list for the project. Not returned to callers. */
 export interface CommandRecord {
   name: string;
-  /** Skill ids filed on this command for each IDE. Missing key = absent on that IDE. */
-  membership: Partial<Record<IDE, string[]>>;
+  /** Catalog ids filed on this command. Project SoT — docks are export targets. */
+  skills: string[];
   createdAt: string;
   /**
-   * Leftover shell template for `contextkit run`. Absent on commands
+   * Leftover shell template for `skil run`. Absent on commands
    * created without it — always check before use.
    */
   command?: string;
 }
 
-/** View DTO from `list(ide)` — `skills` is that IDE's membership. Display as `/name`. */
+/** View DTO from `list()` — same skills as persist. Display as `/name`. */
 export interface Command {
   name: string;
-  /** Catalog ids filed on this command for the requested IDE. */
+  /** Catalog ids filed on this command. */
   skills: string[];
   /** ISO 8601 timestamp of when the command was created. */
   createdAt: string;
   /**
-   * Leftover shell template for `contextkit run`. Absent on commands
+   * Leftover shell template for `skil run`. Absent on commands
    * created without it — always check before use.
    */
   command?: string;
+}
+
+/** Counts of how often a catalog skill was read. Phase 5 eval. */
+export interface UsageRow {
+  skillId: string;
+  count: number;
+}
+
+/** One observed skill read. Aggregated by `engine.usage()`. */
+export interface UsageEvent {
+  skillId: string;
+  source: 'claude' | 'cursor';
 }
 
 /** Temporary alias so CLI/GUI keep typechecking while copy catches up. */
@@ -74,7 +87,7 @@ export interface ScanResult {
   added: string[];
   gone: string[];
   changed: string[];
-  /** Stamped command file won for that IDE (disk ≠ map). */
+  /** Stamp `skills:` ≠ map (warn only — stamps do not fork the map). */
   commandPulls: Array<{ ide: IDE; name: string }>;
 }
 
@@ -83,11 +96,13 @@ export interface ScanResult {
  * Missing file → empty state. Leftover `.contextkit/state.json` with no
  * `.skil/` file is an error — no fallback.
  *
- * Schema v5: `commands[].membership` by IDE. Load v4 `commands[].skills`
- * as `membership.cursor`. Load v3 `collections` → `commands` first, then
- * the same. Missing `skills` catalog → `[]`. `installedSkills` is leftover
- * (not the catalog). Missing `inbox` → `[]`. v1 `activeCollection` is
- * still ignored. No rewrite on read.
+ * Schema v6: `commands[].skills` is the project list. Load v5
+ * `commands[].membership` as a union (cursor first, then other keys,
+ * unique). Load v4 `commands[].skills` as that array. Load v3
+ * `collections` → `commands` first, then the same. Missing `skills`
+ * catalog → `[]`. `installedSkills` is leftover (not the catalog).
+ * Missing `inbox` → `[]`. v1 `activeCollection` is still ignored.
+ * No rewrite on read.
  */
 export interface State {
   commands: CommandRecord[];

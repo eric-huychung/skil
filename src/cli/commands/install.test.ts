@@ -39,14 +39,31 @@ describe('runInstall', () => {
 });
 
 describe('registerInstallCommand', () => {
-  it('requires --to and does not call the engine without it', () => {
+  it('defaults --to to cursor', () => {
     const { engine, skills } = buildEngine();
     const program = createProgram(engine);
     program.exitOverride();
 
-    expect(() => program.parse(['install', 'obra/x'], { from: 'user' })).toThrow();
-    expect(skills.getInstalls()).toEqual([]);
-    expect(engine.skills()).toEqual([]);
+    program.parse(['install', 'obra/x'], { from: 'user' });
+    expect(skills.getInstalls()).toEqual([expect.objectContaining({ skillId: 'obra/x', ide: 'cursor' })]);
+  });
+
+  it('accepts --to codex', () => {
+    const { engine, skills } = buildEngine();
+    const program = createProgram(engine);
+    program.exitOverride();
+
+    program.parse(['install', 'obra/x', '--to', 'codex'], { from: 'user' });
+    expect(skills.getInstalls()).toEqual([expect.objectContaining({ skillId: 'obra/x', ide: 'codex' })]);
+  });
+
+  it('accepts --to copilot', () => {
+    const { engine, skills } = buildEngine();
+    const program = createProgram(engine);
+    program.exitOverride();
+
+    program.parse(['install', 'obra/x', '--to', 'copilot'], { from: 'user' });
+    expect(skills.getInstalls()).toEqual([expect.objectContaining({ skillId: 'obra/x', ide: 'copilot' })]);
   });
 
   it('rejects an unknown IDE before the engine', () => {

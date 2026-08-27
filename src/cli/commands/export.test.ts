@@ -96,15 +96,15 @@ describe('runExportAll', () => {
 });
 
 describe('registerExportCommand', () => {
-  it('requires --to and does not write a command file without it', () => {
+  it('defaults --to to cursor', async () => {
     const { engine, fs } = buildEngine();
     engine.create('build', ['tdd']);
     fs.removeFile('.cursor/commands/build.md');
     const program = createProgram(engine);
     program.exitOverride();
 
-    expect(() => program.parse(['export', 'build'], { from: 'user' })).toThrow();
-    expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(false);
+    await program.parseAsync(['export', 'build'], { from: 'user' });
+    expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
   });
 
   it('rejects an unknown IDE before the engine', () => {

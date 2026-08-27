@@ -3,22 +3,26 @@
 A CLI and desktop GUI for mapping AI skills onto SDLC commands (`/build`, `/tdd`), then pushing a skill or a generated command file. No login.
 
 - **Skills** = folders with `SKILL.md`. Disk owns the body. We hash it; we do not edit it. One catalog, many paths.
-- **Commands** = named groups of skill ids **per IDE**. `/build` on Cursor can differ from `/build` on Claude. Folders do not move when you file.
-- **Inbox** = one global staging pool (scanned locals + Discover adds). Filing onto a command does not remove the id.
-- **Pull** = `scan` (skills dirs + stamped command files — not unstamped `commands/`).
-- **Push** = `install` a skill, **Copy** a command to another IDE, and/or `export` **our** stamped command file plus the filed skills that IDE is missing.
+- **Commands** = named groups of skill ids **once per project**. `/build` is the same list whether you later export to Cursor or Claude.
+- **Inbox** = one staging pool (scanned locals + Discover adds). Filing onto a command does not remove the id.
+- **Docks** = folders we scan and install/export into (Claude, Cursor, Codex, Copilot, agents). Windsurf is still scanned.
+- **Pull** = `scan` (skill dirs). Stamped command files do not fork the map.
+- **Push** = `install` a skill into a dock, **Copy** the same list to a dock, and/or `export` **our** stamped command file (when that dock has one) plus missing skill folders.
+- **Usage** = how often catalog skills were read (Claude logs first). Counts only — not “used properly.”
 
 Bin is `skil`. `contextkit` is an alias of the same entry.
 
 ## Loop
 
 1. Connect a repo (CLI = current directory; GUI = folder picker on Sync).
-2. `skil scan` — find `SKILL.md` under the four IDE skills dirs, and pull stamped command files (that IDE's list wins).
-3. Ids sit in Inbox (staging). Create `/build` on an IDE (`--ide cursor`, default), then add a skill onto it. Inbox keeps the id. Folders stay put. Other IDEs are unchanged.
-4. `skil copy build --from cursor --to claude` copies that command's list, writes Claude's stamped file, and copies missing skill folders.
-5. `skil install <skillId> --to cursor` writes the skill into that IDE's skills dir.
-6. `skil export --to cursor` writes **our** command files for that IDE (`skills:` + short steps + `generated_by: skil`) and copies filed local skills into that IDE if they are not already there. Discover-only ids are installed. An existing unstamped command file is left alone unless you pass `--replace`.
-7. Re-scan refreshes the catalog and stamped lists. Each IDE's stamped file wins that IDE only. Gone folders are dropped and reported.
+2. `skil scan` — find `SKILL.md` under dock skill dirs. The command map stays.
+3. Ids sit in Inbox (staging). Create `/build` once, then file a skill onto it. Inbox keeps the id. Folders stay put.
+4. `skil copy build --to claude` writes Claude’s stamped file (if that dock has one) and copies missing skill folders. Same list as the map.
+5. `skil install <skillId> --to cursor` writes the skill into that dock’s skills dir (Cursor → `.cursor/skills`, not vercel’s `.agents` dump).
+6. `skil export --to cursor` writes **our** command files where that dock has command markdown (`skills:` + Goal/Sequence/Rules comments + `## Skills` + `generated_by: skil`) and copies filed local skills if they are not already there. Copilot gets a VS Code prompt file (`.github/prompts/<name>.prompt.md`); Codex gets skill folders only. Discover-only ids are installed. An existing unstamped command file is left alone unless you pass `--replace`. `--replace` on a stamped file resets Goal/Sequence/Rules; otherwise those stay yours.
+7. Re-scan refreshes the catalog. Stamp ≠ map is a warn. Gone folders are dropped and reported.
+8. `skil usage` prints read counts from Claude session logs.
+9. Sync **Import** copies another project’s skills (one dock) into the connected folder. Conflicts warn, then replace overwrites. The connected folder does not change. Market inbox is not copied.
 
 Discover Add puts an id in Inbox. It does not download. Install is a later, explicit step.
 
@@ -28,16 +32,17 @@ Discover Add puts an id in Inbox. It does not download. Install is a later, expl
 skil scan                                              # pull: SKILL.md folders in this repo
 skil inbox                                             # list staging skill ids
 skil inbox add <skillId>                               # hold an id in Inbox (no download)
-skil inbox file <skillId> <command> [--ide cursor]     # file onto that IDE; Inbox keeps the id
-skil create <name> [--ide cursor] [--skills id-a,id-b] # /build stores build on that IDE; inbox is reserved
-skil delete <name> [--ide cursor]                      # drop that IDE's command; other IDEs stay
-skil list [--ide cursor]                               # list commands for one IDE (or all)
-skil add <command> <skillId> [--ide cursor]            # add a skill on that IDE (Inbox unchanged)
-skil remove <command> <skillId> [--ide cursor]         # remove a skill on that IDE (Inbox unchanged)
-skil copy <command> --from cursor --to claude          # dest list + stamped file + missing skills
-skil copy --all --from cursor --to claude [--replace]
-skil install <skillId> --to <ide>                      # push a skill (cursor|claude|windsurf|agents)
-skil export --to <ide> [--replace]                     # write that IDE's command files and deploy filed skills
+skil inbox file <skillId> <command>                    # file onto a command; Inbox keeps the id
+skil create <name> [--skills id-a,id-b]                # /build stores build; inbox is reserved
+skil delete <name>                                     # drop the command
+skil list                                              # the project map
+skil add <command> <skillId>                           # add a skill (Inbox unchanged)
+skil remove <command> <skillId>                        # remove a skill (Inbox unchanged)
+skil copy <command> --to claude [--replace]            # dest stamped file + missing skills
+skil copy --all --to claude [--replace]
+skil install <skillId> --to <dock>                     # push a skill (cursor|claude|codex|copilot|agents)
+skil export --to <dock> [--replace]                    # write command files (if any) and deploy filed skills
+skil usage                                             # print Claude read counts
 skil search [query] [--trending]                       # typed search, or all-time / trending
 ```
 
@@ -51,25 +56,23 @@ Search and browse go through skil's backend, which authenticates to skills.sh wi
 
 An Electron app (`gui/`) shares the same engine as the CLI. Window and brand say skil.
 
-- **Inbox** — staging pool, search, 25 per page, Scan / re-scan, install from Inbox (download icon, then pick an IDE). Filing does not remove ids. Install result is a modal. Gone ids from the last scan show as a status banner.
-- **Commands** — IDE cards (click into a workspace). Create, file from Inbox, delete, install filed, export, Copy to another IDE (dest chips, one command or all).
-- **Discover** — All time / Trending, typed search, skill details from listing fields, Add → Inbox. Works with no folder. Add does not install.
-- **Sync** — pick or change the project folder. Not a live merge. No per-IDE state file. Light watcher after write-through (debounce, mute our writes, skip `.git`).
+- **Inbox** — staging pool, search, 25 per page, delete. File onto a command from the Commands tab. Gone ids from the last scan show as a status banner. Re-scan is the header icon after a folder is bound.
+- **Commands** — one list (the project map). Create, file from Inbox, remove a skill, delete a command, **Export** (push everything to a dock). No IDE workspace cards, no separate Install/Copy controls — Export already deploys every filed skill to the dock. Filed skills can show Claude read counts.
+- **Discover** — market index when shelves have data, otherwise All time / Trending + typed search. Add → Inbox. Works with no folder. Add does not install.
+- **Sync** — pick or change the project folder, plus Import from another project (one dock). Not a live merge. No per-dock state file. Light watcher after write-through (debounce, mute our writes, skip `.git`).
 
-Pick a folder and skil scans once. The Scan button on Inbox is re-scan. Scan needs a connected folder. Install and export can pick a dest folder without binding the project.
+Pick a folder and skil scans once. Re-scan is the header icon next to the path. Scan needs a connected folder. Export can pick a dest folder without binding the project.
 
-Install: pick an IDE on Inbox (unfiled) or Commands (filed). Errors show as a visible alert.
+Export (Commands): push the project map — write our stamped command files where the dock has one, and deploy filed skills that dock is missing (copy local folders; install Discover-only ids internally). Existing dest skill folders are left alone. Result is a modal. If a target command file exists and is not stamped by us, you can confirm Replace.
 
-Copy (Commands): from the open IDE workspace, copy one command or all to another IDE. Writes that dest stamped file and missing skill folders. Cursor files stay put.
-
-Export (Commands): push the open IDE — write our stamped command files and deploy filed skills that IDE is missing (copy local folders; install Discover-only ids). Existing dest skill folders are left alone. Result is a modal. If a target command file exists and is not stamped by us, you can confirm Replace.
+The CLI's `install` and `copy` verbs (below) are not exposed as separate GUI buttons — Export already covers organize-then-push for the GUI.
 
 Run it with `npm run gui:dev`.
 
 ## Troubleshooting
 
 **`Command '<name>' already exists`**
-That name is already on this IDE. Same name on another IDE is fine — use `--ide` or Copy.
+That name is already on this project map.
 
 **`Command '<name>' not found`**
 Run `skil list` to see available commands.
@@ -81,4 +84,4 @@ Inbox is the staging pool. Create a named command (`skil create build`) and add 
 Export writes our template. Re-run with `--replace` (CLI) or confirm Replace (GUI) if you want to overwrite their file.
 
 **Scan reports no skills**
-Scan looks for `SKILL.md` under the four IDE skills dirs. It does not read **unstamped** `commands/` or Windsurf `workflows/`. Stamped files update that IDE's command list.
+Scan looks for `SKILL.md` under `.cursor/skills`, `.claude/skills`, `.codex/skills`, `.github/skills`, `.agents/skills`, and leftover `.windsurf/skills`. It does not read **unstamped** `commands/` or Windsurf `workflows/`. Stamped files that disagree with the map are a warn.

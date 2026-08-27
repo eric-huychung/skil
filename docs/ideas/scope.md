@@ -1,4 +1,4 @@
-# ContextKit: AI Context Orchestration Tool
+# skil: AI Context Orchestration Tool
 
 ## Problem Statement
 
@@ -18,9 +18,9 @@ The key insight: Vercel solved "how do I install skills" (npx skills add) and "h
 
 - [ ] **Developers want organization over "enable all"** — test by building CLI MVP and seeing if 10 developers actually create collections or just load everything. Validate in 2 weeks.
 - [ ] **Collections solve a real workflow problem** — interview 5 developers about current context management pain. Ask: "Do you use different skills for different tasks, or same skills always?" Validate before building GUI.
-- [ ] **Team sync is valuable** — talk to 3 engineering teams (5+ devs) about AI context standardization. Would they use `.contextkit.yml` like they use `package.json`? Validate before investing in team features.
+- [ ] **Team sync is valuable** — talk to 3 engineering teams (5+ devs) about AI context standardization. Would they use `.skil.yml` like they use `package.json`? Validate before investing in team features.
 - [ ] **CLI + GUI covers different user types** — track which gets more usage after launch. If GUI is <10% usage, don't maintain it. Validate in month 2.
-- [ ] **Thin wrappers add value** — users might just prefer `npx skills add` directly. Test if convenience wrappers (`contextkit install`) get used or ignored. Validate in month 1.
+- [ ] **Thin wrappers add value** — users might just prefer `npx skills add` directly. Test if convenience wrappers (`skil install`) get used or ignored. Validate in month 1.
 
 
 
@@ -30,27 +30,27 @@ The key insight: Vercel solved "how do I install skills" (npx skills add) and "h
 
 ### CLI Core (2 weeks)
 
-- `contextkit create <name> --skills skill1,skill2,skill3` — create skill collection
-- `contextkit use <name>` — enable collection (symlinks skills to active directory)
-- `contextkit disable` — disable current collection (remove symlinks)
-- `contextkit list` — show all collections
-- `contextkit status` — show what's currently active
+- `skil create <name> --skills skill1,skill2,skill3` — create skill collection
+- `skil use <name>` — enable collection (symlinks skills to active directory)
+- `skil disable` — disable current collection (remove symlinks)
+- `skil list` — show all collections
+- `skil status` — show what's currently active
 - Works by manipulating `.agents/skills/`, `.claude/skills/`, `.windsurf/skills/` directories
 
 
 
 ### Thin Wrappers (1 week)
 
-- `contextkit search [query]` → calls `skills.sh/api/search`
-- `contextkit install <skill>` → calls `npx skills add` under hood
-- `contextkit convert <skill> --to cursor|claude|windsurf` → calls `skillsmith`
+- `skil search [query]` → calls `skills.sh/api/search`
+- `skil install <skill>` → calls `npx skills add` under hood
+- `skil convert <skill> --to cursor|claude|windsurf` → calls `skillsmith`
 - Convenience layer, not rebuilding existing tools
 
 
 
 ### Team Sync (1 week)
 
-- `.contextkit.yml` config file format:
+- `.skil.yml` config file format:
   ```yaml
   collections:
     frontend:
@@ -60,8 +60,8 @@ The key insight: Vercel solved "how do I install skills" (npx skills add) and "h
       - addyosmani/api-design
       - vercel-labs/security-review
   ```
-- `contextkit sync` — install collections from config file
-- `contextkit export` — generate config from current local setup
+- `skil sync` — install collections from config file
+- `skil export` — generate config from current local setup
 
 
 
@@ -78,10 +78,10 @@ The key insight: Vercel solved "how do I install skills" (npx skills add) and "h
 
 ## Not Doing (and Why)
 
-- **Installation infrastructure** — Vercel's `npx skills add` works perfectly. Don't rebuild it. We just wrap it with `contextkit install` for consistency.
+- **Installation infrastructure** — Vercel's `npx skills add` works perfectly. Don't rebuild it. We just wrap it with `skil install` for consistency.
 - **Registry/hosting** — skills.sh already provides discovery, leaderboard, search API. We consume their API, don't compete.
-- **Format conversion logic** — skillsmith already handles SKILL.md ↔ Cursor .mdc ↔ Windsurf conversion. We just provide a thin wrapper (`contextkit convert`) for convenience.
-- **Token management** — IDEs already show context window usage. Token estimation is nice-to-have but not core value. Maybe add simple `contextkit status` output later, but no UI for it.
+- **Format conversion logic** — skillsmith already handles SKILL.md ↔ Cursor .mdc ↔ Windsurf conversion. We just provide a thin wrapper (`skil convert`) for convenience.
+- **Token management** — IDEs already show context window usage. Token estimation is nice-to-have but not core value. Maybe add simple `skil status` output later, but no UI for it.
 - **IDE extensions** — Building VSCode/Cursor/JetBrains extensions means rebuilding for each platform. CLI + desktop app gives universal compatibility without platform lock-in.
 - **Phase detection** — Don't try to auto-detect what phase the user is in (design? testing? deployment?). Let users decide when to switch collections. Automation here would be brittle and annoying.
 - **Skill authoring/editing** — Don't build a skill editor. Skills are markdown files—developers already have editors. Changing installed skills should be done at source (GitHub repos), not in our tool.
@@ -95,14 +95,14 @@ The key insight: Vercel solved "how do I install skills" (npx skills add) and "h
 
 - How do we handle IDE-specific skill loading (some IDEs watch directories, others need restart)?
 - Should collections be mutually exclusive (only one active) or composable (stack multiple)?
-- What happens when `contextkit sync` conflicts with manually installed skills?
+- What happens when `skil sync` conflicts with manually installed skills?
 - Do we support local-only collections vs. global collections, or just one namespace?
 
 **Product:**
 
-- Is `.contextkit.yml` enough for team sync, or do teams need more (version pinning, approval workflow)?
+- Is `.skil.yml` enough for team sync, or do teams need more (version pinning, approval workflow)?
 - Should GUI app be cross-platform from day 1, or start with macOS only?
-- Do we need `contextkit update` to update skills, or just point to `npx skills update`?
+- Do we need `skil update` to update skills, or just point to `npx skills update`?
 - Is "collection" the right term, or is "profile", "context", "bundle" clearer?
 
 **Business:**
@@ -137,7 +137,7 @@ The key insight: Vercel solved "how do I install skills" (npx skills add) and "h
 
 - 100 developers install CLI
 - 50 create at least one collection
-- 5 teams use `.contextkit.yml` for sync
+- 5 teams use `.skil.yml` for sync
 
 **Month 3:**
 

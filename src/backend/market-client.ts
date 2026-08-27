@@ -41,6 +41,9 @@ export interface MarketSkillsClient {
   /** Fetches one skill's audit status. A 404 from skills.sh maps to `{ status: 'none' }` by the caller. */
   getAudit(id: string): Promise<Result<MarketAudit>>;
 
+  /** Fetches one skill's full SKILL.md body for preview-on-click. Never stored — DB only ever holds the capped search `description`. `null` if the skill has no SKILL.md file. */
+  getSkillMd(id: string): Promise<Result<string | null>>;
+
   /** Searches skills.sh for `q`, used to build/refresh one field's shelf. */
   searchSkills(q: string, opts: { limit: number }): Promise<Result<MarketSearchResult[]>>;
 }

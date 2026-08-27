@@ -1,0 +1,5 @@
+interface:
+  display_name: "Refactor"
+  short_description: "Find and walk through architecture improvements"
+policy:
+  allow_implicit_invocation: false
