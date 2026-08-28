@@ -47,8 +47,8 @@ describe('groupInboxSkills', () => {
   it('splits Discover pulls from skills scanned on disk', () => {
     expect(
       groupInboxSkills(['obra/react-patterns', 'tdd', 'ui/styling'], [
-        { id: 'tdd', source: 'local', paths: ['.cursor/skills/tdd'] },
-        { id: 'ui/styling', source: 'local', paths: ['.cursor/skills/ui/styling'] },
+        { id: 'tdd', paths: ['.cursor/skills/tdd'] },
+        { id: 'ui/styling', paths: ['.cursor/skills/ui/styling'] },
       ])
     ).toEqual([
       { key: 'market', label: 'Market', skills: ['obra/react-patterns'] },
@@ -61,7 +61,6 @@ describe('groupInboxSkills', () => {
       groupInboxSkills(['obra/react-patterns', 'addyosmani/api-design'], [
         {
           id: 'obra/react-patterns',
-          source: 'skills.sh',
           paths: ['.cursor/skills/obra/react-patterns'],
         },
       ])
@@ -73,7 +72,7 @@ describe('groupInboxSkills', () => {
 
   it('omits empty groups', () => {
     expect(
-      groupInboxSkills(['tdd'], [{ id: 'tdd', source: 'local', paths: ['.cursor/skills/tdd'] }])
+      groupInboxSkills(['tdd'], [{ id: 'tdd', paths: ['.cursor/skills/tdd'] }])
     ).toEqual([{ key: 'project', label: 'Project', skills: ['tdd'] }]);
   });
 });

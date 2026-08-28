@@ -26,8 +26,8 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 ## User Flow
 
 1. **Connect a repo (optional).** No login. Skip and still use Discover / Inbox / Commands; first Save can pick a folder and bind it.
-2. **Scan** dock skill trees — catalog + Inbox. Stamps do not change the map.
-3. **Show the inventory.** Scanned and Discover ids sit in one Inbox and stay there after filing.
+2. **Scan** hardcoded dock skill trees (`.cursor/skills`, `.claude/skills`, `.codex/skills`, `.github/skills`, `.agents/skills`, leftover `.windsurf/skills`) — catalog + Inbox. Stamps do not change the map. No per-project dock config.
+3. **Show the inventory.** Scanned and Discover ids sit in one Inbox and stay there after filing. Click a row to read `SKILL.md`. Inbox splits **Market** (not on disk) vs **Project** (on disk). A Discover add moves to Project after install/export; it is not listed in both.
 4. **Organize once:** Create `/build`, drop `tdd` on it. That is the project list.
 5. **Copy / export to Claude** (one command or all): dest stamped file + missing skill folders. Same ids as the map.
 6. **Discover → Inbox → file onto a command → install `--to` a dock** writes the skill into that dock’s skills dir.
@@ -60,6 +60,10 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 20. As a developer, I want a light disk watcher after write-through, so I do not have to hit Re-scan for every edit (debounce, mute our writes, skip `.git`)
 21. As a developer, I want to import skills from another project on Sync, so I do not copy-paste folders by hand
 22. As a developer, I want to see how many times a skill was used (Claude first), so I can drop dead weight from `/build`
+23. As a developer, I want to click an Inbox skill and read its `SKILL.md`, so I know what I am filing before I organize
+24. As a developer, I want a Discover skill to show under Project once it is on disk, so Inbox does not list the same skill as both Market and Project
+25. As a developer, I want an Update control when a market skill I did not edit has a new SKILL.md, so I can pull the new copy without hunting GitHub
+26. As a developer who edited a market skill, I want Reset in preview instead of a silent overwrite, so my rewrite is not eaten
 
 ## Implementation Decisions
 
@@ -116,7 +120,7 @@ v5 `membership` loads as a union (cursor first). v4 `commands[].skills` loads as
 - **Scan does not create `/cursor` or `/claude`.** That would be the folder tree again.
 - **We do not scan unstamped `commands/` (or Windsurf `workflows/`).** Stamped files are ours to write. Pull does **not** adopt `skills:` into the map. Stamp is `generated_by: skil`. Unstamped existing files need replace. Stamped re-writes refresh frontmatter + `## Skills`; Goal / Sequence / Rules stay unless `replace` is true.
 - **Command-file paths:** cursor / claude / agents use `commands/<name>.md`. Copilot writes a real VS Code prompt file, `.github/prompts/<name>.prompt.md` — works in classic Copilot Chat (extension host), not Copilot's newer Agent Host. Codex: skill folders only (custom prompts removed in codex-cli 0.117.0; never had a project-shareable file even before that). Windsurf leftover: `.windsurf/workflows/<name>.md`.
-- **No version pinning.** Catalog hash is content identity, not a lockfile.
+- **No version pinning.** Catalog hash is content identity, not a lockfile. Inbox does not auto-sync market copies. `originHash` plus a manual Update (unedited) / Reset (edited) is the refresh.
 - **Team YAML sync is leftover.** Not in this loop. No `.skil.yml` this phase.
 - **`run` / shell templates are leftover.** "Command template" now means the markdown file we generate, not `skil run`.
 - **README is the user-facing loop.** Scan → Inbox → file (one list) → copy / install / export **to a dock**. Do not advertise leftover `sync` / `run` / convert, a marketplace, or a linter.
@@ -134,7 +138,7 @@ v5 `membership` loads as a union (cursor first). v4 `commands[].skills` loads as
 - `skil list`
 - `skil add <command> <skillId>` / `skil remove <command> <skillId>` — Inbox unchanged
 - `skil inbox` / `inbox add <skillId>` / `inbox file <skillId> <command>` — file onto a command; Inbox keeps the id
-- `skil inbox delete <skillId>` — delete a skill from disk + Inbox; nested skills stay, Discover-only ids just leave Inbox
+- `skil inbox delete <skillId>` — delete that catalog id from disk (every dock copy under the skills roots) + Inbox; nested skills stay; Discover-only ids just leave Inbox
 - `skil copy <command> --to <dock> [--replace]` / `skil copy --all --to <dock>`
 - `skil install <skillId> --to cursor|claude|codex|copilot|agents|windsurf` — records `deployedTo`; unknown `--to` is rejected before the engine
 - `skil export [command] --to <dock> [--replace]` — a name exports that one; omitted exports every command
@@ -148,7 +152,7 @@ API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 ### GUI
 
 - Window and brand say skil. Connect folder (Sync tab). No login. Header shows the bound path and Re-scan only after connect. Purple **Import** on Sync (disabled until connected) copies one dock’s skills from a recent folder or a chosen folder. Does not bind. Dock chips default to Cursor. Conflicts warn then replace. Market inbox is not copied.
-- Inbox tab (above Commands): Discover-like list (25 per page), search the staging pool, file onto a command, or delete. Filing does not remove ids. One Inbox. No Scan icon; Inbox refreshes from `onScan`.
+- Inbox tab (above Commands): Discover-like list (25 per page), search the staging pool, click a row to preview `SKILL.md` (on-disk body + every dock path for catalog ids; market preview for Discover-only ids), file onto a command, or delete. Delete removes every dock copy of that catalog id (confirm lists the paths). Filing does not remove ids. One Inbox. Groups **Market** (wishlist, not on disk) vs **Project** (catalog `paths` non-empty), not by `source === 'local'`. Project rows with a market origin show **Update** only when the disk copy still matches `originHash` and the live market SKILL.md moved. Edited copies get **Reset to market** in preview. No auto-sync. No Scan icon; Inbox refreshes from `onScan`.
 - Commands tab: **one list**. Create, file from Inbox, remove skill, delete command, **Export** (download icon, pushes everything to a chosen dock). Do not add IDE cards or four tabs, and do not add separate Install/Copy controls — Export already deploys every filed skill to the dock. Filed skills show Claude read counts from `usage()`.
 - Discover: market index role → category browse + search + preview, Add → Inbox, when the index has data (`MarketDiscover.tsx`); falls back to the live All time / Trending + typed search + details (`SkillSearch.tsx`) when it doesn't. No project re-scan control either way.
 - Discover / Inbox / Commands do not require a folder. Scan needs a connected repo (header Re-scan, Sync pick, or CLI cwd).
@@ -168,7 +172,7 @@ API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 - DiskWatch tests use a fake clock (debounce / mute), not a real chokidar run
 - Usage tests use an in-memory collector and Claude log fixtures
 
-**Modules to test:** engine (scan, one-list file, copy same list, importFrom add/replace, gone, install dock path, export stamp, scan does not adopt stamps, usage); FS walk; install adapter; UsageCollector; CLI handlers; GUI via the bridge; DiskWatch debounce/mute.
+- **Modules to test:** engine (scan, one-list file, copy same list, importFrom add/replace, gone, install dock path, export stamp, scan does not adopt stamps, scan attaches npx leftover to market id, originHash / originChecks / updateFromMarket, usage, readSkillMd, deleteSkill all dock copies); FS walk; install adapter; UsageCollector; CLI handlers; GUI via the bridge; DiskWatch debounce/mute.
 
 ## Out of Scope
 
@@ -182,6 +186,7 @@ API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 - Team `.yml` sync as the core loop
 - Last-folder persistence
 - Live 3-way merge on disk change (watcher is scan + write-through only)
+- Auto-sync of installed Discover skills — Update/Reset is explicit. No background overwrite.
 - Token / fat-skill linter (later wedge, not this loop)
 - Login, SSO, analytics
 - IDE extensions

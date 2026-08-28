@@ -39,6 +39,7 @@ describe('runSearch', () => {
       install: async () => ok(undefined),
       convert: async () => ok(undefined),
       getInstalled: () => [],
+      skillHash: async () => ok(null),
     });
 
     const outcome = await runSearch(engine, 'nonexistent');
@@ -97,6 +98,7 @@ describe('runSearch', () => {
       install: async () => ok(undefined),
       convert: async () => ok(undefined),
       getInstalled: () => [],
+      skillHash: async () => ok(null),
     });
 
     const outcome = await runSearch(engine, '');
@@ -113,6 +115,7 @@ describe('runSearch', () => {
       install: async () => ok(undefined),
       convert: async () => ok(undefined),
       getInstalled: () => [],
+      skillHash: async () => ok(null),
     });
 
     const outcome = await runSearch(engine, '');

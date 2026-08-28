@@ -1,5 +1,5 @@
 import type { Result } from '../core/result.js';
-import type { BrowseView, Collection, ExportResult, IDE, ScanResult, Skill, SkillRecord, SyncResult, UsageRow } from '../types/index.js';
+import type { BrowseView, Collection, ExportResult, IDE, OriginCheck, ScanResult, Skill, SkillRecord, SyncResult, UsageRow } from '../types/index.js';
 
 /**
  * CollectionEngine is skil's deep module: a small interface backed by
@@ -65,7 +65,7 @@ export interface ICollectionEngine {
    * be saved (in which case no deploy is recorded — `install` can be
    * safely retried).
    */
-  install(skillId: string, targetIDE: IDE, opts?: { dest?: string }): Promise<Result<SkillRecord>>;
+  install(skillId: string, targetIDE: IDE, opts?: { dest?: string; replace?: boolean }): Promise<Result<SkillRecord>>;
 
   /**
    * Searches skills.sh for skills matching `query`, via the SkillsAdapter.
@@ -161,6 +161,14 @@ export interface ICollectionEngine {
   deleteSkill(skillId: string): Result<void>;
 
   /**
+   * Reads the SKILL.md body for a catalog id. Disk owns the text — this
+   * does not persist it. First readable copy in `paths` wins (scan order,
+   * `.cursor` first). Missing catalog row or no SKILL.md on disk is an
+   * error. Discover-only Inbox ids are not catalog rows.
+   */
+  readSkillMd(skillId: string): Result<string>;
+
+  /**
    * Adds an Inbox ID onto an existing command. Inbox stays a staging
    * pool: the id is not removed. One persist; rollback on write failure.
    * Error if the command is missing or the ID is not in Inbox. Does not
@@ -232,6 +240,21 @@ export interface ICollectionEngine {
 
   /** Catalog rows we are SoT for. */
   skills(): SkillRecord[];
+
+  /**
+   * For each catalog skill with a market originHash: current (in sync),
+   * update (market moved, disk still the template), or edited (disk
+   * diverged). Missing market snapshot is current. Fetch failures skip
+   * that id. Does not write disk.
+   */
+  originChecks(): Promise<Result<OriginCheck[]>>;
+
+  /**
+   * Re-installs `skillId` over the dock copies we deployed, then sets
+   * originHash to the new disk hash. Refuses if the copy was edited
+   * unless `replaceEdited` is true. Does not auto-run.
+   */
+  updateFromMarket(skillId: string, opts?: { replaceEdited?: boolean; dest?: string }): Promise<Result<SkillRecord>>;
 
   /**
    * Counts of how often catalog skills were read. Claude logs first.

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { createHash } from 'node:crypto';
 import { execa } from 'execa';
 import type { ISkillsAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
@@ -129,5 +130,21 @@ export class SkillsAdapter implements ISkillsAdapter {
 
   getInstalled(): Skill[] {
     return [];
+  }
+
+  async skillHash(skillId: string): Promise<Result<string | null>> {
+    try {
+      const response = await axios.get<{ data: { skillMd: string | null } }>(
+        `${this.apiBaseUrl}/api/market/preview`,
+        { params: { id: skillId } }
+      );
+      const skillMd = response.data.data.skillMd;
+      if (!skillMd) {
+        return ok(null);
+      }
+      return ok(createHash('sha256').update(skillMd, 'utf8').digest('hex'));
+    } catch {
+      return ok(null);
+    }
   }
 }

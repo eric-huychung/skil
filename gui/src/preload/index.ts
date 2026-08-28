@@ -35,6 +35,9 @@ const bridge: SkilBridge = {
   marketShelves: () => ipcRenderer.invoke(IPC_CHANNELS.marketShelves),
   marketSearch: (query) => ipcRenderer.invoke(IPC_CHANNELS.marketSearch, query),
   marketPreview: (id) => ipcRenderer.invoke(IPC_CHANNELS.marketPreview, id),
+  readSkillMd: (skillId) => ipcRenderer.invoke(IPC_CHANNELS.readSkillMd, skillId),
+  originChecks: () => ipcRenderer.invoke(IPC_CHANNELS.originChecks),
+  updateFromMarket: (skillId, opts) => ipcRenderer.invoke(IPC_CHANNELS.updateFromMarket, skillId, opts),
 };
 
 contextBridge.exposeInMainWorld('skil', bridge);

@@ -1,8 +1,8 @@
 import type { Result } from '../../../src/core/result.js';
-import type { BrowseView, Collection, ExportResult, IDE, ScanResult, Skill, SkillRecord, UsageRow } from '../../../src/types/index.js';
+import type { BrowseView, Collection, ExportResult, IDE, OriginCheck, OriginStatus, ScanResult, Skill, SkillRecord, UsageRow } from '../../../src/types/index.js';
 import type { MarketSearchRow, ShelfRole } from '../../../src/backend/market-types.js';
 
-export type { BrowseView, Collection, ExportResult, IDE, MarketSearchRow, Result, ScanResult, ShelfRole, Skill, SkillRecord, UsageRow };
+export type { BrowseView, Collection, ExportResult, IDE, MarketSearchRow, OriginCheck, OriginStatus, Result, ScanResult, ShelfRole, Skill, SkillRecord, UsageRow };
 
 /**
  * Client-side shape of `GET /api/market/preview`'s `data` — not exported by
@@ -52,6 +52,9 @@ export const IPC_CHANNELS = {
   marketShelves: 'skil:market-shelves',
   marketSearch: 'skil:market-search',
   marketPreview: 'skil:market-preview',
+  readSkillMd: 'skil:read-skill-md',
+  originChecks: 'skil:origin-checks',
+  updateFromMarket: 'skil:update-from-market',
 } as const;
 
 /**
@@ -113,4 +116,10 @@ export interface SkilBridge {
   marketSearch(query: string): Promise<Result<MarketSearchRow[]>>;
   /** Market index preview: stored listing fields plus a live SKILL.md/audit fetch. */
   marketPreview(id: string): Promise<Result<MarketPreviewData>>;
+  /** On-disk SKILL.md for a catalog id. Missing catalog row or file is an error. */
+  readSkillMd(skillId: string): Promise<Result<string>>;
+  /** Market origin vs disk vs live SKILL.md. Empty if none of the catalog has originHash. */
+  originChecks(): Promise<Result<OriginCheck[]>>;
+  /** Re-install from the market. `replaceEdited` resets a forked copy. */
+  updateFromMarket(skillId: string, opts?: { replaceEdited?: boolean }): Promise<Result<SkillRecord>>;
 }

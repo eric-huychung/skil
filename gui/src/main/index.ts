@@ -313,6 +313,16 @@ ipcMain.handle(IPC_CHANNELS.usage, () => currentEngine().usage());
 ipcMain.handle(IPC_CHANNELS.marketShelves, () => fetchMarketShelves());
 ipcMain.handle(IPC_CHANNELS.marketSearch, (_event, query: string) => fetchMarketSearch(query));
 ipcMain.handle(IPC_CHANNELS.marketPreview, (_event, id: string) => fetchMarketPreview(id));
+ipcMain.handle(IPC_CHANNELS.readSkillMd, (_event, skillId: string) => currentEngine().readSkillMd(skillId));
+ipcMain.handle(IPC_CHANNELS.originChecks, () => currentEngine().originChecks());
+ipcMain.handle(IPC_CHANNELS.updateFromMarket, (_event, skillId: string, opts?: { replaceEdited?: boolean }) => {
+  const result = currentEngine().updateFromMarket(skillId, opts);
+  muteOwnWrites();
+  return result;
+});
+
+// Brand icon (regenerate via scripts/generate-icons.mjs). out/main -> gui/resources.
+const APP_ICON = join(import.meta.dirname, '../../resources/icon.png');
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -322,6 +332,7 @@ function createWindow(): void {
     minHeight: 640,
     show: false,
     title: 'skil',
+    icon: APP_ICON,
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
     webPreferences: {
@@ -344,6 +355,11 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // BrowserWindow.icon only covers Windows/Linux; the macOS dock icon
+  // (otherwise the default Electron logo in dev) is set on app.dock.
+  if (process.platform === 'darwin') {
+    app.dock?.setIcon(APP_ICON);
+  }
   restoreLastProject();
   createWindow();
 

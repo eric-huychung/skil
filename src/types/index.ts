@@ -61,6 +61,14 @@ export interface UsageRow {
   count: number;
 }
 
+/** Market origin vs disk vs live skills.sh, for Inbox Update. */
+export type OriginStatus = 'current' | 'update' | 'edited';
+
+export interface OriginCheck {
+  skillId: string;
+  status: OriginStatus;
+}
+
 /** One observed skill read. Aggregated by `engine.usage()`. */
 export interface UsageEvent {
   skillId: string;
@@ -80,6 +88,12 @@ export interface SkillRecord {
   paths: string[];
   deployedTo: Array<{ ide: IDE; path: string; installedAt: string }>;
   source: 'local' | 'skills.sh';
+  /**
+   * sha256 of SKILL.md at the moment we copied from the market. Scan
+   * updates `hash` but not this. Missing on local skills and on records
+   * installed before origin tracking.
+   */
+  originHash?: string;
 }
 
 /** Outcome of `scan()` — pull. */

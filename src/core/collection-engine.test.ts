@@ -30,6 +30,8 @@ function npxProjectSkillRoot(ide: IDE): string {
 }
 
 class NpxLayoutSkillsAdapter extends InMemorySkillsAdapter {
+  skillBody = '';
+
   constructor(private readonly disk: InMemoryFileSystemAdapter) {
     super();
   }
@@ -43,7 +45,7 @@ class NpxLayoutSkillsAdapter extends InMemorySkillsAdapter {
     const prefix = opts?.cwd ? `${opts.cwd.replace(/\\/g, '/').replace(/\/+$/, '')}/` : '';
     this.disk.writeFile(
       `${prefix}${npxProjectSkillRoot(targetIDE)}/${shortName}/SKILL.md`,
-      `# ${shortName}\n`
+      this.skillBody || `# ${shortName}\n`
     );
     return result;
   }
@@ -983,6 +985,25 @@ describe('CollectionEngine', () => {
       expect(isErr(fs.readFile('.cursor/commands/obra/react-patterns.md'))).toBe(true);
     });
 
+    it('stamps originHash from the copied SKILL.md and keeps it after the file is edited', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, config, npx);
+
+      const result = await engine.install('obra/react-patterns', 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      if (!isOk(result)) return;
+      expect(result.value.originHash).toBe(result.value.hash);
+      expect(result.value.originHash).toMatch(/^[a-f0-9]{64}$/);
+
+      fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      engine.scan();
+
+      const row = engine.skills()[0];
+      expect(row?.originHash).toBe(result.value.originHash);
+      expect(row?.hash).not.toBe(row?.originHash);
+    });
+
     it('persists the catalog deploy and does not require the id to be filed', async () => {
       engine.addToInbox('obra/react-patterns');
 
@@ -1157,6 +1178,76 @@ describe('CollectionEngine', () => {
       if (isOk(persisted)) {
         expect(persisted.value.skills).toHaveLength(1);
       }
+    });
+  });
+
+  describe('originChecks', () => {
+    it('reports update when the market hash moved and the disk copy was not edited', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, config, npx);
+      await engine.install('obra/react-patterns', 'cursor');
+      npx.setSkillHash('obra/react-patterns', 'market-moved');
+
+      const result = await engine.originChecks();
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual([{ skillId: 'obra/react-patterns', status: 'update' }]);
+      }
+    });
+
+    it('reports edited when the on-disk hash no longer matches originHash', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, config, npx);
+      await engine.install('obra/react-patterns', 'cursor');
+      fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      engine.scan();
+
+      const result = await engine.originChecks();
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toEqual([{ skillId: 'obra/react-patterns', status: 'edited' }]);
+      }
+    });
+  });
+
+  describe('updateFromMarket', () => {
+    it('overwrites an unedited copy and refreshes originHash', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, config, npx);
+      await engine.install('obra/react-patterns', 'cursor');
+      npx.skillBody = '# from market\n';
+
+      const result = await engine.updateFromMarket('obra/react-patterns');
+
+      expect(isOk(result)).toBe(true);
+      if (!isOk(result)) return;
+      expect(fs.readFile('.cursor/skills/obra/react-patterns/SKILL.md')).toEqual({
+        ok: true,
+        value: '# from market\n',
+      });
+      expect(result.value.originHash).toBe(result.value.hash);
+      expect(result.value.originHash).not.toBeUndefined();
+    });
+
+    it('refuses to overwrite an edited copy unless replaceEdited is set', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, config, npx);
+      await engine.install('obra/react-patterns', 'cursor');
+      fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      engine.scan();
+
+      const blocked = await engine.updateFromMarket('obra/react-patterns');
+      expect(isErr(blocked)).toBe(true);
+
+      npx.skillBody = '# from market\n';
+      const reset = await engine.updateFromMarket('obra/react-patterns', { replaceEdited: true });
+      expect(isOk(reset)).toBe(true);
+      expect(fs.readFile('.cursor/skills/obra/react-patterns/SKILL.md')).toEqual({
+        ok: true,
+        value: '# from market\n',
+      });
     });
   });
 
@@ -1507,6 +1598,27 @@ describe('CollectionEngine', () => {
       expect(engine.inbox()).toEqual(['tdd']);
     });
 
+    it('does not mint a second catalog id for an npx leftover short folder', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, config, npx);
+      engine.addToInbox('obra/react-patterns');
+      await engine.install('obra/react-patterns', 'cursor');
+      fs.writeFile('.agents/skills/react-patterns/SKILL.md', '# react-patterns\n');
+
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.added).not.toContain('react-patterns');
+      }
+      expect(engine.skills().map((skill) => skill.id)).toEqual(['obra/react-patterns']);
+      expect(engine.inbox()).toEqual(['obra/react-patterns']);
+      expect(engine.skills()[0]?.paths).toEqual([
+        '.cursor/skills/obra/react-patterns',
+        '.agents/skills/react-patterns',
+      ]);
+    });
+
     it('keeps a filed command map on re-scan and reports gone ids', () => {
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
       fs.writeFile('.cursor/skills/design/SKILL.md', '# design\n');
@@ -1801,6 +1913,59 @@ generated_at: 2026-08-24T00:00:00.000Z
         expect(existsSync(join(tmpDir, '.cursor', 'skills'))).toBe(true);
       } finally {
         rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('readSkillMd', () => {
+    it('returns the on-disk SKILL.md for a scanned id', () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n\nWrite tests first.\n');
+      engine.scan();
+
+      const result = engine.readSkillMd('tdd');
+
+      expect(result).toEqual({ ok: true, value: '# tdd\n\nWrite tests first.\n' });
+    });
+
+    it('reads the first dock copy when the same id exists on several trees', () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# cursor tdd\n');
+      fs.writeFile('.claude/skills/tdd/SKILL.md', '# claude tdd\n');
+      engine.scan();
+
+      const result = engine.readSkillMd('tdd');
+
+      expect(result).toEqual({ ok: true, value: '# cursor tdd\n' });
+    });
+
+    it('falls through to the next path when the first copy is gone', () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# cursor tdd\n');
+      fs.writeFile('.claude/skills/tdd/SKILL.md', '# claude tdd\n');
+      engine.scan();
+      fs.removeFile('.cursor/skills/tdd/SKILL.md');
+
+      const result = engine.readSkillMd('tdd');
+
+      expect(result).toEqual({ ok: true, value: '# claude tdd\n' });
+    });
+
+    it('reads a nested skill folder, not its parent', () => {
+      fs.writeFile('.cursor/skills/build/SKILL.md', '# build\n');
+      fs.writeFile('.cursor/skills/build/ui/shadcn/SKILL.md', '# shadcn\n');
+      engine.scan();
+
+      const result = engine.readSkillMd('build/ui/shadcn');
+
+      expect(result).toEqual({ ok: true, value: '# shadcn\n' });
+    });
+
+    it('errors when the id is not in the catalog', () => {
+      engine.addToInbox('obra/react-patterns');
+
+      const result = engine.readSkillMd('obra/react-patterns');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('obra/react-patterns');
       }
     });
   });

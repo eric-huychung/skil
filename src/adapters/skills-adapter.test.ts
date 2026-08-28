@@ -290,4 +290,36 @@ describe('SkillsAdapter', () => {
       }
     });
   });
+
+  describe('skillHash', () => {
+    it('hashes the live SKILL.md from market preview', async () => {
+      nock(website.apiBaseUrl)
+        .get('/api/market/preview')
+        .query({ id: 'obra/react-patterns' })
+        .reply(200, { data: { skillMd: '# hello\n' } });
+
+      const adapter = new SkillsAdapter();
+      const result = await adapter.skillHash('obra/react-patterns');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toMatch(/^[a-f0-9]{64}$/);
+      }
+    });
+
+    it('returns null when preview has no body or the request fails', async () => {
+      nock(website.apiBaseUrl)
+        .get('/api/market/preview')
+        .query({ id: 'missing' })
+        .reply(404, { error: 'not_found' });
+
+      const adapter = new SkillsAdapter();
+      const result = await adapter.skillHash('missing');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toBeNull();
+      }
+    });
+  });
 });

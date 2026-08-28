@@ -115,6 +115,12 @@ export interface ISkillsAdapter {
 
   /** Returns skills already installed, read from local tooling state. */
   getInstalled(): Skill[];
+
+  /**
+   * Live sha256 of the market SKILL.md for `id`, or `null` if there is
+   * no snapshot. Used to decide Update vs current. Does not write disk.
+   */
+  skillHash(skillId: string): Promise<Result<string | null>>;
 }
 
 /**

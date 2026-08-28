@@ -23,11 +23,14 @@ import { BridgeProvider } from './bridge-context';
 export function createInMemoryWorkspace(usage?: InMemoryUsageCollector): {
   engine: ICollectionEngine;
   fs: InMemoryFileSystemAdapter;
+  skills: InMemorySkillsAdapter;
 } {
   const fs = new InMemoryFileSystemAdapter();
+  const skills = new InMemorySkillsAdapter();
   return {
     fs,
-    engine: new CollectionEngine(fs, new InMemoryConfigAdapter(), new InMemorySkillsAdapter(), usage),
+    skills,
+    engine: new CollectionEngine(fs, new InMemoryConfigAdapter(), skills, usage),
   };
 }
 
@@ -170,6 +173,9 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
         skillMd: null,
         audit: { status: 'none' },
       }),
+    readSkillMd: async (skillId: string) => activeEngine.readSkillMd(skillId),
+    originChecks: async () => activeEngine.originChecks(),
+    updateFromMarket: async (skillId, opts) => activeEngine.updateFromMarket(skillId, opts),
   };
 }
 

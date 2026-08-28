@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowRight, CaretLeft, CaretRight, MagnifyingGlass, Trash } from '@phosphor-icons/react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react';
+import { ArrowRight, CaretLeft, CaretRight, MagnifyingGlass, Trash, ArrowClockwise } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import { groupInboxSkills } from '../lib/skill-sources';
-import type { ScanResult, SkillRecord } from '../../../shared/ipc';
+import type { OriginCheck, OriginStatus, ScanResult, SkillRecord } from '../../../shared/ipc';
+import SkillPreviewDialog from './SkillPreviewDialog';
 
 const PAGE_SIZE = 25;
 
@@ -24,17 +25,27 @@ export default function InboxPanel() {
   const bridge = useBridge();
   const [inbox, setInbox] = useState<string[] | null>(null);
   const [catalog, setCatalog] = useState<SkillRecord[]>([]);
+  const [originById, setOriginById] = useState<Record<string, OriginStatus>>({});
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   const [canScan, setCanScan] = useState(false);
   const [lastScan, setLastScan] = useState<ScanResult | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<{ id: string; replaceEdited: boolean } | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [nextInbox, nextCatalog] = await Promise.all([bridge.listInbox(), bridge.listSkills()]);
+    const [nextInbox, nextCatalog, nextChecks] = await Promise.all([
+      bridge.listInbox(),
+      bridge.listSkills(),
+      bridge.originChecks(),
+    ]);
     setInbox(nextInbox);
     setCatalog(nextCatalog);
+    const checks: OriginCheck[] = nextChecks.ok ? nextChecks.value : [];
+    setOriginById(Object.fromEntries(checks.map((check) => [check.skillId, check.status])));
   }, [bridge]);
 
   useEffect(() => {
@@ -78,19 +89,21 @@ export default function InboxPanel() {
   const pendingNested = pendingDelete
     ? catalog.filter((skill) => skill.id.startsWith(`${pendingDelete}/`)).map((skill) => skill.id)
     : [];
+  const selectedRecord = selectedId ? catalog.find((skill) => skill.id === selectedId) : undefined;
+  const previewSource = selectedRecord && selectedRecord.paths.length > 0 ? 'local' : 'market';
 
   useEffect(() => {
-    if (!pendingDelete) return;
+    if (!pendingDelete && !pendingUpdate) return;
     function handleKey(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault();
-        setPendingDelete(null);
-        setDeleteError(null);
+        if (pendingUpdate) closeUpdate();
+        else closeDelete();
       }
     }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [pendingDelete]);
+  }, [pendingDelete, pendingUpdate]);
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -104,6 +117,26 @@ export default function InboxPanel() {
   function closeDelete() {
     setPendingDelete(null);
     setDeleteError(null);
+  }
+
+  function closeUpdate() {
+    setPendingUpdate(null);
+    setUpdateError(null);
+  }
+
+  async function handleUpdate() {
+    if (!pendingUpdate) return;
+    setUpdateError(null);
+    const result = await bridge.updateFromMarket(pendingUpdate.id, {
+      replaceEdited: pendingUpdate.replaceEdited,
+    });
+    if (!result.ok) {
+      setUpdateError(result.error.message);
+      return;
+    }
+    setPendingUpdate(null);
+    setSelectedId(null);
+    await refresh();
   }
 
   async function handleDelete() {
@@ -125,7 +158,7 @@ export default function InboxPanel() {
           <p className="eyebrow">Inbox</p>
           <h1>Inbox</h1>
           <p className="workspace-lede">
-            Staging pool from scans and Discover. File them onto a command when you are ready. They stay here after you file.
+            Discover adds sit under Market until they are on disk. Then they move to Project. Filing onto a command does not remove them.
           </p>
         </div>
         <div className="library-heading-actions">
@@ -178,16 +211,43 @@ export default function InboxPanel() {
                   {group.skills.map((skillId) => {
                     const rank = visibleStart + visibleIds.indexOf(skillId) + 1;
                     return (
-                      <li className="library-skill library-skill-static" key={skillId}>
+                      <li
+                        className="library-skill library-skill-interactive"
+                        key={skillId}
+                        onClick={() => setSelectedId(skillId)}
+                      >
+                        <button
+                          type="button"
+                          className={`library-skill-hit ${FOCUS_RING}`}
+                          onClick={() => setSelectedId(skillId)}
+                          aria-haspopup="dialog"
+                          aria-label={`Details for ${skillId}`}
+                        />
                         <span className="skill-rank">{rank}</span>
                         <div className="skill-info">
                           <div className="skill-name">{skillId}</div>
                         </div>
+                        {originById[skillId] === 'update' && (
+                          <button
+                            type="button"
+                            aria-label={`Update ${skillId}`}
+                            className={`update-card ${FOCUS_RING}`}
+                            onClick={(event: MouseEvent<HTMLButtonElement>) => {
+                              event.stopPropagation();
+                              setUpdateError(null);
+                              setPendingUpdate({ id: skillId, replaceEdited: false });
+                            }}
+                          >
+                            <ArrowClockwise size={16} weight="regular" aria-hidden="true" />
+                            Update
+                          </button>
+                        )}
                         <button
                           type="button"
                           aria-label={`Delete ${skillId}`}
                           className={`delete-card ${FOCUS_RING}`}
-                          onClick={() => {
+                          onClick={(event: MouseEvent<HTMLButtonElement>) => {
+                            event.stopPropagation();
                             setDeleteError(null);
                             setPendingDelete(skillId);
                           }}
@@ -229,6 +289,24 @@ export default function InboxPanel() {
         </>
       )}
 
+      {selectedId && (
+        <SkillPreviewDialog
+          id={selectedId}
+          source={previewSource}
+          paths={selectedRecord?.paths}
+          originStatus={originById[selectedId]}
+          onReset={
+            originById[selectedId] === 'edited'
+              ? () => {
+                  setUpdateError(null);
+                  setPendingUpdate({ id: selectedId, replaceEdited: true });
+                }
+              : undefined
+          }
+          onClose={() => setSelectedId(null)}
+        />
+      )}
+
       {pendingDelete && (
         <div className="modal-backdrop" role="presentation" onClick={closeDelete}>
           <div
@@ -268,6 +346,41 @@ export default function InboxPanel() {
               </button>
               <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={() => void handleDelete()}>
                 Delete skill
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingUpdate && (
+        <div className="modal-backdrop" role="presentation" onClick={closeUpdate}>
+          <div
+            className="help-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="update-skill-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">Inbox</p>
+            <h2 id="update-skill-title">
+              {pendingUpdate.replaceEdited ? `Reset ${pendingUpdate.id}?` : `Update ${pendingUpdate.id}?`}
+            </h2>
+            <p className="muted-copy">
+              {pendingUpdate.replaceEdited
+                ? 'This replaces your edited SKILL.md with the current market copy.'
+                : 'This replaces the on-disk SKILL.md with the current market copy.'}
+            </p>
+            {updateError && (
+              <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {updateError}
+              </p>
+            )}
+            <div className="modal-actions">
+              <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={closeUpdate}>
+                Cancel
+              </button>
+              <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={() => void handleUpdate()}>
+                {pendingUpdate.replaceEdited ? 'Reset skill' : 'Update skill'}
               </button>
             </div>
           </div>

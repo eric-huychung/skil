@@ -9,7 +9,8 @@ import {
   DEFAULT_TEST_PROJECT_ROOT,
   renderWithProviders,
 } from '../test-utils';
-import { isErr } from '../../../../../src/core/result.js';
+import { isErr, ok, type Result } from '../../../../../src/core/result.js';
+import type { MarketPreviewData } from '../../../shared/ipc.js';
 
 describe('InboxPanel', () => {
   it('shows unfiled inventory, not a command card', async () => {
@@ -94,6 +95,38 @@ describe('InboxPanel', () => {
     expect(within(market as HTMLElement).getByText('obra/react-patterns')).toBeInTheDocument();
     expect(within(project as HTMLElement).getByText('tdd')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Install / })).not.toBeInTheDocument();
+  });
+
+  it('moves a Discover skill to Project after it lands on disk', async () => {
+    const engine = createInMemoryEngine();
+    engine.addToInbox('obra/react-patterns');
+    await engine.install('obra/react-patterns', 'cursor');
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<InboxPanel />, { bridge });
+
+    expect(await screen.findByText('Project')).toBeInTheDocument();
+    expect(screen.queryByText('Market')).not.toBeInTheDocument();
+    const project = screen.getByText('Project').closest('.command-stage');
+    if (!project) throw new Error('expected project group');
+    expect(within(project as HTMLElement).getByText('obra/react-patterns')).toBeInTheDocument();
+  });
+
+  it('offers Update on a Project row when the market copy moved', async () => {
+    const { engine, fs, skills } = createInMemoryWorkspace();
+    engine.addToInbox('obra/react-patterns');
+    await engine.install('obra/react-patterns', 'cursor');
+    fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# original\n');
+    engine.scan();
+    skills.setSkillHash('obra/react-patterns', 'market-moved');
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<InboxPanel />, { bridge });
+
+    expect(await screen.findByRole('button', { name: 'Update obra/react-patterns' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Update obra/react-patterns' }));
+    expect(await screen.findByRole('dialog', { name: 'Update obra/react-patterns?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Update skill' })).toBeInTheDocument();
   });
 
   it('shows 25 unfiled skills per page', async () => {
@@ -212,5 +245,80 @@ describe('InboxPanel', () => {
     });
     expect(isErr(fs.readFile('.cursor/skills/build/SKILL.md'))).toBe(true);
     expect(isErr(fs.readFile('.cursor/skills/build/scripts/run.sh'))).toBe(true);
+  });
+
+  it('opens a local SKILL.md preview when a project skill is clicked', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n\nWrite tests first.\n');
+    fs.writeFile('.claude/skills/tdd/SKILL.md', '# tdd\n\nClaude copy.\n');
+    engine.scan();
+    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+
+    renderWithProviders(<InboxPanel />, { bridge });
+    await userEvent.click(await screen.findByRole('button', { name: 'Details for tdd' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'tdd' });
+    expect(within(dialog).getByText(/Write tests first/)).toBeInTheDocument();
+    expect(within(dialog).getByText('.cursor/skills/tdd')).toBeInTheDocument();
+    expect(within(dialog).getByText('.claude/skills/tdd')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/npx skills add/)).not.toBeInTheDocument();
+  });
+
+  it('offers Reset in preview when a market skill was edited on disk', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    engine.addToInbox('obra/react-patterns');
+    await engine.install('obra/react-patterns', 'cursor');
+    fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# original\n');
+    engine.scan();
+    fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+    engine.scan();
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<InboxPanel />, { bridge });
+    await userEvent.click(await screen.findByRole('button', { name: 'Details for obra/react-patterns' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'obra/react-patterns' });
+    expect(within(dialog).getByText(/no longer matches the market copy/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Reset to market' }));
+    expect(await screen.findByRole('dialog', { name: 'Reset obra/react-patterns?' })).toBeInTheDocument();
+  });
+
+  it('opens the market preview for a Discover-only inbox id', async () => {
+    const engine = createInMemoryEngine();
+    engine.addToInbox('obra/react-patterns');
+    const bridge = {
+      ...createTestBridge(engine),
+      marketPreview: async (): Promise<Result<MarketPreviewData>> =>
+        ok({
+          id: 'obra/react-patterns',
+          name: 'obra/react-patterns',
+          installs: 1200,
+          url: '',
+          installUrl: null,
+          installCommand: 'npx skills add obra/react-patterns',
+          skillMd: '# React Patterns\n\nUse hooks.',
+          audit: { status: 'pass' },
+        }),
+    };
+
+    renderWithProviders(<InboxPanel />, { bridge });
+    await userEvent.click(await screen.findByRole('button', { name: 'Details for obra/react-patterns' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'obra/react-patterns' });
+    expect(within(dialog).getByText(/Use hooks/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Audit passed/)).toBeInTheDocument();
+  });
+
+  it('does not open preview when delete is clicked', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    engine.scan();
+    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+
+    renderWithProviders(<InboxPanel />, { bridge });
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete tdd' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Delete tdd?' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'tdd' })).not.toBeInTheDocument();
   });
 });

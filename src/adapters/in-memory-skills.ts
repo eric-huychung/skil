@@ -29,6 +29,7 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
   private browseError: Error | null = null;
   private convertError: Error | null = null;
   private convertCalls = 0;
+  private hashes = new Map<string, string | null>();
 
   async search(_query: string): Promise<Result<Skill[]>> {
     if (this.searchError) {
@@ -63,6 +64,15 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
 
   getInstalled(): Skill[] {
     return [...this.installed];
+  }
+
+  async skillHash(skillId: string): Promise<Result<string | null>> {
+    return ok(this.hashes.has(skillId) ? this.hashes.get(skillId)! : null);
+  }
+
+  /** Test helper: live market hash for originChecks. `null` = no snapshot. */
+  setSkillHash(skillId: string, hash: string | null): void {
+    this.hashes.set(skillId, hash);
   }
 
   /** Test helper: (skillId, ide) pairs passed to install(). */
@@ -109,5 +119,6 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     this.browseError = null;
     this.convertError = null;
     this.convertCalls = 0;
+    this.hashes.clear();
   }
 }

@@ -8,6 +8,7 @@ import type {
   CommandRecord,
   ExportResult,
   IDE,
+  OriginCheck,
   ScanResult,
   Skill,
   SkillRecord,
@@ -425,7 +426,21 @@ export class CollectionEngine implements ICollectionEngine {
     return ok({ synced, warnings });
   }
 
-  async install(skillId: string, targetIDE: IDE, opts?: { dest?: string }): Promise<Result<SkillRecord>> {
+  async install(
+    skillId: string,
+    targetIDE: IDE,
+    opts?: { dest?: string; replace?: boolean; refreshOrigin?: boolean }
+  ): Promise<Result<SkillRecord>> {
+    const deployPath = underRoot(opts?.dest, `${SKILL_ROOT_BY_IDE[targetIDE]}/${skillId}`);
+    if (opts?.replace) {
+      const removed = this.fs.removeDir(deployPath);
+      if (!isOk(removed)) {
+        return err(
+          new Error(`Failed to replace skill '${skillId}' at ${deployPath}: ${removed.error.message}`)
+        );
+      }
+    }
+
     const result = await this.skillsAdapter.install(
       skillId,
       targetIDE,
@@ -440,22 +455,26 @@ export class CollectionEngine implements ICollectionEngine {
       return placed;
     }
 
-    const deployPath = underRoot(opts?.dest, `${SKILL_ROOT_BY_IDE[targetIDE]}/${skillId}`);
     const installedAt = new Date().toISOString();
     const existingIndex = this.state.skills.findIndex((s) => s.id === skillId);
     const previous = existingIndex >= 0 ? cloneSkillRecord(this.state.skills[existingIndex]) : undefined;
     const hash = hashSkillAt(this.fs, deployPath) ?? previous?.hash ?? '';
+    const originHash = opts?.refreshOrigin
+      ? hash || previous?.originHash
+      : previous?.originHash ?? (hash || undefined);
 
     const record: SkillRecord = previous
       ? {
           ...previous,
           hash,
+          ...(originHash !== undefined ? { originHash } : {}),
           paths: previous.paths.includes(deployPath) ? previous.paths : [...previous.paths, deployPath],
           deployedTo: upsertDeploy(previous.deployedTo, { ide: targetIDE, path: deployPath, installedAt }),
         }
       : {
           id: skillId,
           hash,
+          ...(hash ? { originHash: hash } : {}),
           paths: [deployPath],
           deployedTo: [{ ide: targetIDE, path: deployPath, installedAt }],
           source: 'skills.sh',
@@ -712,6 +731,22 @@ export class CollectionEngine implements ICollectionEngine {
     const written = names.length > 0 ? this.writeThroughExisting(names) : [];
     this.writtenPaths = [...muted, ...written];
     return ok(undefined);
+  }
+
+  readSkillMd(skillId: string): Result<string> {
+    const record = this.state.skills.find((skill) => skill.id === skillId);
+    if (!record) {
+      return err(new Error(`Skill '${skillId}' is not in the catalog.`));
+    }
+
+    for (const folder of record.paths) {
+      const contents = this.fs.readFile(`${folder}/SKILL.md`);
+      if (isOk(contents)) {
+        return ok(contents.value);
+      }
+    }
+
+    return err(new Error(`Skill '${skillId}' has no SKILL.md on disk.`));
   }
 
   file(skillId: string, commandName: string, _ide?: IDE): Result<Collection> {
@@ -1001,6 +1036,7 @@ export class CollectionEngine implements ICollectionEngine {
           ...prev,
           hash: seen.hash,
           paths: seen.paths,
+          ...(prev.source === 'skills.sh' && !prev.originHash ? { originHash: seen.hash } : {}),
         });
       }
     }
@@ -1033,6 +1069,15 @@ export class CollectionEngine implements ICollectionEngine {
     const filed = new Set(this.state.commands.flatMap((command) => command.skills));
 
     for (const [id, seen] of unmatchedFound) {
+      const origin = nextSkills.find(
+        (record) => record.source === 'skills.sh' && record.id !== id && skillFolderName(record.id) === id
+      );
+      if (origin) {
+        for (const path of seen.paths) {
+          if (!origin.paths.includes(path)) origin.paths.push(path);
+        }
+        continue;
+      }
       added.push(id);
       nextSkills.push({
         id,
@@ -1073,6 +1118,60 @@ export class CollectionEngine implements ICollectionEngine {
 
   skills(): SkillRecord[] {
     return [...this.state.skills];
+  }
+
+  async originChecks(): Promise<Result<OriginCheck[]>> {
+    const checks: OriginCheck[] = [];
+    for (const record of this.state.skills) {
+      if (record.source !== 'skills.sh' || !record.originHash) {
+        continue;
+      }
+      if (record.hash !== record.originHash) {
+        checks.push({ skillId: record.id, status: 'edited' });
+        continue;
+      }
+      const market = await this.skillsAdapter.skillHash(record.id);
+      if (!isOk(market) || !market.value || market.value === record.originHash) {
+        checks.push({ skillId: record.id, status: 'current' });
+        continue;
+      }
+      checks.push({ skillId: record.id, status: 'update' });
+    }
+    return ok(checks);
+  }
+
+  async updateFromMarket(
+    skillId: string,
+    opts?: { replaceEdited?: boolean; dest?: string }
+  ): Promise<Result<SkillRecord>> {
+    const record = this.state.skills.find((skill) => skill.id === skillId);
+    if (!record || record.source !== 'skills.sh' || !record.originHash) {
+      return err(new Error(`Skill '${skillId}' has no market origin to update from.`));
+    }
+    if (record.hash !== record.originHash && !opts?.replaceEdited) {
+      return err(new Error(`Skill '${skillId}' was edited. Reset from the preview if you want the market copy.`));
+    }
+
+    const docks =
+      record.deployedTo.length > 0
+        ? [...new Set(record.deployedTo.map((deploy) => deploy.ide))]
+        : [DEFAULT_IDE];
+    let last: SkillRecord | undefined;
+    for (const dock of docks) {
+      const installed = await this.install(skillId, dock, {
+        dest: opts?.dest,
+        replace: true,
+        refreshOrigin: true,
+      });
+      if (!isOk(installed)) {
+        return installed;
+      }
+      last = installed.value;
+    }
+    if (!last) {
+      return err(new Error(`Skill '${skillId}' has no market origin to update from.`));
+    }
+    return ok(last);
   }
 
   private dropSkillId(id: string): void {
