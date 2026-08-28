@@ -50,13 +50,13 @@ export type InboxSkillGroup = {
 
 export function groupInboxSkills(
   inbox: string[],
-  catalog: Array<{ id: string; source: 'local' | 'skills.sh' }>
+  catalog: Array<{ id: string; paths: string[] }>
 ): InboxSkillGroup[] {
-  const projectIds = new Set(catalog.filter((skill) => skill.source === 'local').map((skill) => skill.id));
+  const onDisk = new Set(catalog.filter((skill) => skill.paths.length > 0).map((skill) => skill.id));
   const market: string[] = [];
   const project: string[] = [];
   for (const id of inbox) {
-    if (projectIds.has(id)) project.push(id);
+    if (onDisk.has(id)) project.push(id);
     else market.push(id);
   }
   const groups: InboxSkillGroup[] = [
