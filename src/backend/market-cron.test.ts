@@ -71,18 +71,32 @@ describe('handleCronSyncRequest', () => {
     expect(response.status).toBe(401);
   });
 
-  it('runs MarketSync.sync with maxDetail 40 when authorized', async () => {
-    const items = Array.from({ length: 45 }, (_, i) => listingItem(`a/${i}`));
-    const { client, sync } = cronSync(fakeClient([{ items }]));
+  it('runs MarketSync.sync with maxDetail 40 when authorized, without a listing crawl', async () => {
+    const items = Array.from({ length: 45 }, (_, i) => listingItem(`a/${i}`, 45 - i));
+    const client = fakeClient([]);
+    client.searchSkills = vi.fn(async () => ok(items));
+    const store = new InMemoryMarketStore();
+    await store.upsertField({
+      slug: 'frontend',
+      roleSlug: 'swe',
+      label: 'Frontend',
+      q: 'frontend ui',
+      sortOrder: 1,
+      shelfSize: 50,
+      active: true,
+    });
+    const sync = new MarketSync({ store, client });
 
     const response = await handleCronSyncRequest(cronRequest('secret'), { cronSecret: 'secret', sync });
-    const body = (await response.json()) as { hydrated: number; listingQueued: number };
+    const body = (await response.json()) as { hydrated: number; listingQueued: number; shelfQueued: number };
 
     expect(response.status).toBe(200);
     expect(CRON_MAX_DETAIL).toBe(40);
+    expect(client.listPage).not.toHaveBeenCalled();
     expect(client.getSkill).toHaveBeenCalledTimes(40);
     expect(body.hydrated).toBe(40);
-    expect(body.listingQueued).toBe(45);
+    expect(body.listingQueued).toBe(0);
+    expect(body.shelfQueued).toBe(45);
   });
 
   it('returns 500 when authorized but sync is not wired', async () => {

@@ -89,7 +89,7 @@ Discover's browse/search today hits skills.sh live via `SkillsAdapter`. The **ma
 
 **Same nest, different action:** Landing copies `npx skills add`. GUI `+` adds to Inbox (does not install).
 
-**Shipped:** sync core, Supabase persistence + first-fill script (`npm run sync-market`), read API (`GET /api/market/shelves|search|preview`), Landing + GUI Discover, and the weekly Cron (`GET /api/cron/sync-market`, `CRON_SECRET` or 401, `sync({ maxDetail: 40 })` — not the 20k fill). Empty index still degrades (Landing hides the section, GUI keeps live skills.sh browse). A human still applies the migration, then runs first fill, before the index has data; after that the cron keeps it fresh.
+**Shipped:** sync core, Supabase persistence + first-fill script (`npm run sync-market`), read API (`GET /api/market/shelves|search|preview`), Landing + GUI Discover, and the weekly Cron (`GET /api/cron/sync-market`, `CRON_SECRET` or 401, `sync({ maxDetail: 40 })` — shelves + 40 hydrates, not the 20k listing). Empty index still degrades (Landing hides the section, GUI keeps live skills.sh browse). A human still applies the migration, then runs first fill, before the index has data; after that the cron keeps shelves fresh.
 
 ### Data Model
 

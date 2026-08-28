@@ -39,16 +39,16 @@ export interface RefreshShelvesResult {
   queued: string[];
 }
 
-/** Outcome of one `sync({ maxDetail })` run — listing + capped hydrate + shelves. */
+/** Outcome of one `sync({ maxDetail })` run — shelves + capped hydrate, no listing crawl. */
 export interface MarketSyncRunResult {
   seenAt: string;
-  /** Ids the listing crawl queued (may be larger than this run hydrates). */
+  /** Always empty — weekly `sync` does not crawl the listing. First fill uses `syncListing`. */
   listingQueued: string[];
   hydrated: string[];
   unchanged: string[];
   refreshed: string[];
   failed: string[];
-  /** Search-only ids queued during shelf refresh (may exceed leftover budget). */
+  /** Ids shelf refresh queued for hydrate (may exceed `maxDetail`). */
   shelfQueued: string[];
 }
 
@@ -234,51 +234,32 @@ export class MarketSync {
   }
 
   /**
-   * One ongoing-sync pass: full listing crawl + inactive reconcile, then
-   * at most `maxDetail` detail hydrates, then shelf refresh. Leftover
-   * budget (if listing queued fewer than `maxDetail`) goes to search-only
-   * ids the listing never saw. This is what the weekly cron calls —
-   * `maxDetail: 40` — so one invocation cannot drain a 20k first fill.
-   * The laptop script still orchestrates its own paced drain.
+   * Weekly cron path: refresh active field shelves, then hydrate at most
+   * `maxDetail` of the ids those searches queued (no hash yet). Does **not**
+   * crawl the 20k listing or mark inactive — that is what timed out at
+   * Vercel's 300s cap. First fill / full listing stays on
+   * `scripts/sync-market.ts`.
    */
   async sync(opts: { maxDetail: number }): Promise<Result<MarketSyncRunResult>> {
     const maxDetail = Math.max(0, Math.floor(opts.maxDetail));
-
-    const listing = await this.syncListing();
-    if (!isOk(listing)) {
-      return listing;
-    }
-
-    const listingSlice = listing.value.queued.slice(0, maxDetail);
-    const listingHydrate = await this.hydrateDetails(listingSlice);
-    if (!isOk(listingHydrate)) {
-      return listingHydrate;
-    }
-
-    const hydrated = [...listingHydrate.value.hydrated];
-    const unchanged = [...listingHydrate.value.unchanged];
+    const seenAt = this.now();
 
     const shelves = await this.refreshActiveFields();
     if (!isOk(shelves)) {
       return shelves;
     }
 
-    const remaining = maxDetail - listingSlice.length;
-    const shelfSlice = remaining > 0 ? shelves.value.queued.slice(0, remaining) : [];
-    if (shelfSlice.length > 0) {
-      const extra = await this.hydrateDetails(shelfSlice);
-      if (!isOk(extra)) {
-        return extra;
-      }
-      hydrated.push(...extra.value.hydrated);
-      unchanged.push(...extra.value.unchanged);
+    const shelfSlice = shelves.value.queued.slice(0, maxDetail);
+    const hydrate = await this.hydrateDetails(shelfSlice);
+    if (!isOk(hydrate)) {
+      return hydrate;
     }
 
     return ok({
-      seenAt: listing.value.seenAt,
-      listingQueued: listing.value.queued,
-      hydrated,
-      unchanged,
+      seenAt,
+      listingQueued: [],
+      hydrated: hydrate.value.hydrated,
+      unchanged: hydrate.value.unchanged,
       refreshed: shelves.value.refreshed,
       failed: shelves.value.failed,
       shelfQueued: shelves.value.queued,
