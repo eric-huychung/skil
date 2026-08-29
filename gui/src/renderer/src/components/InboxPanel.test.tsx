@@ -21,7 +21,7 @@ describe('InboxPanel', () => {
 
     renderWithProviders(<InboxPanel />, { bridge });
 
-    expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument();
     expect(screen.getByText('obra/react-patterns')).toBeInTheDocument();
     expect(screen.queryByRole('listitem', { name: 'Command Inbox' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Scan' })).not.toBeInTheDocument();
@@ -156,7 +156,7 @@ describe('InboxPanel', () => {
 
     renderWithProviders(<InboxPanel />, { bridge });
 
-    expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Scan' })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Connect a folder' })).not.toBeInTheDocument();
     expect(engine.inbox()).toEqual([]);

@@ -37,7 +37,7 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: 'Open Cursor workspace' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create New Command' })).toBeInTheDocument();
     expect(screen.getByText('No commands yet')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Inbox' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Skills' })).not.toBeInTheDocument();
   });
 
   it('reflects commands created through the engine without connecting a folder first', async () => {
@@ -61,7 +61,7 @@ describe('App', () => {
     expect(screen.queryByRole('heading', { name: 'Pick a project folder' })).not.toBeInTheDocument();
   });
 
-  it('puts Inbox on the rail above Commands', async () => {
+  it('puts Skills on the rail above Commands and names each tab for hover', async () => {
     const engine = installTestBridge(createInMemoryEngine());
     engine.create('frontend', []);
     engine.addToInbox('obra/react-patterns');
@@ -69,18 +69,21 @@ describe('App', () => {
     renderWithProviders(<App />);
 
     const tabs = screen.getAllByRole('tab').map((tab) => tab.getAttribute('aria-label'));
-    expect(tabs.indexOf('Inbox')).toBeGreaterThan(-1);
-    expect(tabs.indexOf('Inbox')).toBeLessThan(tabs.indexOf('Commands'));
+    expect(tabs.indexOf('Skills')).toBeGreaterThan(-1);
+    expect(tabs.indexOf('Skills')).toBeLessThan(tabs.indexOf('Commands'));
+    for (const name of ['Sync', 'Discover', 'Skills', 'Commands']) {
+      expect(screen.getByRole('tab', { name })).toHaveTextContent(name);
+    }
     expect(await screen.findByRole('heading', { name: 'Commands' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Inbox' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Skills' })).not.toBeInTheDocument();
     await openCommandsWorkspace();
     expect(
       screen.getByRole('button', { name: 'Add obra/react-patterns to frontend' })
     ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
-    expect(screen.getByRole('tab', { name: 'Inbox' })).toHaveAttribute('aria-selected', 'true');
-    expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Skills' }));
+    expect(screen.getByRole('tab', { name: 'Skills' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument();
     expect(screen.getByText('obra/react-patterns')).toBeInTheDocument();
   });
 
@@ -218,9 +221,9 @@ describe('App', () => {
     expect(screen.queryByText('tdd')).not.toBeInTheDocument();
 
     await clickPickFolder();
-    await userEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Skills' }));
 
-    expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument();
     expect(screen.getByText('tdd')).toBeInTheDocument();
     expect(screen.getByText('ui/styling')).toBeInTheDocument();
     expect(engine.inbox()).toEqual(['tdd', 'ui/styling']);
@@ -229,7 +232,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Re-scan' })).toBeEnabled();
   });
 
-  it('does not put a rescan control on Discover or Inbox', async () => {
+  it('does not put a rescan control on Discover or Skills', async () => {
     installTestBridge(createInMemoryEngine());
 
     renderWithProviders(<App />);
@@ -238,7 +241,7 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: 'Refresh skills' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Re-scan' })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Skills' }));
 
     expect(screen.queryByRole('button', { name: 'Scan' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Re-scan' })).not.toBeInTheDocument();
@@ -288,7 +291,7 @@ describe('App', () => {
       expect(screen.getByRole('listitem', { name: 'Command build' })).toHaveTextContent('2 skills');
     });
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Skills' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Delete tdd' }));
     await userEvent.click(screen.getByRole('button', { name: 'Delete skill' }));
     await waitFor(() => expect(engine.inbox()).toEqual(['ui']));
@@ -441,14 +444,14 @@ describe('App', () => {
     });
 
     renderWithProviders(<App />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Skills' }));
     expect(await screen.findByText('obra/react-patterns')).toBeInTheDocument();
 
     await openSync();
     await userEvent.click(screen.getByRole('button', { name: 'Switch to /tmp/beta' }));
     await userEvent.click(screen.getByRole('button', { name: 'Switch folder' }));
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Skills' }));
     expect(await screen.findByText('obra/react-patterns')).toBeInTheDocument();
     expect(beta.inbox()).toEqual(['obra/react-patterns']);
   });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowsClockwise, Clock, Cube, Folder, MagnifyingGlass, Moon, Question, Sun, Tray, X } from '@phosphor-icons/react';
+import { ArrowsClockwise, Clock, Compass, Cube, Folder, Lightning, Moon, Question, Sun, Terminal, X } from '@phosphor-icons/react';
 import { useTheme } from './theme';
 import { useBridge } from './bridge-context';
 import { FOCUS_RING } from './lib/focus-ring';
@@ -18,9 +18,9 @@ type WorkspaceTab = 'config' | 'search' | 'inbox' | 'collections';
 
 const TABS: { id: WorkspaceTab; label: string; icon: typeof Folder }[] = [
   { id: 'config', label: 'Sync', icon: ArrowsClockwise },
-  { id: 'search', label: 'Discover', icon: MagnifyingGlass },
-  { id: 'inbox', label: 'Inbox', icon: Tray },
-  { id: 'collections', label: 'Commands', icon: Folder },
+  { id: 'search', label: 'Discover', icon: Compass },
+  { id: 'inbox', label: 'Skills', icon: Lightning },
+  { id: 'collections', label: 'Commands', icon: Terminal },
 ];
 
 function ThemeToggle() {
@@ -282,7 +282,7 @@ function ConfigPanel({
             <p className="eyebrow">Workspace</p>
             <h2 id="switch-folder-title">Switch folder?</h2>
             <p className="muted-copy">
-              Open {folderLabel(pendingSwitch)} instead. Sync, Inbox, and Commands will reload from that
+              Open {folderLabel(pendingSwitch)} instead. Sync, Skills, and Commands will reload from that
               project.
             </p>
             <p className="recent-card-path">{pendingSwitch}</p>
@@ -621,7 +621,6 @@ export default function App() {
                   key={item.id}
                   type="button"
                   role="tab"
-                  title={item.label}
                   aria-label={item.label}
                   aria-selected={selected}
                   className={`rail-item ${selected ? 'active' : ''} ${FOCUS_RING}`}
@@ -637,6 +636,9 @@ export default function App() {
                       />
                     )}
                   </span>
+                  <span className="rail-label" aria-hidden="true">
+                    {item.label}
+                  </span>
                 </button>
               );
             })}
@@ -645,10 +647,12 @@ export default function App() {
             type="button"
             className={`rail-item help-item ${FOCUS_RING}`}
             aria-label="Help"
-            title="Help"
             onClick={() => setHelpOpen(true)}
           >
             <Question size={16} weight="regular" aria-hidden="true" />
+            <span className="rail-label" aria-hidden="true">
+              Help
+            </span>
           </button>
         </nav>
 

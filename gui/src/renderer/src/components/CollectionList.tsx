@@ -167,16 +167,16 @@ function CollectionDetail({
             className={`inbox-toggle ${FOCUS_RING}`}
             aria-expanded={inboxOpen}
             aria-controls={inboxPickerId}
-            aria-label={`From Inbox, ${inbox.length === 1 ? '1 skill' : `${inbox.length} skills`}`}
+            aria-label={`From Skills, ${inbox.length === 1 ? '1 skill' : `${inbox.length} skills`}`}
             onClick={() => setInboxOpen((open) => !open)}
           >
-            <span>From Inbox</span>
+            <span>From Skills</span>
             <span className="count-pill">{inbox.length}</span>
             <CaretDown className="inbox-caret" size={14} weight="regular" aria-hidden="true" />
           </button>
           <div id={inboxPickerId} hidden={!inboxOpen} className="inbox-picker-list">
             <label className="search-box inbox-filter" htmlFor={`inbox-filter-${collection.name}`}>
-              <span className="sr-only">Filter inbox</span>
+              <span className="sr-only">Filter skills</span>
               <input
                 id={`inbox-filter-${collection.name}`}
                 value={inboxQuery}
@@ -184,7 +184,7 @@ function CollectionDetail({
                   setInboxQuery(event.target.value);
                   setInboxPage(0);
                 }}
-                placeholder="Filter inbox"
+                placeholder="Filter skills"
               />
             </label>
             {visibleInbox.length === 0 ? (
@@ -215,10 +215,10 @@ function CollectionDetail({
               })
             )}
             {inboxPageCount > 1 && (
-              <nav aria-label="Inbox pages" className="page-row">
+              <nav aria-label="Skills pages" className="page-row">
                 <button
                   type="button"
-                  aria-label="Previous inbox page"
+                  aria-label="Previous skills page"
                   disabled={safeInboxPage === 0}
                   onClick={() => setInboxPage(safeInboxPage - 1)}
                   className={`filter ${FOCUS_RING}`}
@@ -230,7 +230,7 @@ function CollectionDetail({
                 </span>
                 <button
                   type="button"
-                  aria-label="Next inbox page"
+                  aria-label="Next skills page"
                   disabled={safeInboxPage === inboxPageCount - 1}
                   onClick={() => setInboxPage(safeInboxPage + 1)}
                   className={`filter ${FOCUS_RING}`}

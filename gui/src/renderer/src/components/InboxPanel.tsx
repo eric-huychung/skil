@@ -155,8 +155,8 @@ export default function InboxPanel() {
     <section className="inbox-panel panel-section">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Inbox</p>
-          <h1>Inbox</h1>
+          <p className="eyebrow">Skills</p>
+          <h1>Skills</h1>
           <p className="workspace-lede">
             Discover adds sit under Market until they are on disk. Then they move to Project. Filing onto a command does not remove them.
           </p>
@@ -316,7 +316,7 @@ export default function InboxPanel() {
             aria-labelledby="delete-skill-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <p className="eyebrow">Inbox</p>
+            <p className="eyebrow">Skills</p>
             <h2 id="delete-skill-title">Delete {pendingDelete}?</h2>
             {pendingPaths.length > 0 ? (
               <>
@@ -333,7 +333,7 @@ export default function InboxPanel() {
                 )}
               </>
             ) : (
-              <p className="muted-copy">Not on disk. This only drops it from Inbox.</p>
+              <p className="muted-copy">Not on disk. This only drops it from Skills.</p>
             )}
             {deleteError && (
               <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -361,7 +361,7 @@ export default function InboxPanel() {
             aria-labelledby="update-skill-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <p className="eyebrow">Inbox</p>
+            <p className="eyebrow">Skills</p>
             <h2 id="update-skill-title">
               {pendingUpdate.replaceEdited ? `Reset ${pendingUpdate.id}?` : `Update ${pendingUpdate.id}?`}
             </h2>

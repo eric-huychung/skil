@@ -119,7 +119,7 @@ describe('CollectionList', () => {
     expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
     expect(screen.getByRole('button', { name: /^Pick format:/ })).toBeInTheDocument();
     expect(screen.queryByLabelText('Format')).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Inbox' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Skills' })).not.toBeInTheDocument();
   });
 
   it('renders one card per command and shows the selected command skills in the detail panel', async () => {
@@ -152,11 +152,11 @@ describe('CollectionList', () => {
     const panel = heading.closest('section');
     if (!panel) throw new Error('expected commands panel');
 
-    expect(within(panel as HTMLElement).queryByRole('heading', { name: 'Inbox' })).not.toBeInTheDocument();
+    expect(within(panel as HTMLElement).queryByRole('heading', { name: 'Skills' })).not.toBeInTheDocument();
     expect(screen.queryByRole('listitem', { name: 'Command Inbox' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('File into')).not.toBeInTheDocument();
     const detail = screen.getByRole('region', { name: 'Command frontend details' });
-    expect(within(detail).getByRole('button', { name: 'From Inbox, 1 skill' })).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: 'From Skills, 1 skill' })).toBeInTheDocument();
   });
 
   it('adds an Inbox ID to the selected collection without removing it from Inbox', async () => {
@@ -202,7 +202,7 @@ describe('CollectionList', () => {
 
     renderWithProviders(<CollectionList />, { bridge });
     const detail = await screen.findByRole('region', { name: 'Command frontend details' });
-    const toggle = within(detail).getByRole('button', { name: 'From Inbox, 1 skill' });
+    const toggle = within(detail).getByRole('button', { name: 'From Skills, 1 skill' });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(within(detail).getByRole('button', { name: 'Add obra/react-patterns to frontend' })).toBeInTheDocument();
@@ -463,7 +463,7 @@ describe('CollectionList', () => {
     expect(within(dialog).getByText(/stderr: boom/)).toBeVisible();
   });
 
-  it('filters the From Inbox picker as you type', async () => {
+  it('filters the From Skills picker as you type', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', []);
     engine.addToInbox('obra/react-patterns');
@@ -475,13 +475,13 @@ describe('CollectionList', () => {
     expect(within(detail).getByText('obra/react-patterns')).toBeInTheDocument();
     expect(within(detail).getByText('addyosmani/api-design')).toBeInTheDocument();
 
-    await userEvent.type(within(detail).getByLabelText('Filter inbox'), 'react');
+    await userEvent.type(within(detail).getByLabelText('Filter skills'), 'react');
 
     expect(within(detail).getByText('obra/react-patterns')).toBeInTheDocument();
     expect(within(detail).queryByText('addyosmani/api-design')).not.toBeInTheDocument();
   });
 
-  it('pages the From Inbox picker when there are more than 10 matches', async () => {
+  it('pages the From Skills picker when there are more than 10 matches', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', []);
     for (let index = 0; index < 11; index += 1) {
@@ -497,13 +497,13 @@ describe('CollectionList', () => {
     expect(within(detail).queryByText('skill/10')).not.toBeInTheDocument();
     expect(within(detail).getByText('Page 1 of 2')).toBeInTheDocument();
 
-    await userEvent.click(within(detail).getByRole('button', { name: 'Next inbox page' }));
+    await userEvent.click(within(detail).getByRole('button', { name: 'Next skills page' }));
 
     expect(within(detail).getByText('skill/10')).toBeInTheDocument();
     expect(within(detail).queryByText('skill/0')).not.toBeInTheDocument();
   });
 
-  it('places Export on the workspace, then Included skills, then From Inbox on the command', async () => {
+  it('places Export on the workspace, then Included skills, then From Skills on the command', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', ['addyosmani/api-design']);
     engine.addToInbox('obra/react-patterns');
@@ -518,7 +518,7 @@ describe('CollectionList', () => {
     const exportButton = within(workspace as HTMLElement).getByRole('button', { name: 'Export' });
     expect(within(detail).queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
     const included = within(detail).getByText('Included skills');
-    const inboxToggle = within(detail).getByRole('button', { name: 'From Inbox, 1 skill' });
+    const inboxToggle = within(detail).getByRole('button', { name: 'From Skills, 1 skill' });
     expect(exportButton.compareDocumentPosition(included) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(included.compareDocumentPosition(inboxToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
