@@ -34,8 +34,7 @@ export function registerCreateCommand(program: Command, engine: ICollectionEngin
     .command('create <name>')
     .description('Create a new command (leading / is stripped: /build → build)')
     .option('--skills <ids>', 'comma-separated skill IDs', '')
-    .option('--command <cmd>', 'shell command template, runnable later via "skil run"')
-    .action((name: string, options: { skills: string; command?: string }) => {
-      printOutcome(runCreate(engine, name, parseSkillIds(options.skills), options.command));
+    .action((name: string, options: { skills: string }) => {
+      printOutcome(runCreate(engine, name, parseSkillIds(options.skills)));
     });
 }

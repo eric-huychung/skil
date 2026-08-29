@@ -91,15 +91,18 @@ describe('handleShelvesRequest', () => {
     expect(body.data.map((role) => role.slug)).toEqual(['legal']);
   });
 
-  it('returns a 500 with the store error message when the store fails', async () => {
+  it('returns a 500 without the store error text when the store fails', async () => {
     const store = new InMemoryMarketStore();
-    store.listShelves = async () => ({ ok: false, error: new Error('connection lost') });
+    store.listShelves = async () => ({ ok: false, error: new Error('connection lost at db.internal:5432') });
 
     const response = await handleShelvesRequest(new Request('http://localhost/api/market/shelves'), { store });
     const body = (await response.json()) as { error: string; message: string };
 
     expect(response.status).toBe(500);
-    expect(body).toEqual({ error: 'store_error', message: 'connection lost' });
+    expect(body.error).toBe('store_error');
+    expect(body.message).toBe('Market index is temporarily unavailable.');
+    expect(body.message).not.toContain('connection lost');
+    expect(body.message).not.toContain('db.internal');
   });
 });
 
@@ -162,9 +165,9 @@ describe('handleMarketSearchRequest', () => {
     expect(body.data).toEqual([]);
   });
 
-  it('returns a 500 with the store error message when the store fails', async () => {
+  it('returns a 500 without the store error text when the store fails', async () => {
     const store = new InMemoryMarketStore();
-    store.searchListings = async () => ({ ok: false, error: new Error('connection lost') });
+    store.searchListings = async () => ({ ok: false, error: new Error('connection lost at db.internal:5432') });
 
     const response = await handleMarketSearchRequest(new Request('http://localhost/api/market/search?q=sql'), {
       store,
@@ -172,7 +175,10 @@ describe('handleMarketSearchRequest', () => {
     const body = (await response.json()) as { error: string; message: string };
 
     expect(response.status).toBe(500);
-    expect(body).toEqual({ error: 'store_error', message: 'connection lost' });
+    expect(body.error).toBe('store_error');
+    expect(body.message).toBe('Market index is temporarily unavailable.');
+    expect(body.message).not.toContain('connection lost');
+    expect(body.message).not.toContain('db.internal');
   });
 });
 
@@ -287,9 +293,9 @@ describe('handleMarketPreviewRequest', () => {
     expect(response.headers.get('Cache-Control')).toBe('public, s-maxage=300, stale-while-revalidate=60');
   });
 
-  it('returns a 500 with the store error message when the store fails', async () => {
+  it('returns a 500 without the store error text when the store fails', async () => {
     const store = new InMemoryMarketStore();
-    store.getListing = async () => ({ ok: false, error: new Error('connection lost') });
+    store.getListing = async () => ({ ok: false, error: new Error('connection lost at db.internal:5432') });
 
     const response = await handleMarketPreviewRequest(new Request('http://localhost/api/market/preview?id=a/one'), {
       store,
@@ -298,6 +304,9 @@ describe('handleMarketPreviewRequest', () => {
     const body = (await response.json()) as { error: string; message: string };
 
     expect(response.status).toBe(500);
-    expect(body).toEqual({ error: 'store_error', message: 'connection lost' });
+    expect(body.error).toBe('store_error');
+    expect(body.message).toBe('Market index is temporarily unavailable.');
+    expect(body.message).not.toContain('connection lost');
+    expect(body.message).not.toContain('db.internal');
   });
 });

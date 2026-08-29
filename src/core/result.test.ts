@@ -16,6 +16,18 @@ describe('err', () => {
 
     expect(result).toEqual({ ok: false, error });
   });
+
+  it('attaches a conflict code and labels next to the error', () => {
+    const error = new Error('Command files exist');
+    const result = err(error, { code: 'UNSTAMPED_COMMAND', labels: ['testing', 'review'] });
+
+    expect(result).toEqual({
+      ok: false,
+      error,
+      code: 'UNSTAMPED_COMMAND',
+      labels: ['testing', 'review'],
+    });
+  });
 });
 
 describe('isOk', () => {

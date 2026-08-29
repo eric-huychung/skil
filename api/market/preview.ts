@@ -29,6 +29,6 @@ export async function GET(request: Request): Promise<Response> {
     const client = new RealMarketSkillsClient({ fetchImpl: fetch, getOidcToken: () => getVercelOidcToken() });
     return await handleMarketPreviewRequest(request, { store, client });
   } catch (error) {
-    return Response.json({ error: 'function_error', message: (error as Error).message }, { status: 500 });
+    return Response.json({ error: 'function_error', message: 'Request failed.' }, { status: 500 });
   }
 }

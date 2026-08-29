@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Copy, GitBranch } from '@phosphor-icons/react';
+import { Check, Copy, GitBranch, Warning } from '@phosphor-icons/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import { formatInstalls } from '../lib/format-installs';
 import type { MarketPreviewData, OriginStatus } from '../../../shared/ipc';
+import { StatusNotice, StatusSkeleton, type StatusKind } from '../../../../../shared/status';
 
 /** Strips SKILL.md's YAML frontmatter (`name` / `description`) — the dialog
  * title above already shows the name, and raw frontmatter reads as garbled
@@ -39,6 +40,7 @@ export default function SkillPreviewDialog({
   paths = [],
   originStatus,
   onReset,
+  lockDismiss = false,
 }: {
   id: string;
   onClose: () => void;
@@ -46,11 +48,13 @@ export default function SkillPreviewDialog({
   paths?: string[];
   originStatus?: OriginStatus;
   onReset?: () => void;
+  lockDismiss?: boolean;
 }) {
   const bridge = useBridge();
   const [preview, setPreview] = useState<MarketPreviewData | null>(null);
   const [localMd, setLocalMd] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<StatusKind | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -64,7 +68,7 @@ export default function SkillPreviewDialog({
         ? bridge.readSkillMd(id).then((result) => {
             if (cancelled) return;
             if (!result.ok) {
-              setError(result.error.message);
+              setError('preview');
               return;
             }
             setLocalMd(result.value);
@@ -72,19 +76,22 @@ export default function SkillPreviewDialog({
         : bridge.marketPreview(id).then((result) => {
             if (cancelled) return;
             if (!result.ok) {
-              setError(result.error.message);
+              setError('preview');
               return;
             }
             setPreview(result.value);
           });
 
-    void load;
+    void load.catch(() => {
+      if (!cancelled) setError('preview');
+    });
     return () => {
       cancelled = true;
     };
-  }, [bridge, id, source]);
+  }, [bridge, id, source, reloadKey]);
 
   useEffect(() => {
+    if (lockDismiss) return;
     function handleKey(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -93,7 +100,7 @@ export default function SkillPreviewDialog({
     }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  }, [lockDismiss, onClose]);
 
   async function handleCopy() {
     if (!preview) return;
@@ -107,7 +114,7 @@ export default function SkillPreviewDialog({
   const loading = !error && (source === 'local' ? localMd === null : preview === null);
 
   return createPortal(
-    <div className="skill-details-backdrop" role="presentation" onClick={onClose}>
+    <div className="skill-details-backdrop" role="presentation" onClick={lockDismiss ? undefined : onClose}>
       <div
         className="skill-details-modal"
         role="dialog"
@@ -120,16 +127,8 @@ export default function SkillPreviewDialog({
         </button>
         <p className="eyebrow">Skill</p>
         <h2 id="skill-preview-title">{title}</h2>
-        {error && (
-          <p role="alert" className="muted-copy text-destructive">
-            {error}
-          </p>
-        )}
-        {loading && (
-          <p role="status" className="muted-copy">
-            Loading&hellip;
-          </p>
-        )}
+        {error && <StatusNotice kind={error} onRetry={() => setReloadKey((key) => key + 1)} />}
+        {loading && <StatusSkeleton variant="preview" />}
         {preview && (
           <div className="skill-meta-row">
             <span className={`audit-badge ${AUDIT_BADGE_CLASS[preview.audit.status]}`}>
@@ -153,8 +152,11 @@ export default function SkillPreviewDialog({
         )}
         {originStatus === 'edited' && onReset && (
           <div className="skill-origin-row">
-            <p className="muted-copy">This no longer matches the market copy.</p>
-            <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={onReset}>
+            <p className="origin-warning text-amber-500">
+              <Warning size={16} weight="fill" aria-hidden="true" />
+              This no longer matches the market copy.
+            </p>
+            <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={onReset}>
               Reset to market
             </button>
           </div>

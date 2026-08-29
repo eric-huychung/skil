@@ -11,12 +11,13 @@ Developers accumulate AI skills as folders (`SKILL.md`) across Claude, Cursor, C
 - **Skills** = folders with `SKILL.md`. Disk is truth for the body. We hash it; we do not own the text. One catalog, many `paths` / `deployedTo`.
 - **Commands** = named groups of skill ids **once per project**. Those are the SDLC knobs. `/build` is the same list whether you later export to Cursor or Claude.
 - **Inbox** = one staging pool (scanned locals + Discover adds). Filing onto a command does not remove the id.
+- **Rules** = markdown/mdc files agents already load. Disk is truth. We list every file we find (all formats). We do not persist a rules map. Export copies into a dest dock’s rules dir.
 - **Docks** = folders we scan and install/export into (claude, cursor, codex, copilot, agents). Not five command editors. Windsurf is scanned, not a peer dock.
-- **Pull** = scan skill folders into the catalog. Stamped command files do not fork the map.
-- **Push** = install a skill into a dock’s skills dir, copy/export the **same** list to a dock, and/or write **our** command template where that dock has command markdown.
+- **Pull** = scan skill folders into the catalog (and list rule files on disk). Stamped command files do not fork the map.
+- **Push** = install a skill into a dock’s skills dir, copy/export the **same** command list to a dock, write **our** command template where that dock has command markdown, and/or copy rules into that dock’s rules dir.
 - **Usage** = counts of how often a catalog skill was read (Claude first). Not “used properly.”
 
-We are **not** SoT for skill file contents.  
+We are **not** SoT for skill or rule file contents.  
 We **are** SoT for: which skills exist here, hashes, where we deployed them, and which skills sit on which command (**one list**).
 
 One `.skil/state.json`. No extra state file per dock.
@@ -32,9 +33,10 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 5. **Copy / export to Claude** (one command or all): dest stamped file + missing skill folders. Same ids as the map.
 6. **Discover → Inbox → file onto a command → install `--to` a dock** writes the skill into that dock’s skills dir.
 7. **Export** (explicit): generate **our** command file where the dock has one, and put filed skills there if they are missing. Do not touch their old `/build.md` unless they opt in to replace. Do not overwrite dest skill folders.
-8. **Import** (Sync): copy one dock’s skills from another **project** into this folder. Add on top; warn then replace on conflict. Bound folder stays. Market inbox is not copied.
-9. **Re-scan / light watcher** = refresh catalog. Map stays SoT. Stamp ≠ map is a warn.
+8. **Import** (Sync): copy one dock’s skills **and rules** from another **project** into this folder. Add on top; warn then replace on conflict. Bound folder stays. Market inbox is not copied.
+9. **Re-scan / light watcher** = refresh catalog. Map stays SoT. Stamp ≠ map is a warn. Rules tab re-reads disk (rule dirs and root always-on files).
 10. **Usage:** see counts on filed skills (Claude logs; Cursor hook optional).
+11. **Rules:** see every rule file in the project (including other formats), preview, toggle Cursor always-apply, export to a dest dock.
 
 ## User Stories
 
@@ -64,6 +66,10 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 24. As a developer, I want a Discover skill to show under Project once it is on disk, so Inbox does not list the same skill as both Market and Project
 25. As a developer, I want an Update control when a market skill I did not edit has a new SKILL.md, so I can pull the new copy without hunting GitHub
 26. As a developer who edited a market skill, I want Reset in preview instead of a silent overwrite, so my rewrite is not eaten
+27. As a developer, I want a Rules tab that lists every rule file in the project (including other formats), so I can see Cursor, Claude, and Copilot rules in one place
+28. As a developer, I want a toggle showing whether a rule is always-apply, so I know which Cursor rules fire on every chat
+29. As a developer, I want to click a rule card and preview its body, so I know what the agent will read
+30. As a developer, I want to export rules to a dest dock (same format picker as Commands) and import them with a project folder, so I do not copy rule files by hand
 
 ## Implementation Decisions
 
@@ -77,12 +83,12 @@ We wrap skills.sh (via skil's OIDC backend) and `npx skills add`. We do not host
 
 ### Module Boundaries
 
-1. **Engine** — scan, catalog, inbox, one command list, file, copy, install, export, usage. One deep module (today `CollectionEngine`).
+1. **Engine** — scan, catalog, inbox, one command list, file, copy, install, export, usage, rules listing/export. One deep module (today `CollectionEngine`).
 2. **FileSystemAdapter** — state JSON plus walk/read/write for `SKILL.md` discovery and command-file output.
 3. **SkillsAdapter** — search, browse, install. Convert/skillsmith is leftover. Product export is engine `exportCommand`, not skillsmith.
 4. **UsageCollector** — Phase 5. In-memory in tests; Claude logs in prod.
 5. **CLI** — parse and print.
-6. **GUI** — bind to the engine. Header path + Re-scan when connected. Commands is one list. Discover / Inbox / folder pick. Dock picker on install/export.
+6. **GUI** — bind to the engine. Header path + Re-scan when connected. Commands is one list. Rules is every on-disk rule file. Discover / Inbox / folder pick. Dock picker on install/export.
 7. **DiskWatch** — debounce / mute / skip `.git`. Calls scan + write-through existing stamps. Not a second deep module.
 
 ### Market index (Discover backend, separate track — shipped through Phase 4)
@@ -93,7 +99,7 @@ Discover's browse/search today hits skills.sh live via `SkillsAdapter`. The **ma
 
 **Same nest, different action:** Landing copies `npx skills add`. GUI `+` adds to Inbox (does not install).
 
-**Shipped:** sync core, Supabase persistence + first-fill script (`npm run sync-market`), read API (`GET /api/market/shelves|search|preview`), Landing + GUI Discover, and the weekly Cron (`GET /api/cron/sync-market`, `CRON_SECRET` or 401, `sync({ maxDetail: 40 })` — shelves + 40 hydrates, not the 20k listing). Empty index still degrades (Landing hides the section, GUI keeps live skills.sh browse). A human still applies the migration, then runs first fill, before the index has data; after that the cron keeps shelves fresh.
+**Shipped:** sync core, Supabase persistence + first-fill script (`npm run sync-market`), read API (`GET /api/market/shelves|search|preview`), Landing + GUI Discover, and the weekly Cron (`GET /api/cron/sync-market`, `CRON_SECRET` or 401, `sync({ maxDetail: 40 })` — shelves + 40 hydrates, not the 20k listing). Empty or failed shelves keep the same Discover nest and default to live Top. A human still applies the migration, then runs first fill, before the index has data; after that the cron keeps shelves fresh.
 
 ### Data Model
 
@@ -127,7 +133,7 @@ v5 `membership` loads as a union (cursor first). v4 `commands[].skills` loads as
 - **Inbox is a staging pool.** Filing does not remove the id. `remove` from a command does not remove it from Inbox either. Gone folders drop the id from both.
 - **One state file, one command list.** Commands tab is that list. Dock picker only on install/export/copy. No tab-per-dock, no `.cursor/.skil/state.json`.
 - **Write-through refreshes existing stamps only.** File / unfile / create / delete do not create a stamp in a dock that was never exported.
-- **Light watcher after write-through.** Disk edits: watcher scans and the GUI refreshes (debounce ~500ms, mute our writes ~1s, skip `.git`). Explicit Re-scan remains in the header. Unchanged stamps are not rewritten. Not a live 3-way merge.
+- **Light watcher after write-through.** Disk edits: watcher scans and the GUI refreshes (debounce ~500ms, mute our writes ~1s, skip `.git`). Watches skill/command/rule dirs plus root always-on files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`). Explicit Re-scan remains in the header. Unchanged stamps are not rewritten. Not a live 3-way merge.
 - **Usage is counts.** Claude logs first. Cursor hook optional. Copilot eval out. No SQLite. No “used properly.”
 
 ### CLI
@@ -143,6 +149,7 @@ v5 `membership` loads as a union (cursor first). v4 `commands[].skills` loads as
 - `skil install <skillId> --to cursor|claude|codex|copilot|agents|windsurf` — records `deployedTo`; unknown `--to` is rejected before the engine
 - `skil export [command] --to <dock> [--replace]` — a name exports that one; omitted exports every command
 - `skil usage` — print use counts
+- `skil rules` / `rules show <id>` / `rules always-apply <id> on|off` / `rules export --to <dock> [--replace]` — list on-disk rules, read body, toggle Cursor alwaysApply, copy to a dest dock
 - `skil search [query] [--trending]`
 
 Bin is `skil`. `contextkit` stays as an alias so old scripts work. The product name is skil.
@@ -151,13 +158,14 @@ API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 
 ### GUI
 
-- Window and brand say skil. Connect folder (Sync tab). No login. Header shows the bound path and Re-scan only after connect. Purple **Import** on Sync (disabled until connected) copies one dock’s skills from a recent folder or a chosen folder. Does not bind. Dock chips default to Cursor. Conflicts warn then replace. Market inbox is not copied.
-- Inbox tab (above Commands): Discover-like list (25 per page), search the staging pool, click a row to preview `SKILL.md` (on-disk body + every dock path for catalog ids; market preview for Discover-only ids), file onto a command, or delete. Delete removes every dock copy of that catalog id (confirm lists the paths). Filing does not remove ids. One Inbox. Groups **Market** (wishlist, not on disk) vs **Project** (catalog `paths` non-empty), not by `source === 'local'`. Project rows with a market origin show **Update** only when the disk copy still matches `originHash` and the live market SKILL.md moved. Edited copies get **Reset to market** in preview. No auto-sync. No Scan icon; Inbox refreshes from `onScan`.
+- Window and brand say skil. Connect folder (Sync tab). No login. Header shows the bound path and Re-scan only after connect. Purple **Import** on Sync (disabled until connected) copies one dock’s skills, stamped commands, and rules from a recent folder or a chosen folder. Does not bind. Dock chips default to Cursor. Conflicts warn then replace. Market inbox is not copied.
+- Inbox tab (above Commands): Discover-like list (25 per page), search the staging pool, click a row to preview `SKILL.md` (on-disk body + every dock path for catalog ids; market preview for Discover-only ids), file onto a command, or delete. Delete removes every dock copy of that catalog id (confirm lists the paths). Filing does not remove ids. One Inbox. Groups **Market** (wishlist, not on disk) vs **Project** (catalog `paths` non-empty), not by `source === 'local'`. Project rows with a market origin show a **Synced** / **Edited** / **New copy** badge (color + label). **Update** only when the disk copy still matches `originHash` and the live market SKILL.md moved. Edited copies get **Reset to market** (purple) in preview; the confirm stacks above the preview. Update/Reset does not drop the id from Inbox. No auto-sync. No Scan icon; Inbox refreshes from `onScan`.
 - Commands tab: **one list**. Create, file from Inbox, remove skill, delete command, **Export** (download icon, pushes everything to a chosen dock). Do not add IDE cards or four tabs, and do not add separate Install/Copy controls — Export already deploys every filed skill to the dock. Filed skills show Claude read counts from `usage()`.
-- Discover: market index role → category browse + search + preview, Add → Inbox, when the index has data (`MarketDiscover.tsx`); falls back to the live All time / Trending + typed search + details (`SkillSearch.tsx`) when it doesn't. No project re-scan control either way.
-- Discover / Inbox / Commands do not require a folder. Scan needs a connected repo (header Re-scan, Sync pick, or CLI cwd).
+- Rules tab: one card per rule name (dock copies are the same rule). Same format picker + Export as Commands. Card shows the name and an always-apply toggle (writes every dock copy; root always-on files are display-only). Click a card to preview the body. Does not create rules. Codex writes `.codex/rules` plus `AGENTS.md` sections. Agents writes `.agents/rules` plus `AGENTS.md` sections. Dest copies get `generated_by: skil`.
+- Discover: one nest on Landing and GUI — live Top / Trending, then market index role → category, plus search + preview (`MarketDiscover.tsx` / `discover.tsx`). Empty or failed shelves stay on that nest and default to Top. GUI Add → Inbox. No project re-scan control.
+- Discover / Inbox / Commands / Rules do not require a folder. Scan needs a connected repo (header Re-scan, Sync pick, or CLI cwd).
 - Pick folder on Sync scans once and binds. Header Re-scan is the explicit pull after that. Watcher also scans after debounce. There is no Scan-without-folder modal.
-- **The GUI's only push control is Export** — `bridge.install` / `copyTo` / `copyAll` / single-name `exportCommand` are not exposed over the Electron bridge (removed 2026-08-27 as dead code; a per-skill Install button existed as an unmounted file, and Copy had no UI at all). `engine.install` / `copyTo` / `copyAll` / `exportCommand` still exist and back the CLI (`skil install`, `skil copy`, `skil export <command>`).
+- **Push controls are Export** — Commands Export (`exportAll`) and Rules Export (`exportRules`). `bridge.install` / `copyTo` / `copyAll` / single-name `exportCommand` are not exposed over the Electron bridge (removed 2026-08-27 as dead code; a per-skill Install button existed as an unmounted file, and Copy had no UI at all). `engine.install` / `copyTo` / `copyAll` / `exportCommand` still exist and back the CLI (`skil install`, `skil copy`, `skil export <command>`).
 - Export on Commands: push the **project map** via the download icon, call `engine.exportAll` with a dock. Writes our stamped command file where that dock has one, and deploys filed skills that dock is missing (copy local; install Discover-only internally; skip dest that already exists). Loading / success / failure is a modal; failure details stay collapsed. Unstamped existing command file shows a Replace confirm (`replace: true`). No connected folder → dest picker, export, then bind that folder so header and Sync show it. Later Exports use the bound root.
 - Discover Add still does not install and does not grow an Install control
 - Gone ids and stamp-vs-map warns from the last scan show as a status banner
@@ -172,7 +180,7 @@ API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 - DiskWatch tests use a fake clock (debounce / mute), not a real chokidar run
 - Usage tests use an in-memory collector and Claude log fixtures
 
-- **Modules to test:** engine (scan, one-list file, copy same list, importFrom add/replace, gone, install dock path, export stamp, scan does not adopt stamps, scan attaches npx leftover to market id, originHash / originChecks / updateFromMarket, usage, readSkillMd, deleteSkill all dock copies); FS walk; install adapter; UsageCollector; CLI handlers; GUI via the bridge; DiskWatch debounce/mute.
+- **Modules to test:** engine (scan, one-list file, copy same list, importFrom add/replace including rules, gone, install dock path, export stamp, scan does not adopt stamps, scan attaches npx leftover to market id, originHash / originChecks / updateFromMarket, usage, readSkillMd, deleteSkill all dock copies, rules listing / readRule / setAlwaysApply / exportRules); FS walk; install adapter; UsageCollector; CLI handlers; GUI via the bridge; DiskWatch debounce/mute.
 
 ## Out of Scope
 

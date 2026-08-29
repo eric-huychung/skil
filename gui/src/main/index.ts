@@ -1,70 +1,21 @@
 import { join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, watch as watchDir, type FSWatcher } from 'node:fs';
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
-import axios from 'axios';
 import { createEngine } from '../../../src/create-engine.js';
 import { SkillsAdapter } from '../../../src/adapters/skills-adapter.js';
 import { getApiBaseUrl } from '../../../src/config/website.js';
-import { DiskWatch } from '../../../src/watch/disk-watch.js';
+import { RULE_DIR_BY_IDE, ROOT_RULE_FILES } from '../../../src/core/project-rules.js';
+import { watchRoots } from '../../../src/core/dock-layout.js';
+import { createDiscover } from '../../../src/backend/discover.js';
+import { DiskWatch, watchFilesByParent } from '../../../src/watch/disk-watch.js';
 import type { ICollectionEngine } from '../../../src/interfaces/engine.js';
-import type { BrowseView, IDE, ScanResult } from '../../../src/types/index.js';
-import type { MarketSearchRow, ShelfRole } from '../../../src/backend/market-types.js';
-import { err, isOk, ok, type Result } from '../../../src/core/result.js';
-import { IPC_CHANNELS, type MarketPreviewData } from '../shared/ipc.js';
+import type { IDE, ScanResult } from '../../../src/types/index.js';
+import { isOk } from '../../../src/core/result.js';
+import { IPC_CHANNELS } from '../shared/ipc.js';
 import { forgetFolder, parseRecentFolders, rememberFolder } from '../shared/recent-folders.js';
-import { marketInboxIds, mergeMarketInbox, parseMarketInbox, rememberMarketSkill } from '../shared/market-inbox.js';
+import { marketInboxIds, mergeMarketInbox, rememberMarketSkill } from '../shared/market-inbox.js';
 
-/**
- * Market index reads (`api/market/*`) go through the main process like
- * `SkillsAdapter.search`/`.browse`, rather than `fetch` in the renderer —
- * Electron's renderer origin isn't the Vercel deployment's, so a direct
- * cross-origin `fetch` risks CORS. These are public, unauthenticated reads
- * (anon SELECT via the store), so plain `axios.get` is enough — no OIDC.
- */
-async function fetchMarketShelves(): Promise<Result<ShelfRole[]>> {
-  try {
-    const response = await axios.get<{ data: ShelfRole[] }>(`${getApiBaseUrl()}/api/market/shelves`);
-    return ok(response.data.data);
-  } catch (error) {
-    return err(new Error(`Failed to load market shelves: ${(error as Error).message}`));
-  }
-}
-
-async function fetchMarketSearch(query: string): Promise<Result<MarketSearchRow[]>> {
-  try {
-    const response = await axios.get<{ data: MarketSearchRow[] }>(`${getApiBaseUrl()}/api/market/search`, {
-      params: { q: query },
-    });
-    return ok(response.data.data);
-  } catch (error) {
-    return err(new Error(`Failed to search market index for '${query}': ${(error as Error).message}`));
-  }
-}
-
-async function fetchMarketPreview(id: string): Promise<Result<MarketPreviewData>> {
-  try {
-    const response = await axios.get<{ data: MarketPreviewData }>(`${getApiBaseUrl()}/api/market/preview`, {
-      params: { id },
-    });
-    return ok(response.data.data);
-  } catch (error) {
-    return err(new Error(`Failed to load market preview for '${id}': ${(error as Error).message}`));
-  }
-}
-
-const WATCH_ROOTS = [
-  '.cursor/skills',
-  '.claude/skills',
-  '.codex/skills',
-  '.github/skills',
-  '.windsurf/skills',
-  '.agents/skills',
-  '.cursor/commands',
-  '.claude/commands',
-  '.windsurf/workflows',
-  '.agents/commands',
-  '.github/prompts',
-] as const;
+const WATCH_ROOTS = watchRoots(Object.values(RULE_DIR_BY_IDE));
 
 // Project bind persists the last folder plus up to four more recents under
 // Electron userData. Until the user connects one, collections live under
@@ -76,7 +27,11 @@ let recentFolders: string[] = [];
 let marketInbox: string[] = [];
 let diskWatch: DiskWatch | null = null;
 let fsWatchers: FSWatcher[] = [];
-const discovery = new SkillsAdapter(getApiBaseUrl());
+const liveSkills = new SkillsAdapter(getApiBaseUrl());
+const discover = createDiscover({
+  apiBaseUrl: getApiBaseUrl(),
+  browse: (view) => liveSkills.browse(view),
+});
 
 function currentEngine(): ICollectionEngine {
   if (!engine) {
@@ -128,6 +83,20 @@ function startDiskWatch(root: string): void {
       // Missing dir is fine — scan does not require every IDE tree.
     }
   }
+  for (const { dir, names } of watchFilesByParent(ROOT_RULE_FILES.map((file) => file.path))) {
+    try {
+      const abs = dir ? join(root, dir) : root;
+      const watcher = watchDir(abs, (_event, filename) => {
+        if (!filename) return;
+        const name = String(filename);
+        if (!names.includes(name)) return;
+        diskWatch?.handleEvent(dir ? `${dir}/${name}` : name);
+      });
+      fsWatchers.push(watcher);
+    } catch {
+      // Missing parent (.github) is fine — same as a missing rules dir.
+    }
+  }
 }
 
 async function pickDirectory(): Promise<string | null> {
@@ -160,31 +129,9 @@ function saveRecentFolders(next: string[]): void {
   }
 }
 
-function marketInboxFilePath(): string {
-  return join(app.getPath('userData'), 'market-inbox.json');
-}
-
-function loadMarketInbox(): string[] {
-  try {
-    const raw: unknown = JSON.parse(readFileSync(marketInboxFilePath(), 'utf8'));
-    return parseMarketInbox(raw);
-  } catch {
-    return [];
-  }
-}
-
-function saveMarketInbox(next: string[]): void {
-  marketInbox = next;
-  try {
-    writeFileSync(marketInboxFilePath(), JSON.stringify(next));
-  } catch {
-    // Persist is best-effort — a full disk should not block Discover adds.
-  }
-}
-
 function captureMarketInbox(): void {
   if (!engine) return;
-  saveMarketInbox(mergeMarketInbox(marketInbox, marketInboxIds(engine.inbox(), engine.skills())));
+  marketInbox = mergeMarketInbox(marketInbox, marketInboxIds(engine.inbox(), engine.skills()));
 }
 
 function seedMarketInbox(target: ICollectionEngine): void {
@@ -198,7 +145,7 @@ function bindProject(path: string): string | null {
   try {
     engine = createEngine(path);
   } catch (error) {
-    dialog.showErrorBox('skil', error instanceof Error ? error.message : String(error));
+    dialog.showErrorBox('skil', 'Could not open this folder.');
     return null;
   }
   seedMarketInbox(engine);
@@ -218,7 +165,6 @@ function unbindProject(): void {
 
 function restoreLastProject(): void {
   recentFolders = loadRecentFolders();
-  marketInbox = loadMarketInbox();
   saveRecentFolders(recentFolders);
   const last = recentFolders[0];
   if (last) {
@@ -275,14 +221,13 @@ ipcMain.handle(
     return result;
   }
 );
-ipcMain.handle(IPC_CHANNELS.searchSkills, (_event, query: string) => discovery.search(query));
-ipcMain.handle(IPC_CHANNELS.browseSkills, (_event, view: BrowseView) => discovery.browse(view));
+ipcMain.handle(IPC_CHANNELS.browseSkills, (_event, view) => discover.browse(view));
 ipcMain.handle(IPC_CHANNELS.listInbox, () => currentEngine().inbox());
 ipcMain.handle(IPC_CHANNELS.listSkills, () => (projectRoot ? currentEngine().skills() : []));
 ipcMain.handle(IPC_CHANNELS.addToInbox, (_event, skillId: string) => {
   const result = currentEngine().addToInbox(skillId);
   if (isOk(result)) {
-    saveMarketInbox(rememberMarketSkill(skillId, marketInbox));
+    marketInbox = rememberMarketSkill(skillId, marketInbox);
   }
   return result;
 });
@@ -310,16 +255,31 @@ ipcMain.handle(IPC_CHANNELS.deleteSkill, (_event, skillId: string) => {
   return result;
 });
 ipcMain.handle(IPC_CHANNELS.usage, () => currentEngine().usage());
-ipcMain.handle(IPC_CHANNELS.marketShelves, () => fetchMarketShelves());
-ipcMain.handle(IPC_CHANNELS.marketSearch, (_event, query: string) => fetchMarketSearch(query));
-ipcMain.handle(IPC_CHANNELS.marketPreview, (_event, id: string) => fetchMarketPreview(id));
+ipcMain.handle(IPC_CHANNELS.marketShelves, () => discover.shelves());
+ipcMain.handle(IPC_CHANNELS.marketSearch, (_event, query: string) => discover.search(query));
+ipcMain.handle(IPC_CHANNELS.marketPreview, (_event, id: string) => discover.preview(id));
 ipcMain.handle(IPC_CHANNELS.readSkillMd, (_event, skillId: string) => currentEngine().readSkillMd(skillId));
 ipcMain.handle(IPC_CHANNELS.originChecks, () => currentEngine().originChecks());
-ipcMain.handle(IPC_CHANNELS.updateFromMarket, (_event, skillId: string, opts?: { replaceEdited?: boolean }) => {
-  const result = currentEngine().updateFromMarket(skillId, opts);
+ipcMain.handle(IPC_CHANNELS.updateFromMarket, async (_event, skillId: string, opts?: { replaceEdited?: boolean }) => {
+  const result = await currentEngine().updateFromMarket(skillId, opts);
   muteOwnWrites();
   return result;
 });
+ipcMain.handle(IPC_CHANNELS.listRules, () => currentEngine().rules());
+ipcMain.handle(IPC_CHANNELS.readRule, (_event, id: string) => currentEngine().readRule(id));
+ipcMain.handle(IPC_CHANNELS.setAlwaysApply, (_event, id: string, alwaysApply: boolean) => {
+  const result = currentEngine().setAlwaysApply(id, alwaysApply);
+  muteOwnWrites();
+  return result;
+});
+ipcMain.handle(
+  IPC_CHANNELS.exportRules,
+  async (_event, targetIDE: IDE, opts?: { replace?: boolean; dest?: string }) => {
+    const result = await currentEngine().exportRules(targetIDE, opts);
+    muteOwnWrites();
+    return result;
+  }
+);
 
 // Brand icon (regenerate via scripts/generate-icons.mjs). out/main -> gui/resources.
 const APP_ICON = join(import.meta.dirname, '../../resources/icon.png');
@@ -337,6 +297,7 @@ function createWindow(): void {
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
+      // ESM preload + sandbox:true can fail to expose window.skil → blank window.
       sandbox: false,
     },
   });

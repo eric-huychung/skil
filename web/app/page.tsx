@@ -15,10 +15,10 @@ export default function LandingPage() {
       <SiteNav />
       <main>
         <Hero />
+        <Discover />
         <SupportedTools />
         <HowItWorks />
         <ProductPreview />
-        <Discover />
         <FeatureGrid />
         <CliInstall />
         <FooterCta />

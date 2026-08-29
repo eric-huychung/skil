@@ -144,64 +144,11 @@ describe('SkillsAdapter', () => {
     });
   });
 
-  describe('convert', () => {
-    it('converts a skill by running skillsmith convert in the project root', async () => {
-      vi.mocked(execa).mockResolvedValue({} as never);
-
-      const adapter = new SkillsAdapter();
-      const result = await adapter.convert('obra/react-patterns', 'cursor');
-
-      expect(isOk(result)).toBe(true);
-      expect(execa).toHaveBeenCalledWith('skillsmith', ['convert', 'obra/react-patterns', '--to', 'cursor'], {
-        cwd: process.cwd(),
-      });
-    });
-
-    it('runs skillsmith convert with cwd set to a given project root', async () => {
-      vi.mocked(execa).mockResolvedValue({} as never);
-
-      const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
-      const result = await adapter.convert('obra/react-patterns', 'cursor');
-
-      expect(isOk(result)).toBe(true);
-      expect(execa).toHaveBeenCalledWith('skillsmith', ['convert', 'obra/react-patterns', '--to', 'cursor'], {
-        cwd: '/tmp/proj',
-      });
-    });
-
-    it('returns an actionable error when skillsmith is not installed', async () => {
-      const enoent = Object.assign(new Error('spawn skillsmith ENOENT'), { code: 'ENOENT' });
-      vi.mocked(execa).mockRejectedValue(enoent);
-
-      const adapter = new SkillsAdapter();
-      const result = await adapter.convert('obra/react-patterns', 'claude');
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain('skillsmith');
-        expect(result.error.message).toContain('npm install');
-      }
-    });
-
-    it('returns an error when the subprocess fails for another reason', async () => {
-      vi.mocked(execa).mockRejectedValue(new Error('conversion failed: unsupported format'));
-
-      const adapter = new SkillsAdapter();
-      const result = await adapter.convert('obra/react-patterns', 'windsurf');
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain('obra/react-patterns');
-        expect(result.error.message).toContain('unsupported format');
-      }
-    });
-  });
-
   describe('browse', () => {
     it('maps leaderboard hits including install counts from a successful backend response', async () => {
       nock(website.apiBaseUrl)
         .get('/api/skills')
-        .query({ view: 'all-time', limit: '500' })
+        .query({ view: 'all-time' })
         .reply(200, {
           data: [{ id: 'obra/react-patterns', installs: 1200 }],
         });
@@ -220,7 +167,7 @@ describe('SkillsAdapter', () => {
     it('maps listing metadata without treating skills.sh source as Skill.source', async () => {
       nock(website.apiBaseUrl)
         .get('/api/skills')
-        .query({ view: 'all-time', limit: '500' })
+        .query({ view: 'all-time' })
         .reply(200, {
           data: [
             {
@@ -259,7 +206,7 @@ describe('SkillsAdapter', () => {
     it('requests the trending view from the same backend path', async () => {
       nock(website.apiBaseUrl)
         .get('/api/skills')
-        .query({ view: 'trending', limit: '500' })
+        .query({ view: 'trending' })
         .reply(200, {
           data: [{ id: 'vercel-labs/security-review', installs: 90 }],
         });
@@ -278,7 +225,7 @@ describe('SkillsAdapter', () => {
     it('returns an error when the backend request fails', async () => {
       nock(website.apiBaseUrl)
         .get('/api/skills')
-        .query({ view: 'all-time', limit: '500' })
+        .query({ view: 'all-time' })
         .reply(502, { message: 'skills.sh unavailable' });
 
       const adapter = new SkillsAdapter();

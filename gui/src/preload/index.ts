@@ -9,7 +9,6 @@ const bridge: SkilBridge = {
     ipcRenderer.invoke(IPC_CHANNELS.removeSkillFromCollection, name, skillId, ide),
   exportAll: (targetIDE, opts) => ipcRenderer.invoke(IPC_CHANNELS.exportAll, targetIDE, opts),
   importFrom: (sourceRoot, ide, opts) => ipcRenderer.invoke(IPC_CHANNELS.importFrom, sourceRoot, ide, opts),
-  searchSkills: (query) => ipcRenderer.invoke(IPC_CHANNELS.searchSkills, query),
   browseSkills: (view) => ipcRenderer.invoke(IPC_CHANNELS.browseSkills, view),
   listInbox: () => ipcRenderer.invoke(IPC_CHANNELS.listInbox),
   listSkills: () => ipcRenderer.invoke(IPC_CHANNELS.listSkills),
@@ -38,6 +37,10 @@ const bridge: SkilBridge = {
   readSkillMd: (skillId) => ipcRenderer.invoke(IPC_CHANNELS.readSkillMd, skillId),
   originChecks: () => ipcRenderer.invoke(IPC_CHANNELS.originChecks),
   updateFromMarket: (skillId, opts) => ipcRenderer.invoke(IPC_CHANNELS.updateFromMarket, skillId, opts),
+  listRules: () => ipcRenderer.invoke(IPC_CHANNELS.listRules),
+  readRule: (id) => ipcRenderer.invoke(IPC_CHANNELS.readRule, id),
+  setAlwaysApply: (id, alwaysApply) => ipcRenderer.invoke(IPC_CHANNELS.setAlwaysApply, id, alwaysApply),
+  exportRules: (targetIDE, opts) => ipcRenderer.invoke(IPC_CHANNELS.exportRules, targetIDE, opts),
 };
 
 contextBridge.exposeInMainWorld('skil', bridge);

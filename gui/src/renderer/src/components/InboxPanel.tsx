@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react';
-import { ArrowRight, CaretLeft, CaretRight, MagnifyingGlass, Trash, ArrowClockwise } from '@phosphor-icons/react';
+import { createPortal } from 'react-dom';
+import { ArrowRight, CaretLeft, CaretRight, MagnifyingGlass, Trash, ArrowClockwise, CircleNotch } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import { groupInboxSkills } from '../lib/skill-sources';
 import type { OriginCheck, OriginStatus, ScanResult, SkillRecord } from '../../../shared/ipc';
+import { StatusNotice, StatusSkeleton } from '../../../../../shared/status';
 import SkillPreviewDialog from './SkillPreviewDialog';
 
 const PAGE_SIZE = 25;
@@ -21,6 +23,12 @@ function matchesQuery(skillId: string, query: string): boolean {
   return needle.length === 0 || skillId.toLowerCase().includes(needle);
 }
 
+const ORIGIN_BADGE: Record<OriginStatus, { label: string; className: string }> = {
+  current: { label: 'Synced', className: 'origin-badge bg-emerald-500/15 text-emerald-500' },
+  update: { label: 'New copy', className: 'origin-badge bg-amber-500/15 text-amber-500' },
+  edited: { label: 'Edited', className: 'origin-badge bg-amber-500/15 text-amber-500' },
+};
+
 export default function InboxPanel() {
   const bridge = useBridge();
   const [inbox, setInbox] = useState<string[] | null>(null);
@@ -32,8 +40,9 @@ export default function InboxPanel() {
   const [lastScan, setLastScan] = useState<ScanResult | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<{ id: string; replaceEdited: boolean } | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState(false);
+  const [updateError, setUpdateError] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -97,13 +106,14 @@ export default function InboxPanel() {
     function handleKey(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault();
+        if (isUpdating) return;
         if (pendingUpdate) closeUpdate();
         else closeDelete();
       }
     }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [pendingDelete, pendingUpdate]);
+  }, [pendingDelete, pendingUpdate, isUpdating]);
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -116,35 +126,39 @@ export default function InboxPanel() {
 
   function closeDelete() {
     setPendingDelete(null);
-    setDeleteError(null);
+    setDeleteError(false);
   }
 
   function closeUpdate() {
+    if (isUpdating) return;
     setPendingUpdate(null);
-    setUpdateError(null);
+    setUpdateError(false);
   }
 
   async function handleUpdate() {
-    if (!pendingUpdate) return;
-    setUpdateError(null);
+    if (!pendingUpdate || isUpdating) return;
+    setUpdateError(false);
+    setIsUpdating(true);
     const result = await bridge.updateFromMarket(pendingUpdate.id, {
       replaceEdited: pendingUpdate.replaceEdited,
     });
     if (!result.ok) {
-      setUpdateError(result.error.message);
+      setUpdateError(true);
+      setIsUpdating(false);
       return;
     }
     setPendingUpdate(null);
     setSelectedId(null);
+    setIsUpdating(false);
     await refresh();
   }
 
   async function handleDelete() {
     if (!pendingDelete) return;
-    setDeleteError(null);
+    setDeleteError(false);
     const result = await bridge.deleteSkill(pendingDelete);
     if (!result.ok) {
-      setDeleteError(result.error.message);
+      setDeleteError(true);
       return;
     }
     setPendingDelete(null);
@@ -193,7 +207,9 @@ export default function InboxPanel() {
         </p>
       )}
 
-      {inbox === null ? null : inbox.length === 0 ? (
+      {inbox === null ? (
+        <StatusSkeleton />
+      ) : inbox.length === 0 ? (
         <p className="muted-copy">
           {canScan
             ? 'No unfiled skills'
@@ -210,9 +226,15 @@ export default function InboxPanel() {
                 <ul className="skill-list">
                   {group.skills.map((skillId) => {
                     const rank = visibleStart + visibleIds.indexOf(skillId) + 1;
+                    const record = catalog.find((skill) => skill.id === skillId);
+                    const originStatus = originById[skillId];
+                    const originBadge =
+                      record?.source === 'skills.sh' && record.paths.length > 0 && originStatus
+                        ? ORIGIN_BADGE[originStatus]
+                        : null;
                     return (
                       <li
-                        className="library-skill library-skill-interactive"
+                        className={`library-skill library-skill-interactive${originBadge ? ` origin-row origin-row-${originStatus}` : ''}`}
                         key={skillId}
                         onClick={() => setSelectedId(skillId)}
                       >
@@ -226,6 +248,9 @@ export default function InboxPanel() {
                         <span className="skill-rank">{rank}</span>
                         <div className="skill-info">
                           <div className="skill-name">{skillId}</div>
+                          {originBadge && (
+                            <span className={originBadge.className}>{originBadge.label}</span>
+                          )}
                         </div>
                         {originById[skillId] === 'update' && (
                           <button
@@ -234,7 +259,7 @@ export default function InboxPanel() {
                             className={`update-card ${FOCUS_RING}`}
                             onClick={(event: MouseEvent<HTMLButtonElement>) => {
                               event.stopPropagation();
-                              setUpdateError(null);
+                              setUpdateError(false);
                               setPendingUpdate({ id: skillId, replaceEdited: false });
                             }}
                           >
@@ -248,7 +273,7 @@ export default function InboxPanel() {
                           className={`delete-card ${FOCUS_RING}`}
                           onClick={(event: MouseEvent<HTMLButtonElement>) => {
                             event.stopPropagation();
-                            setDeleteError(null);
+                            setDeleteError(false);
                             setPendingDelete(skillId);
                           }}
                         >
@@ -295,10 +320,11 @@ export default function InboxPanel() {
           source={previewSource}
           paths={selectedRecord?.paths}
           originStatus={originById[selectedId]}
+          lockDismiss={pendingUpdate !== null}
           onReset={
             originById[selectedId] === 'edited'
               ? () => {
-                  setUpdateError(null);
+                  setUpdateError(false);
                   setPendingUpdate({ id: selectedId, replaceEdited: true });
                 }
               : undefined
@@ -307,7 +333,8 @@ export default function InboxPanel() {
         />
       )}
 
-      {pendingDelete && (
+      {pendingDelete &&
+        createPortal(
         <div className="modal-backdrop" role="presentation" onClick={closeDelete}>
           <div
             className="help-modal"
@@ -335,11 +362,7 @@ export default function InboxPanel() {
             ) : (
               <p className="muted-copy">Not on disk. This only drops it from Skills.</p>
             )}
-            {deleteError && (
-              <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {deleteError}
-              </p>
-            )}
+            {deleteError && <StatusNotice kind="delete" />}
             <div className="modal-actions">
               <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={closeDelete}>
                 Cancel
@@ -349,42 +372,57 @@ export default function InboxPanel() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {pendingUpdate && (
-        <div className="modal-backdrop" role="presentation" onClick={closeUpdate}>
+      {pendingUpdate &&
+        createPortal(
+        <div className="modal-backdrop" role="presentation" onClick={isUpdating ? undefined : closeUpdate}>
           <div
-            className="help-modal"
+            className={`help-modal${isUpdating ? ' status-loading' : ''}`}
             role="dialog"
             aria-modal="true"
+            aria-busy={isUpdating || undefined}
             aria-labelledby="update-skill-title"
             onClick={(event) => event.stopPropagation()}
           >
+            {isUpdating && (
+              <span className="status-icon status-icon-loading" aria-hidden="true">
+                <CircleNotch size={24} weight="regular" className="spin" />
+              </span>
+            )}
             <p className="eyebrow">Skills</p>
             <h2 id="update-skill-title">
-              {pendingUpdate.replaceEdited ? `Reset ${pendingUpdate.id}?` : `Update ${pendingUpdate.id}?`}
+              {isUpdating
+                ? pendingUpdate.replaceEdited
+                  ? `Resetting ${pendingUpdate.id}`
+                  : `Updating ${pendingUpdate.id}`
+                : pendingUpdate.replaceEdited
+                  ? `Reset ${pendingUpdate.id}?`
+                  : `Update ${pendingUpdate.id}?`}
             </h2>
-            <p className="muted-copy">
-              {pendingUpdate.replaceEdited
-                ? 'This replaces your edited SKILL.md with the current market copy.'
-                : 'This replaces the on-disk SKILL.md with the current market copy.'}
+            <p className="muted-copy" role={isUpdating ? 'status' : undefined}>
+              {isUpdating
+                ? 'Fetching the market copy. This can take a few seconds.'
+                : pendingUpdate.replaceEdited
+                  ? 'This replaces your edited SKILL.md with the current market copy.'
+                  : 'This replaces the on-disk SKILL.md with the current market copy.'}
             </p>
-            {updateError && (
-              <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {updateError}
-              </p>
+            {updateError && <StatusNotice kind="update" />}
+            {!isUpdating && (
+              <div className="modal-actions">
+                <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={closeUpdate}>
+                  Cancel
+                </button>
+                <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={() => void handleUpdate()}>
+                  {pendingUpdate.replaceEdited ? 'Reset skill' : 'Update skill'}
+                </button>
+              </div>
             )}
-            <div className="modal-actions">
-              <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={closeUpdate}>
-                Cancel
-              </button>
-              <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={() => void handleUpdate()}>
-                {pendingUpdate.replaceEdited ? 'Reset skill' : 'Update skill'}
-              </button>
-            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </section>
   );

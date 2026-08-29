@@ -27,8 +27,6 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
   private installError: Error | null = null;
   private searchError: Error | null = null;
   private browseError: Error | null = null;
-  private convertError: Error | null = null;
-  private convertCalls = 0;
   private hashes = new Map<string, string | null>();
 
   async search(_query: string): Promise<Result<Skill[]>> {
@@ -54,14 +52,6 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     return ok(undefined);
   }
 
-  async convert(_skillId: string, _targetIDE: IDE): Promise<Result<void>> {
-    this.convertCalls += 1;
-    if (this.convertError) {
-      return err(this.convertError);
-    }
-    return ok(undefined);
-  }
-
   getInstalled(): Skill[] {
     return [...this.installed];
   }
@@ -80,11 +70,6 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     return [...this.installs];
   }
 
-  /** Test helper: how many times leftover convert() was called. */
-  getConvertCallCount(): number {
-    return this.convertCalls;
-  }
-
   /** Test helper: makes the next install() call(s) fail with `error`. */
   setInstallError(error: Error): void {
     this.installError = error;
@@ -100,11 +85,6 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     this.browseError = error;
   }
 
-  /** Test helper: makes the next convert() call(s) fail with `error`. */
-  setConvertError(error: Error): void {
-    this.convertError = error;
-  }
-
   /** Test helper: seeds skills as if already installed by external tooling. */
   seedInstalled(skills: Skill[]): void {
     this.installed.push(...skills);
@@ -117,8 +97,6 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     this.installError = null;
     this.searchError = null;
     this.browseError = null;
-    this.convertError = null;
-    this.convertCalls = 0;
     this.hashes.clear();
   }
 }

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isErr, isOk } from '../core/result.js';
-import { InMemoryConfigAdapter } from './in-memory-config.js';
 import { InMemoryFileSystemAdapter } from './in-memory-fs.js';
 import { InMemorySkillsAdapter } from './in-memory-skills.js';
 
@@ -154,43 +153,6 @@ describe('InMemoryFileSystemAdapter', () => {
   });
 });
 
-describe('InMemoryConfigAdapter', () => {
-  let config: InMemoryConfigAdapter;
-
-  beforeEach(() => {
-    config = new InMemoryConfigAdapter();
-  });
-
-  it('writes and reads back a config at a path', () => {
-    const value = { version: '1.0', collections: { frontend: ['react-patterns'] } };
-
-    config.write('/.contextkit.yml', value);
-    const result = config.read('/.contextkit.yml');
-
-    expect(result).toEqual({ ok: true, value });
-  });
-
-  it('errors when reading a config that was never written', () => {
-    const result = config.read('/missing.yml');
-
-    expect(isErr(result)).toBe(true);
-  });
-
-  it('validate() accepts a well-formed config', () => {
-    const result = config.validate({ version: '1.0', collections: { frontend: [] } });
-
-    expect(isOk(result)).toBe(true);
-  });
-
-  it('reset() clears stored configs', () => {
-    config.write('/.contextkit.yml', { version: '1.0', collections: {} });
-
-    config.reset();
-
-    expect(isErr(config.read('/.contextkit.yml'))).toBe(true);
-  });
-});
-
 describe('InMemorySkillsAdapter', () => {
   let skills: InMemorySkillsAdapter;
 
@@ -238,12 +200,6 @@ describe('InMemorySkillsAdapter', () => {
 
   it('getInstalled() starts empty', () => {
     expect(skills.getInstalled()).toEqual([]);
-  });
-
-  it('convert() succeeds for a known IDE', async () => {
-    const result = await skills.convert('obra/react-patterns', 'cursor');
-
-    expect(isOk(result)).toBe(true);
   });
 
   it('reset() clears installed skills', async () => {

@@ -1,5 +1,5 @@
 import type { Result } from '../core/result.js';
-import type { BrowseView, Config, IDE, Skill, UsageEvent } from '../types/index.js';
+import type { BrowseView, IDE, Skill, UsageEvent } from '../types/index.js';
 
 /**
  * Wraps project-local I/O: JSON state, SKILL.md discovery, and utf-8 files.
@@ -78,23 +78,8 @@ export interface IFileSystemAdapter {
 }
 
 /**
- * Wraps YAML parsing and validation for `.contextkit.yml`.
- *
- * Isolates CollectionEngine from the config file format, so switching
- * formats (YAML, JSON, TOML) never requires engine changes.
- */
-export interface IConfigAdapter {
-  /** Reads and parses a config file. Returns an error Result if missing or malformed. */
-  read(path: string): Result<Config>;
-
-  /** Validates a parsed Config against the expected schema. */
-  validate(config: Config): Result<void>;
-}
-
-/**
- * Wraps external skill tooling: skills.sh search API, `npx skills add`, and
- * `skillsmith convert`. Isolates CollectionEngine from network calls and
- * subprocess execution.
+ * Wraps external skill tooling: skills.sh search API and `npx skills add`.
+ * Isolates CollectionEngine from network calls and subprocess execution.
  */
 export interface ISkillsAdapter {
   /** Searches skills.sh for skills matching `query`. */
@@ -109,9 +94,6 @@ export interface ISkillsAdapter {
    * `cwd` overrides the adapter's project root for this call only.
    */
   install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }): Promise<Result<void>>;
-
-  /** Converts a skill to a target IDE's format via `skillsmith`. */
-  convert(skillId: string, targetIDE: IDE): Promise<Result<void>>;
 
   /** Returns skills already installed, read from local tooling state. */
   getInstalled(): Skill[];

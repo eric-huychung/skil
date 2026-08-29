@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { CollectionEngine } from '../../core/collection-engine.js';
-import { InMemoryConfigAdapter } from '../../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../../adapters/in-memory-skills.js';
 import { isOk } from '../../core/result.js';
@@ -11,7 +10,7 @@ function buildEngine(): { engine: CollectionEngine; fs: InMemoryFileSystemAdapte
   const fs = new InMemoryFileSystemAdapter();
   return {
     fs,
-    engine: new CollectionEngine(fs, new InMemoryConfigAdapter(), new InMemorySkillsAdapter()),
+    engine: new CollectionEngine(fs, new InMemorySkillsAdapter()),
   };
 }
 

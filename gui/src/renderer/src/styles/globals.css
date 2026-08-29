@@ -8,6 +8,7 @@
 @import '@fontsource/fredoka/700.css';
 @import '../../../../../public/brand.css';
 @import '../../../../../public/theme.css';
+@import '../../../../../public/status.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -104,6 +105,13 @@
   background: var(--background);
   color: var(--foreground);
   transition: background 0.3s ease, color 0.3s ease;
+}
+
+.boot-failure {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
 }
 
 .topbar {
@@ -281,7 +289,8 @@
 
 .workspace-search .library-panel,
 .workspace-config .config-panel,
-.workspace-inbox .inbox-panel {
+.workspace-inbox .inbox-panel,
+.workspace-rules .rules-panel {
   min-height: 0;
   border-right: 0;
   overflow-y: auto;
@@ -301,12 +310,14 @@
 }
 
 .workspace-search .library-panel,
-.workspace-inbox .inbox-panel {
+.workspace-inbox .inbox-panel,
+.workspace-rules .rules-panel {
   width: 100%;
   max-width: none;
 }
 
-.workspace-collections .panel-section {
+.workspace-collections .panel-section,
+.workspace-rules .rules-panel {
   padding: 48px clamp(28px, 4vw, 64px);
 }
 
@@ -553,6 +564,89 @@
   margin-top: 2px;
 }
 
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.command-stage .rules-grid {
+  margin-top: 8px;
+}
+
+.rule-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 112px;
+  padding: 16px;
+  border: 1px solid rgb(var(--glass-border));
+  border-radius: var(--radius-hover);
+  background-color: rgb(var(--glass-bg));
+  backdrop-filter: blur(20px);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.rule-card:hover {
+  background: var(--surface-soft);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.rule-card:has(.library-skill-hit:active) {
+  background: color-mix(in srgb, var(--surface-soft) 80%, var(--line));
+  transform: translateY(0);
+}
+
+.rule-card-name {
+  position: relative;
+  z-index: 0;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.always-on-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  min-height: 28px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.always-on-toggle.on {
+  color: var(--accent-blue);
+}
+
+button.always-on-toggle {
+  z-index: 2;
+}
+
+button.always-on-toggle:hover {
+  color: var(--ink);
+}
+
+button.always-on-toggle.on:hover {
+  color: var(--accent-blue);
+}
+
 .mini-dot {
   width: 4px;
   height: 4px;
@@ -725,7 +819,8 @@
   }
 }
 
-.inbox-panel > .muted-copy {
+.inbox-panel > .muted-copy,
+.rules-panel > .muted-copy {
   margin: 16px 0 0;
 }
 
@@ -974,6 +1069,9 @@
 }
 
 .skill-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex: 1;
   min-width: 0;
 }
@@ -1299,7 +1397,8 @@
 }
 
 .config-panel,
-.inbox-panel {
+.inbox-panel,
+.rules-panel {
   grid-column: 2 / -1;
 }
 
@@ -1696,7 +1795,7 @@ button.recent-card:hover {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 10;
+  z-index: 60;
   display: grid;
   place-items: center;
   padding: 20px;
@@ -1906,14 +2005,36 @@ button.recent-card:hover {
 }
 
 .update-card {
-  color: var(--muted-ink);
-  background: transparent;
+  color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
   border: 0;
-  padding: 4px 6px;
+  padding: 4px 8px;
   display: flex;
   align-items: center;
   gap: 4px;
   font-size: 12px;
+  border-radius: 0.5rem;
+}
+
+.origin-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.origin-row-current {
+  box-shadow: inset 3px 0 0 #10b981;
+}
+
+.origin-row-update,
+.origin-row-edited {
+  box-shadow: inset 3px 0 0 #f59e0b;
 }
 
 .update-card:hover {
@@ -1926,6 +2047,15 @@ button.recent-card:hover {
   justify-content: space-between;
   gap: 12px;
   margin: 8px 0 12px;
+}
+
+.origin-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .inbox-toggle {
@@ -2036,6 +2166,7 @@ select:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .app-shell,
   .collection-card,
+  .rule-card,
   .library-skill-interactive,
   .skill-details-link,
   .skill-details-link svg,

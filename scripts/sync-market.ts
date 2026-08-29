@@ -1,18 +1,20 @@
 /**
- * First-fill / resumable sync for the market index (Task 8,
- * `tasks/plan.md`). Not a 60s Vercel function — meant to run locally
- * (`npm run sync-market`, `.env` + `vercel env pull` for
- * `VERCEL_OIDC_TOKEN`) or as a one-off GitHub Action. Safe to re-run:
- * `syncListing` re-discovers every id whose hash is still null, so a
- * killed run just picks back up.
+ * Market index — laptop operator script.
  *
- * Steps: seed roles/fields from `market-seed.ts` -> full listing crawl +
- * inactive reconcile -> drain the detail-hydrate queue (paced under
- * skills.sh's 600 req/min) -> classify top 1000 into shelves (same
- * `refreshActiveFields` as the weekly cron).
+ * Full fill / recrawl (needs .env + VERCEL_OIDC_TOKEN from `vercel env pull`):
+ *   npm run sync-market
+ *   seed → crawl 20k listing → hydrate missing details → classify top 1000
  *
- * Flags: `--max-detail=N` caps how many queued ids this run hydrates
- * (for a small local smoke run); default drains the whole queue.
+ * Reindex shelves only (needs AI_GATEWAY_API_KEY, no OIDC):
+ *   npm run sync-market -- --classify-only
+ *   seed → classify top 1000 → write shelves
+ *   Same category step as Sunday cron: GET /api/cron/sync-market
+ *
+ * Smoke hydrate:
+ *   npm run sync-market -- --max-detail=40
+ *
+ * Safe to re-run. Classify fail → last week's shelves stay.
+ * Weekly cron does classify + 40 hydrates only (no 20k crawl).
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { getVercelOidcToken } from '@vercel/oidc';
@@ -52,6 +54,10 @@ function parseMaxDetail(argv: string[]): number {
   return Number.isFinite(value) && value > 0 ? value : Number.POSITIVE_INFINITY;
 }
 
+function parseClassifyOnly(argv: string[]): boolean {
+  return argv.includes('--classify-only');
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -89,7 +95,11 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  if (!process.env.VERCEL_OIDC_TOKEN) {
+  const flags = process.argv.slice(2);
+  const classifyOnly = parseClassifyOnly(flags);
+  const maxDetail = parseMaxDetail(flags);
+
+  if (!classifyOnly && !process.env.VERCEL_OIDC_TOKEN) {
     console.error(
       'Missing VERCEL_OIDC_TOKEN. Run: npm i -g vercel && vercel link && vercel env pull (writes .env.local).',
     );
@@ -102,8 +112,6 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-
-  const maxDetail = parseMaxDetail(process.argv.slice(2));
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
   const store = new SupabaseMarketStore(supabase);
@@ -123,19 +131,31 @@ async function main(): Promise<void> {
     if (!isOk(result)) throw result.error;
   }
 
-  console.log('Crawling the full skills.sh listing...');
-  const crawl = await sync.syncListing();
-  if (!isOk(crawl)) throw crawl.error;
-  console.log(`Listing crawl done. ${crawl.value.queued.length} id(s) need detail hydrate.`);
-
-  await drainHydrateQueue(sync, crawl.value.queued, maxDetail);
+  if (!classifyOnly) {
+    console.log('Crawling the full skills.sh listing...');
+    const crawl = await sync.syncListing();
+    if (!isOk(crawl)) throw crawl.error;
+    console.log(`Listing crawl done. ${crawl.value.queued.length} id(s) need detail hydrate.`);
+    await drainHydrateQueue(sync, crawl.value.queued, maxDetail);
+  } else {
+    console.log('Classify-only: skip listing crawl.');
+  }
 
   console.log('Classifying top 1000 into shelves (dedup → LLM → rank)...');
   const shelves = await sync.refreshActiveFields();
   if (!isOk(shelves)) throw shelves.error;
   console.log(`Shelves written: ${shelves.value.refreshed.join(', ')}`);
 
-  if (shelves.value.queued.length > 0) {
+  const listed = await store.listShelves();
+  if (isOk(listed)) {
+    for (const role of listed.value) {
+      for (const field of role.fields) {
+        console.log(`  ${role.label} / ${field.label}: ${field.skills.length}`);
+      }
+    }
+  }
+
+  if (!classifyOnly && shelves.value.queued.length > 0) {
     console.log(`Classify pool has ${shelves.value.queued.length} id(s) with no hash; hydrating...`);
     await drainHydrateQueue(sync, shelves.value.queued, maxDetail);
   }

@@ -31,7 +31,7 @@ describe('App', () => {
     renderWithProviders(<App />);
 
     expect(screen.getByText('Skil')).toBeInTheDocument();
-    expect(screen.getByText('skil 0.2.2')).toBeInTheDocument();
+    expect(screen.getByText('skil 0.3.0')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Commands' })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByRole('heading', { name: 'Commands' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Open Cursor workspace' })).not.toBeInTheDocument();
@@ -71,7 +71,8 @@ describe('App', () => {
     const tabs = screen.getAllByRole('tab').map((tab) => tab.getAttribute('aria-label'));
     expect(tabs.indexOf('Skills')).toBeGreaterThan(-1);
     expect(tabs.indexOf('Skills')).toBeLessThan(tabs.indexOf('Commands'));
-    for (const name of ['Sync', 'Discover', 'Skills', 'Commands']) {
+    expect(tabs.indexOf('Commands')).toBeLessThan(tabs.indexOf('Rules'));
+    for (const name of ['Sync', 'Discover', 'Skills', 'Commands', 'Rules']) {
       expect(screen.getByRole('tab', { name })).toHaveTextContent(name);
     }
     expect(await screen.findByRole('heading', { name: 'Commands' })).toBeInTheDocument();

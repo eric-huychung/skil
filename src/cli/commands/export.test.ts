@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { CollectionEngine } from '../../core/collection-engine.js';
-import { InMemoryConfigAdapter } from '../../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../../adapters/in-memory-skills.js';
 import { isOk } from '../../core/result.js';
@@ -14,7 +13,7 @@ function buildEngine(): {
 } {
   const fs = new InMemoryFileSystemAdapter();
   const skills = new InMemorySkillsAdapter();
-  const engine = new CollectionEngine(fs, new InMemoryConfigAdapter(), skills);
+  const engine = new CollectionEngine(fs, skills);
   return { engine, fs, skills };
 }
 
@@ -39,7 +38,6 @@ describe('runExport', () => {
       expect(written.value).toContain('- tdd');
       expect(written.value).toContain('- design');
     }
-    expect(skills.getConvertCallCount()).toBe(0);
     expect(skills.getInstalls()).toEqual([]);
   });
 

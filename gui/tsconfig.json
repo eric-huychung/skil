@@ -13,5 +13,12 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": ["src/renderer/src/**/*", "src/shared/**/*"]
+    "include": [
+      "src/renderer/src/**/*",
+      "src/shared/**/*",
+      "../shared/status/**/*",
+      "../src/core/status-copy.ts",
+      "../src/core/dock-layout.ts",
+      "../src/types/index.ts"
+    ]
 }

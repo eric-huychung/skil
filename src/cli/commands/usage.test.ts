@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { CollectionEngine } from '../../core/collection-engine.js';
-import { InMemoryConfigAdapter } from '../../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../../adapters/in-memory-skills.js';
 import { InMemoryUsageCollector } from '../../adapters/in-memory-usage.js';
@@ -10,12 +9,7 @@ import { runUsage } from './usage.js';
 function buildEngine(usage = new InMemoryUsageCollector()): CollectionEngine {
   const fs = new InMemoryFileSystemAdapter();
   fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
-  const engine = new CollectionEngine(
-    fs,
-    new InMemoryConfigAdapter(),
-    new InMemorySkillsAdapter(),
-    usage
-  );
+  const engine = new CollectionEngine(fs, new InMemorySkillsAdapter(), usage);
   engine.scan();
   return engine;
 }

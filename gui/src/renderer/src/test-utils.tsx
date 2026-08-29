@@ -2,12 +2,11 @@ import type { ReactElement } from 'react';
 import { render, type RenderOptions } from '@testing-library/react';
 import { CollectionEngine } from '../../../../src/core/collection-engine.js';
 import { InMemoryFileSystemAdapter } from '../../../../src/adapters/in-memory-fs.js';
-import { InMemoryConfigAdapter } from '../../../../src/adapters/in-memory-config.js';
 import { InMemorySkillsAdapter } from '../../../../src/adapters/in-memory-skills.js';
 import { InMemoryUsageCollector } from '../../../../src/adapters/in-memory-usage.js';
 import type { ICollectionEngine } from '../../../../src/interfaces/engine.js';
-import { ok, type Result } from '../../../../src/core/result.js';
-import type { MarketPreviewData, MarketSearchRow, ShelfRole, SkilBridge, ScanResult } from '../../shared/ipc.js';
+import { isOk, ok, type Result } from '../../../../src/core/result.js';
+import type { IDE, MarketPreviewData, MarketSearchRow, ShelfRole, SkilBridge, ScanResult } from '../../shared/ipc.js';
 import { forgetFolder, rememberFolder } from '../../shared/recent-folders.js';
 import { marketInboxIds, mergeMarketInbox, rememberMarketSkill } from '../../shared/market-inbox.js';
 import { ThemeProvider } from './theme';
@@ -16,7 +15,7 @@ import { BridgeProvider } from './bridge-context';
 /**
  * Builds a CollectionEngine backed by the same in-memory adapters the
  * CLI/engine tests use, rather than hand-rolled component mocks. Component
- * tests exercise the real business logic; only the file system, config, and
+ * tests exercise the real business logic; only the file system and
  * skills.sh boundaries are faked. Return `fs` when a test needs to seed
  * SKILL.md files for scan.
  */
@@ -30,12 +29,50 @@ export function createInMemoryWorkspace(usage?: InMemoryUsageCollector): {
   return {
     fs,
     skills,
-    engine: new CollectionEngine(fs, new InMemoryConfigAdapter(), skills, usage),
+    engine: new CollectionEngine(fs, skills, usage),
   };
 }
 
 export function createInMemoryEngine(): ICollectionEngine {
   return createInMemoryWorkspace().engine;
+}
+
+/**
+ * Same as createInMemoryWorkspace, except install() writes the vercel npx
+ * dump (`.agents/skills/<short-name>/SKILL.md`) so engine relocate + Reset
+ * can actually replace an on-disk copy.
+ */
+export class NpxLayoutSkillsAdapter extends InMemorySkillsAdapter {
+  skillBody = '';
+
+  constructor(private readonly disk: InMemoryFileSystemAdapter) {
+    super();
+  }
+
+  override async install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }) {
+    const result = await super.install(skillId, targetIDE, opts);
+    if (!isOk(result)) return result;
+    const shortName = skillId.split('/').filter(Boolean).at(-1) ?? skillId;
+    const prefix = opts?.cwd ? `${opts.cwd.replace(/\\/g, '/').replace(/\/+$/, '')}/` : '';
+    const root =
+      targetIDE === 'claude' ? '.claude/skills' : targetIDE === 'windsurf' ? '.windsurf/skills' : '.agents/skills';
+    this.disk.writeFile(`${prefix}${root}/${shortName}/SKILL.md`, this.skillBody || `# ${shortName}\n`);
+    return result;
+  }
+}
+
+export function createNpxWorkspace(): {
+  engine: ICollectionEngine;
+  fs: InMemoryFileSystemAdapter;
+  skills: NpxLayoutSkillsAdapter;
+} {
+  const fs = new InMemoryFileSystemAdapter();
+  const skills = new NpxLayoutSkillsAdapter(fs);
+  return {
+    fs,
+    skills,
+    engine: new CollectionEngine(fs, skills),
+  };
 }
 
 /** Default path a test Pick/Change click binds when `nextPick` is omitted. */
@@ -112,7 +149,6 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
       if (result.ok) notifyScan(EMPTY_SCAN);
       return result;
     },
-    searchSkills: async (query) => activeEngine.search(query),
     browseSkills: async (view) => activeEngine.browse(view),
     listInbox: async () => activeEngine.inbox(),
     listSkills: async () => activeEngine.skills(),
@@ -158,7 +194,7 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
     deleteSkill: async (skillId) => activeEngine.deleteSkill(skillId),
     usage: async () => activeEngine.usage(),
     // Market index reads are HTTP, not engine-backed — default to an empty
-    // index so existing tests keep exercising today's SkillSearch fallback.
+    // index so Discover stays on live Top / Trending.
     // Tests that need shelves override these on the returned bridge.
     marketShelves: async (): Promise<Result<ShelfRole[]>> => ok([]),
     marketSearch: async (): Promise<Result<MarketSearchRow[]>> => ok([]),
@@ -176,6 +212,18 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
     readSkillMd: async (skillId: string) => activeEngine.readSkillMd(skillId),
     originChecks: async () => activeEngine.originChecks(),
     updateFromMarket: async (skillId, opts) => activeEngine.updateFromMarket(skillId, opts),
+    listRules: async () => activeEngine.rules(),
+    readRule: async (id) => activeEngine.readRule(id),
+    setAlwaysApply: async (id, alwaysApply) => {
+      const result = activeEngine.setAlwaysApply(id, alwaysApply);
+      if (result.ok) notifyScan(EMPTY_SCAN);
+      return result;
+    },
+    exportRules: async (targetIDE, opts) => {
+      const result = await activeEngine.exportRules(targetIDE, opts);
+      if (result.ok) notifyScan(EMPTY_SCAN);
+      return result;
+    },
   };
 }
 

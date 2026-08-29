@@ -1,7 +1,7 @@
 import type { MarketField, MarketRole } from './market-types.js';
 
 /**
- * Seed: 6 roles / 22 fields. Not a schema cap — insert more rows later;
+ * Seed: 6 roles / 21 fields. Not a schema cap — insert more rows later;
  * `listActiveFields` picks them up. `q` is unused for shelves (classify
  * path) but the column is NOT NULL so placeholders stay.
  */
@@ -36,11 +36,10 @@ export const SEED_FIELDS: MarketField[] = [
   field('user-research', 'pm', 'User research', 'user research', 3),
   field('competitive', 'pm', 'Competitive', 'competitive analysis', 4),
   field('pm-writing', 'pm', 'Writing', 'stakeholder communication', 5),
-  // Data (4)
+  // Data (3)
   field('analysis', 'data', 'Analysis', 'data analysis', 1),
-  field('sql', 'data', 'SQL', 'sql warehouse', 2),
-  field('metrics', 'data', 'Metrics', 'ab testing metrics', 3),
-  field('viz', 'data', 'Viz', 'data visualization', 4),
+  field('metrics', 'data', 'Metrics', 'ab testing metrics', 2),
+  field('viz', 'data', 'Viz', 'data visualization', 3),
   // Agent + Other (classify leftovers / agent-workflow)
   field('workflow', 'agent', 'Workflow', 'agent workflow', 1),
   field('integrations', 'other', 'Integrations', 'vendor integrations', 1),

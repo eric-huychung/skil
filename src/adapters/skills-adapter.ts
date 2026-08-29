@@ -81,7 +81,7 @@ export class SkillsAdapter implements ISkillsAdapter {
   async browse(view: BrowseView): Promise<Result<Skill[]>> {
     try {
       const response = await axios.get<SkillsListResponse>(`${this.apiBaseUrl}/api/skills`, {
-        params: { view, limit: 500 },
+        params: { view },
       });
 
       return ok(response.data.data.map(mapSkillsShHit));
@@ -113,18 +113,6 @@ export class SkillsAdapter implements ISkillsAdapter {
       return err(
         new Error(`Failed to install skill '${skillId}': ${message}${stderr ? `\n${stderr}` : ''}`)
       );
-    }
-  }
-
-  async convert(skillId: string, targetIDE: IDE): Promise<Result<void>> {
-    try {
-      await execa('skillsmith', ['convert', skillId, '--to', targetIDE], { cwd: this.projectRoot });
-      return ok(undefined);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return err(new Error("skillsmith is not installed. Run 'npm install -g skillsmith' and try again."));
-      }
-      return err(new Error(`Failed to convert skill '${skillId}' for ${targetIDE}: ${(error as Error).message}`));
     }
   }
 

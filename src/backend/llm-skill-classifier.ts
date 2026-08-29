@@ -5,7 +5,10 @@ import type { SkillLabel } from './shelf-assembler.js';
 
 export const CLASSIFY_BATCH_SIZE = 20;
 export const CLASSIFY_MODEL = 'openai/gpt-4o-mini';
+/** Extra tries after a dropped request or 5xx/429. One failed batch still fails the run. */
+export const CLASSIFY_FETCH_RETRIES = 2;
 const GATEWAY_URL = 'https://ai-gateway.vercel.sh/v1/chat/completions';
+const RETRY_DELAY_MS = 400;
 
 export interface LlmSkillClassifierDeps {
   fetchImpl: typeof fetch;
@@ -40,35 +43,31 @@ export class LlmSkillClassifier implements SkillClassifier {
     skills: MarketClassifyRow[],
     fields: MarketField[],
   ): Promise<Result<SkillLabel[]>> {
-    let response: Response;
-    try {
-      const token = await this.deps.getAccessToken();
-      response = await this.deps.fetchImpl(GATEWAY_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: CLASSIFY_MODEL,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt(fields) },
-            { role: 'user', content: JSON.stringify(skills.map(toPromptSkill)) },
-          ],
-        }),
-      });
-    } catch (error) {
-      return err(new Error(`LlmSkillClassifier: ${error instanceof Error ? error.message : 'request failed'}`));
-    }
+    const token = await this.deps.getAccessToken();
+    const init: RequestInit = {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: CLASSIFY_MODEL,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt(fields) },
+          { role: 'user', content: JSON.stringify(skills.map(toPromptSkill)) },
+        ],
+      }),
+    };
 
-    if (!response.ok) {
-      return err(new Error(`LlmSkillClassifier: gateway returned ${response.status}`));
+    const response = await postWithRetry(this.deps.fetchImpl, init);
+    if (!isOk(response)) {
+      return response;
     }
 
     let body: ChatCompletionBody;
     try {
-      body = (await response.json()) as ChatCompletionBody;
+      body = (await response.value.json()) as ChatCompletionBody;
     } catch {
       return err(new Error('LlmSkillClassifier: invalid JSON body'));
     }
@@ -77,12 +76,39 @@ export class LlmSkillClassifier implements SkillClassifier {
   }
 }
 
+function shouldRetryStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+async function postWithRetry(fetchImpl: typeof fetch, init: RequestInit): Promise<Result<Response>> {
+  let lastError: Error = new Error('LlmSkillClassifier: request failed');
+  for (let attempt = 0; attempt <= CLASSIFY_FETCH_RETRIES; attempt += 1) {
+    try {
+      const response = await fetchImpl(GATEWAY_URL, init);
+      if (response.ok) {
+        return ok(response);
+      }
+      lastError = new Error(`LlmSkillClassifier: gateway returned ${response.status}`);
+      if (!shouldRetryStatus(response.status)) {
+        return err(lastError);
+      }
+    } catch (error) {
+      lastError = new Error(`LlmSkillClassifier: ${error instanceof Error ? error.message : 'request failed'}`);
+    }
+    if (attempt < CLASSIFY_FETCH_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * (attempt + 1)));
+    }
+  }
+  return err(lastError);
+}
+
 function systemPrompt(fields: MarketField[]): string {
   const slugs = fields.map((field) => field.slug).join(', ');
   return [
     'Assign each skill 0-2 category slugs for the job it does, not words that appear.',
     `Allowed slugs: ${slugs}.`,
     'tdd → testing. grill-me / handoff / find-skills / prototype → workflow.',
+    'prisma / neon / supabase app postgres → database.',
     'Lark, Azure, Amazon seller, video-gen suites → integrations. amazon-product-research is NOT prd.',
     'Return JSON {"results":[{"id":"...","fieldSlugs":["slug"]}]} for every input id.',
   ].join(' ');

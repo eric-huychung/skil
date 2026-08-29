@@ -456,11 +456,13 @@ describe('CollectionList', () => {
     expect(dialog).toHaveClass('status-error');
     const details = within(dialog).getByText('Details').closest('details');
     expect(details).not.toHaveAttribute('open');
-    expect(within(dialog).getByText(/stderr: boom/)).not.toBeVisible();
+    expect(within(dialog).queryByText(/stderr: boom/)).toBeNull();
+    expect(within(dialog).getByText(/Couldn't export/)).not.toBeVisible();
 
     await userEvent.click(within(dialog).getByText('Details'));
     expect(details).toHaveAttribute('open');
-    expect(within(dialog).getByText(/stderr: boom/)).toBeVisible();
+    expect(within(dialog).getByText(/Couldn't export/)).toBeVisible();
+    expect(within(dialog).queryByText(/stderr: boom/)).toBeNull();
   });
 
   it('filters the From Skills picker as you type', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { isOk } from '../core/result.js';
-import { CLASSIFY_MODEL, LlmSkillClassifier } from './llm-skill-classifier.js';
+import { CLASSIFY_FETCH_RETRIES, CLASSIFY_MODEL, LlmSkillClassifier } from './llm-skill-classifier.js';
 import type { MarketClassifyRow, MarketField } from './market-types.js';
 import { GOLD_LABELS, GOLD_LISTINGS } from './shelf-gold.fixture.js';
 
@@ -46,6 +46,26 @@ describe('LlmSkillClassifier', () => {
     expect(posted.model).toBe(CLASSIFY_MODEL);
   });
 
+  it('retries a dropped fetch then succeeds', async () => {
+    const fetchImpl = vi.fn(async () => {
+      if (fetchImpl.mock.calls.length === 1) {
+        throw new TypeError('fetch failed');
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { content: goldContent() } }] }), {
+        status: 200,
+      });
+    });
+    const classifier = new LlmSkillClassifier({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getAccessToken: async () => 'test-token',
+    });
+
+    const result = await classifier.classify(GOLD_LISTINGS, fields);
+
+    expect(isOk(result)).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it('returns Err and no labels when a later batch fails', async () => {
     const skills: MarketClassifyRow[] = Array.from({ length: 21 }, (_, i) => ({
       id: `a/${i}`,
@@ -69,6 +89,6 @@ describe('LlmSkillClassifier', () => {
     const result = await classifier.classify(skills, fields);
 
     expect(isOk(result)).toBe(false);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(1 + 1 + CLASSIFY_FETCH_RETRIES);
   });
 });

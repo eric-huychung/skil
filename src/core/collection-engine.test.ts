@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isErr, isOk } from './result.js';
 import { CollectionEngine, STATE_PATH } from './collection-engine.js';
-import { InMemoryConfigAdapter } from '../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../adapters/in-memory-skills.js';
 import { InMemoryUsageCollector } from '../adapters/in-memory-usage.js';
@@ -53,15 +52,13 @@ class NpxLayoutSkillsAdapter extends InMemorySkillsAdapter {
 
 describe('CollectionEngine', () => {
   let fs: InMemoryFileSystemAdapter;
-  let config: InMemoryConfigAdapter;
   let skills: InMemorySkillsAdapter;
   let engine: CollectionEngine;
 
   beforeEach(() => {
     fs = new InMemoryFileSystemAdapter();
-    config = new InMemoryConfigAdapter();
     skills = new InMemorySkillsAdapter();
-    engine = new CollectionEngine(fs, config, skills);
+    engine = new CollectionEngine(fs, skills);
   });
 
   describe('create', () => {
@@ -143,39 +140,6 @@ describe('CollectionEngine', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.command).toBeUndefined();
-      }
-    });
-  });
-
-  describe('getCommand', () => {
-    it('returns the command template for a collection that has one', () => {
-      engine.create('frontend', [], 'npm run dev');
-
-      const result = engine.getCommand('frontend');
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value).toBe('npm run dev');
-      }
-    });
-
-    it('returns an error when the collection has no command defined', () => {
-      engine.create('frontend', []);
-
-      const result = engine.getCommand('frontend');
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain("Collection 'frontend' has no command defined");
-      }
-    });
-
-    it('returns an error when the collection does not exist', () => {
-      const result = engine.getCommand('missing');
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain("Collection 'missing' not found");
       }
     });
   });
@@ -350,7 +314,7 @@ describe('CollectionEngine', () => {
         inbox: [],
         version: '5.0',
       });
-      const loaded = new CollectionEngine(fs, config, skills);
+      const loaded = new CollectionEngine(fs, skills);
 
       expect(loaded.list()).toEqual([
         { name: 'build', skills: ['tdd', 'design', 'ui'], createdAt: '2024-01-01T00:00:00.000Z' },
@@ -368,97 +332,6 @@ describe('CollectionEngine', () => {
     });
   });
 
-  describe('sync', () => {
-    it('adds collections from the config file to local state', () => {
-      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['skill-a'] } });
-
-      const result = engine.sync('.contextkit.yml');
-
-      expect(isOk(result)).toBe(true);
-      const frontend = engine.list().find((c) => c.name === 'frontend');
-      expect(frontend?.skills).toEqual(['skill-a']);
-    });
-
-    it('preserves local collections not present in the config file', () => {
-      engine.create('local-only', ['skill-x']);
-      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['skill-a'] } });
-
-      engine.sync('.contextkit.yml');
-
-      expect(engine.list().map((c) => c.name)).toEqual(expect.arrayContaining(['local-only', 'frontend']));
-    });
-
-    it('overwrites an existing local collection with the same name from config', () => {
-      engine.create('frontend', ['old-skill']);
-      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['new-skill'] } });
-
-      engine.sync('.contextkit.yml');
-
-      const frontend = engine.list().find((c) => c.name === 'frontend');
-      expect(frontend?.skills).toEqual(['new-skill']);
-    });
-
-    it('writes the merged state to the state file', () => {
-      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['skill-a'] } });
-
-      engine.sync('.contextkit.yml');
-
-      const persisted = fs.readJSON<{ commands: Array<{ name: string }> }>(STATE_PATH);
-      expect(isOk(persisted)).toBe(true);
-      if (isOk(persisted)) {
-        expect(persisted.value.commands.map((c) => c.name)).toContain('frontend');
-      }
-    });
-
-    it('returns an error when the config file cannot be read', () => {
-      const result = engine.sync('.contextkit.yml');
-
-      expect(isErr(result)).toBe(true);
-    });
-
-    it('returns an error and restores prior collections when persisting fails', () => {
-      engine.create('frontend', ['old-skill']);
-      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['new-skill'], backend: ['skill-b'] } });
-      fs.setWriteError(new Error('Disk full'));
-
-      const result = engine.sync('.contextkit.yml');
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain('Disk full');
-      }
-      fs.setWriteError(null);
-      expect(engine.list().map((c) => c.name)).toEqual(['frontend']);
-      expect(engine.list()[0]?.skills).toEqual(['old-skill']);
-    });
-
-    it('warns about local collections not present in the config file', () => {
-      engine.create('local-only', ['skill-x']);
-      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['skill-a'] } });
-
-      const result = engine.sync('.contextkit.yml');
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value.warnings).toEqual(
-          expect.arrayContaining([expect.stringContaining('local-only')])
-        );
-      }
-    });
-
-    it('does not warn about collections present in both local state and config', () => {
-      engine.create('frontend', ['old-skill']);
-      config.write('.contextkit.yml', { version: '1.0', collections: { frontend: ['new-skill'] } });
-
-      const result = engine.sync('.contextkit.yml');
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value.warnings).toEqual([]);
-      }
-    });
-  });
-
   describe('loading existing state', () => {
     it('starts with an empty list when no state file exists yet', () => {
       expect(engine.list()).toEqual([]);
@@ -472,7 +345,7 @@ describe('CollectionEngine', () => {
         version: '4.0',
       });
 
-      expect(() => new CollectionEngine(fs, config, skills)).toThrow(
+      expect(() => new CollectionEngine(fs, skills)).toThrow(
         'Found leftover .contextkit/state.json. Move it to .skil/state.json and retry.'
       );
     });
@@ -487,7 +360,7 @@ describe('CollectionEngine', () => {
         version: '4.0',
       });
 
-      const loadedEngine = new CollectionEngine(fs, config, skills);
+      const loadedEngine = new CollectionEngine(fs, skills);
 
       expect(loadedEngine.list().map((c) => c.name)).toEqual(['new-map']);
     });
@@ -499,7 +372,7 @@ describe('CollectionEngine', () => {
         version: '2.0',
       });
 
-      const loadedEngine = new CollectionEngine(fs, config, skills);
+      const loadedEngine = new CollectionEngine(fs, skills);
 
       expect(loadedEngine.list()).toEqual([
         { name: 'frontend', skills: ['react-patterns'], createdAt: '2024-01-01T00:00:00.000Z' },
@@ -512,7 +385,7 @@ describe('CollectionEngine', () => {
         installedSkills: [],
         version: '2.0',
       });
-      const loadedEngine = new CollectionEngine(fs, config, skills);
+      const loadedEngine = new CollectionEngine(fs, skills);
 
       const result = loadedEngine.create('frontend', []);
 
@@ -527,7 +400,7 @@ describe('CollectionEngine', () => {
         version: '1.0',
       });
 
-      const loadedEngine = new CollectionEngine(fs, config, skills);
+      const loadedEngine = new CollectionEngine(fs, skills);
 
       expect(loadedEngine.list().map((c) => c.name)).toEqual(['frontend']);
     });
@@ -562,7 +435,6 @@ describe('CollectionEngine', () => {
         expect(written.value).toContain('- `tdd`');
         expect(written.value).not.toContain('1. Use the skills listed in frontmatter when they apply.');
       }
-      expect(skills.getConvertCallCount()).toBe(0);
       expect(skills.getInstalls()).toEqual([]);
     });
 
@@ -594,7 +466,8 @@ describe('CollectionEngine', () => {
 
       expect(isErr(refused)).toBe(true);
       if (isErr(refused)) {
-        expect(refused.error.message).toMatch(/not generated by skil|replace/i);
+        expect(refused.code).toBe('UNSTAMPED_COMMAND');
+        expect(refused.labels).toEqual(['build']);
       }
       expect(fs.readFile('.cursor/commands/build.md')).toEqual({
         ok: true,
@@ -854,8 +727,8 @@ describe('CollectionEngine', () => {
 
       expect(isErr(refused)).toBe(true);
       if (isErr(refused)) {
-        expect(refused.error.message).toMatch(/not generated by skil|replace/i);
-        expect(refused.error.message).toMatch(/\/testing/);
+        expect(refused.code).toBe('UNSTAMPED_COMMAND');
+        expect(refused.labels).toEqual(['testing']);
       }
       expect(isErr(fs.readFile('.cursor/commands/build.md'))).toBe(true);
       expect(fs.readFile('.cursor/commands/testing.md')).toEqual({
@@ -875,9 +748,8 @@ describe('CollectionEngine', () => {
 
       expect(isErr(refused)).toBe(true);
       if (isErr(refused)) {
-        expect(refused.error.message).toMatch(/\/testing/);
-        expect(refused.error.message).toMatch(/\/review/);
-        expect(refused.error.message).not.toMatch(/\/build/);
+        expect(refused.code).toBe('UNSTAMPED_COMMAND');
+        expect(refused.labels).toEqual(['testing', 'review']);
       }
       expect(fs.readFile('.cursor/commands/testing.md')).toEqual({
         ok: true,
@@ -940,7 +812,7 @@ describe('CollectionEngine', () => {
   describe('market skill export (npx layout)', () => {
     it('keeps a Discover skill on the Cursor command after save, in .cursor not .agents', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
-      engine = new CollectionEngine(fs, config, npx);
+      engine = new CollectionEngine(fs, npx);
 
       engine.addToInbox('vercel-labs/skills/find-skills');
       engine.create('build', []);
@@ -987,7 +859,7 @@ describe('CollectionEngine', () => {
 
     it('stamps originHash from the copied SKILL.md and keeps it after the file is edited', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
-      engine = new CollectionEngine(fs, config, npx);
+      engine = new CollectionEngine(fs, npx);
 
       const result = await engine.install('obra/react-patterns', 'cursor');
 
@@ -1065,7 +937,7 @@ describe('CollectionEngine', () => {
 
     it('places a Cursor install under .cursor/skills and removes the vercel .agents dump', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
-      engine = new CollectionEngine(fs, config, npx);
+      engine = new CollectionEngine(fs, npx);
 
       const result = await engine.install('obra/react-patterns', 'cursor');
 
@@ -1077,7 +949,7 @@ describe('CollectionEngine', () => {
 
     it('places an agents install under .agents/skills', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
-      engine = new CollectionEngine(fs, config, npx);
+      engine = new CollectionEngine(fs, npx);
 
       const result = await engine.install('obra/react-patterns', 'agents');
 
@@ -1088,7 +960,7 @@ describe('CollectionEngine', () => {
 
     it('places Codex and Copilot installs in their dock folders after a vercel .agents dump', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
-      engine = new CollectionEngine(fs, config, npx);
+      engine = new CollectionEngine(fs, npx);
 
       await engine.install('obra/x', 'codex');
       expect(isOk(fs.readFile('.codex/skills/obra/x/SKILL.md'))).toBe(true);
@@ -1184,7 +1056,7 @@ describe('CollectionEngine', () => {
   describe('originChecks', () => {
     it('reports update when the market hash moved and the disk copy was not edited', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
-      engine = new CollectionEngine(fs, config, npx);
+      engine = new CollectionEngine(fs, npx);
       await engine.install('obra/react-patterns', 'cursor');
       npx.setSkillHash('obra/react-patterns', 'market-moved');
 
@@ -1198,7 +1070,7 @@ describe('CollectionEngine', () => {
 
     it('reports edited when the on-disk hash no longer matches originHash', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
-      engine = new CollectionEngine(fs, config, npx);
+      engine = new CollectionEngine(fs, npx);
       await engine.install('obra/react-patterns', 'cursor');
       fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
       engine.scan();
@@ -1215,7 +1087,7 @@ describe('CollectionEngine', () => {
   describe('updateFromMarket', () => {
     it('overwrites an unedited copy and refreshes originHash', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
-      engine = new CollectionEngine(fs, config, npx);
+      engine = new CollectionEngine(fs, npx);
       await engine.install('obra/react-patterns', 'cursor');
       npx.skillBody = '# from market\n';
 
@@ -1233,7 +1105,7 @@ describe('CollectionEngine', () => {
 
     it('refuses to overwrite an edited copy unless replaceEdited is set', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
-      engine = new CollectionEngine(fs, config, npx);
+      engine = new CollectionEngine(fs, npx);
       await engine.install('obra/react-patterns', 'cursor');
       fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
       engine.scan();
@@ -1244,6 +1116,47 @@ describe('CollectionEngine', () => {
       npx.skillBody = '# from market\n';
       const reset = await engine.updateFromMarket('obra/react-patterns', { replaceEdited: true });
       expect(isOk(reset)).toBe(true);
+      expect(fs.readFile('.cursor/skills/obra/react-patterns/SKILL.md')).toEqual({
+        ok: true,
+        value: '# from market\n',
+      });
+    });
+
+    it('does not delete the on-disk copy when the market fetch fails', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, npx);
+      engine.addToInbox('obra/react-patterns');
+      await engine.install('obra/react-patterns', 'cursor');
+      fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      engine.scan();
+      npx.setInstallError(new Error('npx failed'));
+
+      const result = await engine.updateFromMarket('obra/react-patterns', { replaceEdited: true });
+
+      expect(isErr(result)).toBe(true);
+      expect(fs.readFile('.cursor/skills/obra/react-patterns/SKILL.md')).toEqual({
+        ok: true,
+        value: '# edited locally\n',
+      });
+      expect(engine.inbox()).toEqual(['obra/react-patterns']);
+    });
+
+    it('keeps the skill in Inbox after Reset and a follow-up scan', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, npx);
+      engine.addToInbox('obra/react-patterns');
+      await engine.install('obra/react-patterns', 'cursor');
+      fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      engine.scan();
+      npx.skillBody = '# from market\n';
+
+      const reset = await engine.updateFromMarket('obra/react-patterns', { replaceEdited: true });
+      expect(isOk(reset)).toBe(true);
+      const scanned = engine.scan();
+      expect(isOk(scanned)).toBe(true);
+
+      expect(engine.inbox()).toEqual(['obra/react-patterns']);
+      expect(engine.skills().map((skill) => skill.id)).toEqual(['obra/react-patterns']);
       expect(fs.readFile('.cursor/skills/obra/react-patterns/SKILL.md')).toEqual({
         ok: true,
         value: '# from market\n',
@@ -1275,29 +1188,10 @@ describe('CollectionEngine', () => {
     });
   });
 
-  describe('convert', () => {
-    it('converts a skill via the skills adapter', async () => {
-      const result = await engine.convert('obra/react-patterns', 'cursor');
-
-      expect(isOk(result)).toBe(true);
-    });
-
-    it('returns an error when the skills adapter conversion fails', async () => {
-      skills.setConvertError(new Error('skillsmith: unsupported format'));
-
-      const result = await engine.convert('obra/react-patterns', 'cursor');
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain('unsupported format');
-      }
-    });
-  });
-
   describe('loading installed skills on startup', () => {
     it('does not treat leftover getInstalled() as the catalog; install records deployedTo', async () => {
       skills.seedInstalled([{ id: 'obra/react-patterns', source: 'skills.sh', installedAt: '2024-01-01T00:00:00.000Z' }]);
-      const loadedEngine = new CollectionEngine(fs, config, skills);
+      const loadedEngine = new CollectionEngine(fs, skills);
 
       expect(loadedEngine.skills()).toEqual([]);
 
@@ -1319,7 +1213,7 @@ describe('CollectionEngine', () => {
         installedSkills: [],
         version: '2.0',
       });
-      const loadedEngine = new CollectionEngine(fs, config, skills);
+      const loadedEngine = new CollectionEngine(fs, skills);
 
       expect(loadedEngine.inbox()).toEqual([]);
     });
@@ -1600,7 +1494,7 @@ describe('CollectionEngine', () => {
 
     it('does not mint a second catalog id for an npx leftover short folder', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
-      engine = new CollectionEngine(fs, config, npx);
+      engine = new CollectionEngine(fs, npx);
       engine.addToInbox('obra/react-patterns');
       await engine.install('obra/react-patterns', 'cursor');
       fs.writeFile('.agents/skills/react-patterns/SKILL.md', '# react-patterns\n');
@@ -1636,7 +1530,7 @@ describe('CollectionEngine', () => {
       fs.writeJSON(STATE_PATH, persisted.value);
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
 
-      const reloaded = new CollectionEngine(fs, config, skills);
+      const reloaded = new CollectionEngine(fs, skills);
       const result = reloaded.scan();
 
       expect(isOk(result)).toBe(true);
@@ -1683,7 +1577,7 @@ describe('CollectionEngine', () => {
         installedSkills: [],
         version: '3.0',
       });
-      const loaded = new CollectionEngine(fs, config, skills);
+      const loaded = new CollectionEngine(fs, skills);
 
       expect(loaded.list()).toEqual([
         { name: 'build', skills: ['tdd'], createdAt: '2024-01-01T00:00:00.000Z' },
@@ -1902,7 +1796,7 @@ generated_at: 2026-08-24T00:00:00.000Z
       const tmpDir = mkdtempSync(join(process.cwd(), 'tmp-skil-delete-'));
       try {
         const realFs = new RealFileSystemAdapter(tmpDir);
-        const realEngine = new CollectionEngine(realFs, new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+        const realEngine = new CollectionEngine(realFs, new InMemorySkillsAdapter());
         realFs.writeFile('.cursor/skills/build/ui/shadcn/SKILL.md', '# shadcn\n');
         realFs.writeFile('.cursor/skills/other/SKILL.md', '# other\n');
         realEngine.scan();
@@ -2014,7 +1908,7 @@ generated_at: 2026-08-24T00:00:00.000Z
         inbox: [],
         version: '4.0',
       });
-      const loaded = new CollectionEngine(fs, config, skills);
+      const loaded = new CollectionEngine(fs, skills);
 
       expect(loaded.list()).toEqual([
         { name: 'build', skills: ['tdd'], createdAt: '2024-01-01T00:00:00.000Z' },
@@ -2351,8 +2245,8 @@ Turn the spec into architecture and a small task list.
 
       expect(isErr(blocked)).toBe(true);
       if (isErr(blocked)) {
-        expect(blocked.error.message).toMatch(/tdd/);
-        expect(blocked.error.message).toMatch(/replace/i);
+        expect(blocked.code).toBe('IMPORT_CONFLICT');
+        expect(blocked.labels).toEqual(['tdd']);
       }
       expect(fs.readFile('.cursor/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# dest tdd\n' });
 
@@ -2385,7 +2279,8 @@ Turn the spec into architecture and a small task list.
 
       expect(isErr(blocked)).toBe(true);
       if (isErr(blocked)) {
-        expect(blocked.error.message).toMatch(/build/);
+        expect(blocked.code).toBe('IMPORT_CONFLICT');
+        expect(blocked.labels).toEqual(['/build']);
       }
       expect(engine.list()[0]?.skills).toEqual(['design']);
 
@@ -2403,7 +2298,8 @@ Turn the spec into architecture and a small task list.
 
       expect(isErr(blocked)).toBe(true);
       if (isErr(blocked)) {
-        expect(blocked.error.message).toMatch(/not generated by skil/);
+        expect(blocked.code).toBe('IMPORT_CONFLICT');
+        expect(blocked.labels).toEqual(['/build']);
       }
       expect(fs.readFile('.cursor/commands/build.md')).toEqual({ ok: true, value: '# leftover\n' });
 
@@ -2417,7 +2313,42 @@ Turn the spec into architecture and a small task list.
       }
     });
 
-    it('errors when the source has no skills or stamped commands', async () => {
+    it('copies missing rules from the source dock', async () => {
+      sourceFile('.cursor/rules/pair-programming/behavior.mdc', '---\nalwaysApply: true\n---\n# behavior\n');
+      sourceFile('AGENTS.md', '# agents from source\n');
+
+      const result = await engine.importFrom(SOURCE, 'cursor');
+
+      expect(isOk(result)).toBe(true);
+      expect(fs.readFile('.cursor/rules/pair-programming/behavior.mdc')).toEqual({
+        ok: true,
+        value: '---\nalwaysApply: true\n---\n# behavior\n',
+      });
+      expect(fs.readFile('AGENTS.md')).toEqual({ ok: true, value: '# agents from source\n' });
+      expect(engine.rules().map((rule) => rule.id).sort()).toEqual([
+        '.cursor/rules/pair-programming/behavior.mdc',
+        'AGENTS.md',
+      ]);
+    });
+
+    it('refuses import when dest rules already differ, then replaces', async () => {
+      sourceFile('.cursor/rules/behavior.mdc', '# source\n');
+      fs.writeFile('.cursor/rules/behavior.mdc', '# dest\n');
+
+      const blocked = await engine.importFrom(SOURCE, 'cursor');
+      expect(isErr(blocked)).toBe(true);
+      if (isErr(blocked)) {
+        expect(blocked.code).toBe('IMPORT_CONFLICT');
+        expect(blocked.labels).toEqual(['behavior']);
+      }
+      expect(fs.readFile('.cursor/rules/behavior.mdc')).toEqual({ ok: true, value: '# dest\n' });
+
+      const replaced = await engine.importFrom(SOURCE, 'cursor', { replace: true });
+      expect(isOk(replaced)).toBe(true);
+      expect(fs.readFile('.cursor/rules/behavior.mdc')).toEqual({ ok: true, value: '# source\n' });
+    });
+
+    it('errors when the source has no skills, stamped commands, or rules', async () => {
       sourceFile('.cursor/commands/planning.md', '# leftover\n');
 
       const result = await engine.importFrom(SOURCE, 'cursor');
@@ -2448,7 +2379,7 @@ Turn the spec into architecture and a small task list.
         { skillId: 'tdd', source: 'claude' },
       ]);
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
-      engine = new CollectionEngine(fs, config, skills, usage);
+      engine = new CollectionEngine(fs, skills, usage);
       engine.scan();
 
       expect(await engine.usage()).toEqual({
@@ -2460,7 +2391,7 @@ Turn the spec into architecture and a small task list.
     it('returns a collector error and still lets scan run', async () => {
       const usage = new InMemoryUsageCollector();
       usage.setCollectError(new Error('log unreadable'));
-      engine = new CollectionEngine(fs, config, skills, usage);
+      engine = new CollectionEngine(fs, skills, usage);
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
 
       const result = await engine.usage();
@@ -2470,6 +2401,349 @@ Turn the spec into architecture and a small task list.
       }
       expect(isOk(engine.scan())).toBe(true);
       expect(engine.inbox()).toEqual(['tdd']);
+    });
+  });
+
+  describe('rules', () => {
+    it('lists cursor, claude, copilot, and root rule files without putting them in Inbox', () => {
+      fs.writeFile(
+        '.cursor/rules/pair-programming/behavior.mdc',
+        '---\nalwaysApply: true\n---\n# behavior\n'
+      );
+      fs.writeFile('.cursor/rules/optional.mdc', '---\nalwaysApply: false\n---\n# optional\n');
+      fs.writeFile('.claude/rules/review.md', '# review\n');
+      fs.writeFile('CLAUDE.md', '# claude root\n');
+      fs.writeFile('AGENTS.md', '# agents\n');
+      fs.writeFile('.github/copilot-instructions.md', '# copilot always\n');
+      fs.writeFile(
+        '.github/instructions/typescript.instructions.md',
+        '---\napplyTo: "**/*.ts"\n---\n# ts\n'
+      );
+      fs.writeFile('.windsurf/rules/style.md', '# style\n');
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+
+      engine.scan();
+
+      expect(engine.inbox()).toEqual(['tdd']);
+      const rules = engine.rules();
+      expect(rules).toHaveLength(8);
+      expect(rules).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: '.cursor/rules/pair-programming/behavior.mdc',
+            name: 'pair-programming/behavior',
+            dock: 'cursor',
+            alwaysApply: true,
+          }),
+          expect.objectContaining({
+            id: '.cursor/rules/optional.mdc',
+            name: 'optional',
+            dock: 'cursor',
+            alwaysApply: false,
+          }),
+          expect.objectContaining({
+            id: '.claude/rules/review.md',
+            name: 'review',
+            dock: 'claude',
+            alwaysApply: true,
+          }),
+          expect.objectContaining({
+            id: 'CLAUDE.md',
+            name: 'CLAUDE',
+            dock: 'claude',
+            alwaysApply: true,
+          }),
+          expect.objectContaining({
+            id: 'AGENTS.md',
+            name: 'AGENTS',
+            dock: 'agents',
+            alwaysApply: true,
+          }),
+          expect.objectContaining({
+            id: '.github/copilot-instructions.md',
+            name: 'copilot-instructions',
+            dock: 'copilot',
+            alwaysApply: true,
+          }),
+          expect.objectContaining({
+            id: '.github/instructions/typescript.instructions.md',
+            name: 'typescript',
+            dock: 'copilot',
+            alwaysApply: false,
+          }),
+          expect.objectContaining({
+            id: '.windsurf/rules/style.md',
+            name: 'style',
+            dock: 'windsurf',
+            alwaysApply: false,
+          }),
+        ])
+      );
+    });
+
+    it('reads a rule body by path id', () => {
+      fs.writeFile('.cursor/rules/behavior.mdc', '---\nalwaysApply: true\n---\n# hello\n');
+
+      const result = engine.readRule('.cursor/rules/behavior.mdc');
+
+      expect(result).toEqual({ ok: true, value: '---\nalwaysApply: true\n---\n# hello\n' });
+    });
+
+    it('errors when the rule file is missing', () => {
+      const result = engine.readRule('.cursor/rules/gone.mdc');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toMatch(/gone/i);
+      }
+    });
+
+    it('does not read an absolute path even when that file exists', () => {
+      fs.writeFile('/etc/passwd', 'root:x:0:0:root:/root:/bin/sh\n');
+
+      const result = engine.readRule('/etc/passwd');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toMatch(/not found/i);
+        expect(result).not.toEqual({ ok: true, value: 'root:x:0:0:root:/root:/bin/sh\n' });
+      }
+    });
+
+    it('does not read a project file that is not a listed rule', () => {
+      fs.writeFile('.env', 'SECRET=1\n');
+      fs.writeFile('.cursor/rules/../../.env', 'SECRET=1\n');
+
+      expect(isErr(engine.readRule('.env'))).toBe(true);
+      expect(isErr(engine.readRule('.cursor/rules/../../.env'))).toBe(true);
+    });
+
+    it('writes alwaysApply on a cursor rule and leaves other files alone', () => {
+      fs.writeFile(
+        '.cursor/rules/behavior.mdc',
+        '---\ndescription: pair\nalwaysApply: false\n---\n# body\n'
+      );
+      fs.writeFile('.claude/rules/review.md', '# other rule\n');
+
+      const result = engine.setAlwaysApply('.cursor/rules/behavior.mdc', true);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.alwaysApply).toBe(true);
+      }
+      expect(fs.readFile('.cursor/rules/behavior.mdc')).toEqual({
+        ok: true,
+        value: '---\ndescription: pair\nalwaysApply: true\n---\n# body\n',
+      });
+      expect(fs.readFile('.claude/rules/review.md')).toEqual({ ok: true, value: '# other rule\n' });
+    });
+
+    it('writes alwaysApply on every dock copy of the same rule', () => {
+      fs.writeFile(
+        '.cursor/rules/pair-programming/behavior.mdc',
+        '---\nalwaysApply: true\n---\n# body\n'
+      );
+      fs.writeFile('.claude/rules/pair-programming/behavior.md', '---\nalwaysApply: true\n---\n# body\n');
+
+      const result = engine.setAlwaysApply('.cursor/rules/pair-programming/behavior.mdc', false);
+
+      expect(isOk(result)).toBe(true);
+      expect(fs.readFile('.cursor/rules/pair-programming/behavior.mdc')).toEqual({
+        ok: true,
+        value: '---\nalwaysApply: false\n---\n# body\n',
+      });
+      expect(fs.readFile('.claude/rules/pair-programming/behavior.md')).toEqual({
+        ok: true,
+        value: '---\nalwaysApply: false\n---\n# body\n',
+      });
+    });
+
+    it('refuses to toggle alwaysApply on a root always-on file', () => {
+      fs.writeFile('CLAUDE.md', '# claude\n');
+
+      const result = engine.setAlwaysApply('CLAUDE.md', false);
+
+      expect(isErr(result)).toBe(true);
+      expect(fs.readFile('CLAUDE.md')).toEqual({ ok: true, value: '# claude\n' });
+    });
+
+    it('does not list the same rule twice after export to another dock', async () => {
+      fs.writeFile(
+        '.cursor/rules/pair-programming/behavior.mdc',
+        '---\nalwaysApply: true\n---\n# behavior\n'
+      );
+
+      const exported = await engine.exportRules('claude');
+      expect(isOk(exported)).toBe(true);
+      const dest = fs.readFile('.claude/rules/pair-programming/behavior.md');
+      expect(isOk(dest)).toBe(true);
+      if (isOk(dest)) {
+        expect(dest.value).toContain('generated_by: skil');
+        expect(dest.value).toContain('id: pair-programming/behavior');
+        expect(dest.value).toContain('alwaysApply: true');
+        expect(dest.value).toContain('# behavior');
+      }
+
+      expect(engine.rules()).toEqual([
+        expect.objectContaining({
+          id: '.cursor/rules/pair-programming/behavior.mdc',
+          name: 'pair-programming/behavior',
+          path: '.cursor/rules/pair-programming/behavior.mdc',
+          dock: 'cursor',
+          alwaysApply: true,
+        }),
+      ]);
+    });
+
+    it('exports every scanned rule into the dest dock rules dir', async () => {
+      fs.writeFile(
+        '.cursor/rules/pair-programming/behavior.mdc',
+        '---\nalwaysApply: true\n---\n# behavior\n'
+      );
+      fs.writeFile('CLAUDE.md', '# claude root\n');
+      fs.writeFile('.claude/rules/review.md', '# review\n');
+
+      const result = await engine.exportRules('cursor');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.failures).toEqual([]);
+        expect(result.value.succeeded).toEqual(['.cursor/rules/review.mdc']);
+      }
+      expect(isErr(fs.readFile('.cursor/rules/CLAUDE.mdc'))).toBe(true);
+      expect(fs.readFile('CLAUDE.md')).toEqual({ ok: true, value: '# claude root\n' });
+      const review = fs.readFile('.cursor/rules/review.mdc');
+      expect(isOk(review)).toBe(true);
+      if (isOk(review)) {
+        expect(review.value).toContain('generated_by: skil');
+        expect(review.value).toContain('# review');
+      }
+      expect(fs.readFile('.cursor/rules/pair-programming/behavior.mdc')).toEqual({
+        ok: true,
+        value: '---\nalwaysApply: true\n---\n# behavior\n',
+      });
+    });
+
+    it('refuses export when dest rule files already differ, then replaces', async () => {
+      fs.writeFile('.cursor/rules/behavior.mdc', '# new\n');
+      fs.writeFile('.claude/rules/behavior.md', '# old\n');
+
+      const blocked = await engine.exportRules('claude');
+      expect(isErr(blocked)).toBe(true);
+      if (isErr(blocked)) {
+        expect(blocked.code).toBe('RULE_EXPORT_CONFLICT');
+        expect(blocked.labels).toEqual(['behavior']);
+      }
+      expect(fs.readFile('.claude/rules/behavior.md')).toEqual({ ok: true, value: '# old\n' });
+
+      const replaced = await engine.exportRules('claude', { replace: true });
+      expect(isOk(replaced)).toBe(true);
+      const dest = fs.readFile('.claude/rules/behavior.md');
+      expect(isOk(dest)).toBe(true);
+      if (isOk(dest)) {
+        expect(dest.value).toContain('generated_by: skil');
+        expect(dest.value).toContain('# new');
+      }
+    });
+
+    it('errors when there are no rules to export', async () => {
+      const result = await engine.exportRules('cursor');
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toMatch(/no rules to export/i);
+      }
+    });
+
+    it('exports folder rules into AGENTS.md when Codex has no existing root file', async () => {
+      fs.writeFile('.cursor/rules/pair-programming/behavior.mdc', '# behavior\n');
+      fs.writeFile('.cursor/rules/pair-programming/format.mdc', '# format\n');
+
+      const result = await engine.exportRules('codex');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.failures).toEqual([]);
+        expect(result.value.succeeded).toEqual([
+          '.codex/rules/pair-programming/behavior.md',
+          '.codex/rules/pair-programming/format.md',
+          'AGENTS.md',
+        ]);
+      }
+      expect(isOk(fs.readFile('.codex/rules/pair-programming/behavior.md'))).toBe(true);
+      expect(isOk(fs.readFile('.codex/rules/pair-programming/format.md'))).toBe(true);
+      const dest = fs.readFile('AGENTS.md');
+      expect(isOk(dest)).toBe(true);
+      if (isOk(dest)) {
+        expect(dest.value).toContain('<!-- skil:rule pair-programming/behavior -->');
+        expect(dest.value).toContain('<!-- skil:rule pair-programming/format -->');
+        expect(dest.value).toContain('generated_by: skil');
+      }
+    });
+
+    it('exports folder rules into .agents/rules and AGENTS.md', async () => {
+      fs.writeFile('.cursor/rules/behavior.mdc', '# behavior\n');
+
+      const result = await engine.exportRules('agents');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.failures).toEqual([]);
+        expect(result.value.succeeded).toEqual(['.agents/rules/behavior.md', 'AGENTS.md']);
+      }
+      const folder = fs.readFile('.agents/rules/behavior.md');
+      expect(isOk(folder)).toBe(true);
+      if (isOk(folder)) {
+        expect(folder.value).toContain('generated_by: skil');
+        expect(folder.value).toContain('# behavior');
+      }
+      const root = fs.readFile('AGENTS.md');
+      expect(isOk(root)).toBe(true);
+      if (isOk(root)) {
+        expect(root.value).toContain('<!-- skil:rule behavior -->');
+      }
+    });
+
+    it('reports dest paths on a second Codex export instead of an empty success', async () => {
+      fs.writeFile('.cursor/rules/behavior.mdc', '# behavior\n');
+      await engine.exportRules('codex');
+
+      const again = await engine.exportRules('codex');
+
+      expect(isOk(again)).toBe(true);
+      if (isOk(again)) {
+        expect(again.value.failures).toEqual([]);
+        expect(again.value.succeeded).toEqual(['.codex/rules/behavior.md', 'AGENTS.md']);
+      }
+    });
+
+    it('exports folder rules into AGENTS.md for Codex and writes a dock folder copy', async () => {
+      fs.writeFile('AGENTS.md', '# agents\n');
+      fs.writeFile('.cursor/rules/pair-programming/behavior.mdc', '# behavior\n');
+
+      const result = await engine.exportRules('codex', { dest: '/tmp/out' });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.failures).toEqual([]);
+        expect(result.value.succeeded).toEqual([
+          '/tmp/out/.codex/rules/pair-programming/behavior.md',
+          '/tmp/out/AGENTS.md',
+        ]);
+      }
+      const folder = fs.readFile('/tmp/out/.codex/rules/pair-programming/behavior.md');
+      expect(isOk(folder)).toBe(true);
+      if (isOk(folder)) {
+        expect(folder.value).toContain('# behavior');
+        expect(folder.value).toContain('generated_by: skil');
+      }
+      const dest = fs.readFile('/tmp/out/AGENTS.md');
+      expect(isOk(dest)).toBe(true);
+      if (isOk(dest)) {
+        expect(dest.value).toContain('# agents');
+        expect(dest.value).toContain('<!-- skil:rule pair-programming/behavior -->');
+        expect(dest.value).toContain('generated_by: skil');
+        expect(dest.value).toContain('# behavior');
+      }
     });
   });
 });

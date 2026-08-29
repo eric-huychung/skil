@@ -2,11 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isOk } from '../core/result.js';
 import { CollectionEngine } from '../core/collection-engine.js';
 import { RealFileSystemAdapter } from '../adapters/real-fs-adapter.js';
-import { ConfigAdapter } from '../adapters/config-adapter.js';
-import { InMemoryConfigAdapter } from '../adapters/in-memory-config.js';
 import { InMemorySkillsAdapter } from '../adapters/in-memory-skills.js';
 
 describe('CollectionEngine + RealFileSystemAdapter integration', () => {
@@ -27,7 +24,7 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
   });
 
   function buildEngine(): CollectionEngine {
-    return new CollectionEngine(new RealFileSystemAdapter(), new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+    return new CollectionEngine(new RealFileSystemAdapter(), new InMemorySkillsAdapter());
   }
 
   it('persists collection state to .skil/state.json on disk', () => {
@@ -72,23 +69,5 @@ describe('CollectionEngine + RealFileSystemAdapter integration', () => {
     const reloaded = buildEngine();
 
     expect(reloaded.list()[0]?.skills).toEqual(['react-patterns', 'performance-review']);
-  });
-
-  it('syncs collections from a real .contextkit.yml file on disk', () => {
-    const configPath = join(tmpDir, '.contextkit.yml');
-    writeFileSync(
-      configPath,
-      ['version: "1.0"', 'collections:', '  frontend:', '    - react-patterns'].join('\n')
-    );
-    const engine = new CollectionEngine(new RealFileSystemAdapter(), new ConfigAdapter(), new InMemorySkillsAdapter());
-
-    const result = engine.sync(configPath);
-
-    expect(isOk(result)).toBe(true);
-    expect(engine.list().map((c) => c.name)).toEqual(['frontend']);
-    const persisted = JSON.parse(readFileSync(join(tmpDir, '.skil', 'state.json'), 'utf-8'));
-    expect(persisted.commands).toEqual([
-      expect.objectContaining({ name: 'frontend', skills: ['react-patterns'] }),
-    ]);
   });
 });

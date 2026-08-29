@@ -96,7 +96,7 @@ export function DownloadCta({
         <Button
           size="lg"
           nativeButton={false}
-          className="rounded-full bg-[var(--accent-blue)] px-6 text-[var(--accent-blue-foreground)] hover:bg-[var(--accent-blue)]/90"
+          className="primary-button px-6"
           render={<a href="#download" />}
         >
           <Apple className="size-4" />
@@ -104,9 +104,8 @@ export function DownloadCta({
         </Button>
         <Button
           size="lg"
-          variant="ghost"
           nativeButton={false}
-          className="glass-panel rounded-full px-6"
+          className="outline-button px-6"
           render={
             <a
               href="https://github.com/eric-huychung/skil"
