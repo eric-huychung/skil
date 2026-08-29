@@ -1,17 +1,13 @@
 import type { IDE } from '../../../shared/ipc';
+import {
+  SKILL_SOURCES,
+  SKILL_SOURCE_BY_IDE,
+  type SkillSourceFolder,
+} from '../../../../../src/core/dock-layout.js';
 
-export const SKILL_SOURCES = ['.cursor', '.claude', '.codex', '.github', '.agents', '.windsurf'] as const;
+export { SKILL_SOURCES, type SkillSourceFolder };
 
-export type SkillSourceFolder = (typeof SKILL_SOURCES)[number];
-
-export const SOURCE_BY_IDE: Record<IDE, SkillSourceFolder> = {
-  cursor: '.cursor',
-  claude: '.claude',
-  codex: '.codex',
-  copilot: '.github',
-  windsurf: '.windsurf',
-  agents: '.agents',
-};
+export const SOURCE_BY_IDE: Record<IDE, SkillSourceFolder> = SKILL_SOURCE_BY_IDE;
 
 function skillIsUnderSource(paths: string[], source: SkillSourceFolder): boolean {
   return paths.some((path) => path === source || path.startsWith(`${source}/`));
@@ -50,13 +46,13 @@ export type InboxSkillGroup = {
 
 export function groupInboxSkills(
   inbox: string[],
-  catalog: Array<{ id: string; source: 'local' | 'skills.sh' }>
+  catalog: Array<{ id: string; paths: string[] }>
 ): InboxSkillGroup[] {
-  const projectIds = new Set(catalog.filter((skill) => skill.source === 'local').map((skill) => skill.id));
+  const onDisk = new Set(catalog.filter((skill) => skill.paths.length > 0).map((skill) => skill.id));
   const market: string[] = [];
   const project: string[] = [];
   for (const id of inbox) {
-    if (projectIds.has(id)) project.push(id);
+    if (onDisk.has(id)) project.push(id);
     else market.push(id);
   }
   const groups: InboxSkillGroup[] = [

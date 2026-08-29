@@ -19,6 +19,12 @@ export function SiteNav() {
 
         <nav className="hidden items-center gap-1 text-sm text-muted-foreground md:flex">
           <a
+            href="#discover"
+            className="rounded-[var(--radius-hover)] px-3 py-1.5 transition-colors hover:bg-[var(--hover)] hover:text-[var(--hover-foreground)]"
+          >
+            Discover
+          </a>
+          <a
             href="#how-it-works"
             className="rounded-[var(--radius-hover)] px-3 py-1.5 transition-colors hover:bg-[var(--hover)] hover:text-[var(--hover-foreground)]"
           >
@@ -29,12 +35,6 @@ export function SiteNav() {
             className="rounded-[var(--radius-hover)] px-3 py-1.5 transition-colors hover:bg-[var(--hover)] hover:text-[var(--hover-foreground)]"
           >
             Product
-          </a>
-          <a
-            href="#discover"
-            className="rounded-[var(--radius-hover)] px-3 py-1.5 transition-colors hover:bg-[var(--hover)] hover:text-[var(--hover-foreground)]"
-          >
-            Discover
           </a>
           <a
             href="#features"
@@ -48,7 +48,7 @@ export function SiteNav() {
           <ThemeToggle />
           <Button
             nativeButton={false}
-            className="rounded-full bg-[var(--accent-blue)] text-[var(--accent-blue-foreground)] hover:bg-[var(--accent-blue)]/90"
+            className="primary-button"
             render={<a href="#download" />}
           >
             Open app

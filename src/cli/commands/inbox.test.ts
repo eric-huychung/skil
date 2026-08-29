@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { CollectionEngine } from '../../core/collection-engine.js';
-import { InMemoryConfigAdapter } from '../../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../../adapters/in-memory-skills.js';
 import { isErr } from '../../core/result.js';
 import { runInboxAdd, runInboxDelete, runInboxFile, runInboxList } from './inbox.js';
 
 function buildEngine(): CollectionEngine {
-  return new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+  return new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemorySkillsAdapter());
 }
 
 describe('runInboxList', () => {
@@ -47,7 +46,7 @@ describe('runInboxAdd', () => {
 
   it('reports persist errors from the engine', () => {
     const fs = new InMemoryFileSystemAdapter();
-    const engine = new CollectionEngine(fs, new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+    const engine = new CollectionEngine(fs, new InMemorySkillsAdapter());
     fs.setWriteError(new Error('Disk full'));
 
     const outcome = runInboxAdd(engine, 'obra/react-patterns');
@@ -87,7 +86,7 @@ describe('runInboxFile', () => {
 describe('runInboxDelete', () => {
   it('deletes a scanned skill from disk and Inbox', () => {
     const fs = new InMemoryFileSystemAdapter();
-    const engine = new CollectionEngine(fs, new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+    const engine = new CollectionEngine(fs, new InMemorySkillsAdapter());
     fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
     fs.writeFile('.cursor/skills/tdd/scripts/run.sh', 'echo hi\n');
     engine.scan();
@@ -104,7 +103,7 @@ describe('runInboxDelete', () => {
 
   it('keeps a nested skill when deleting the parent', () => {
     const fs = new InMemoryFileSystemAdapter();
-    const engine = new CollectionEngine(fs, new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+    const engine = new CollectionEngine(fs, new InMemorySkillsAdapter());
     fs.writeFile('.cursor/skills/build/SKILL.md', '# build\n');
     fs.writeFile('.cursor/skills/build/ui/shadcn/SKILL.md', '# shadcn\n');
     engine.scan();

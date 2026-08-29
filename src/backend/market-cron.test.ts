@@ -6,6 +6,7 @@ import { InMemoryMarketStore } from './in-memory-market-store.js';
 import { CRON_MAX_DETAIL, handleCronSyncRequest } from './market-cron.js';
 import type { MarketListingPage, MarketSkillsClient } from './market-client.js';
 import { MarketSync } from './market-sync.js';
+import { FakeSkillClassifier } from './skill-classifier.js';
 
 function listingItem(id: string, installs = 0) {
   return {
@@ -30,7 +31,6 @@ function fakeClient(pages: MarketListingPage[]): MarketSkillsClient {
     getSkill: vi.fn(async (id: string) => ok({ description: id, hash: `hash-${id}` })),
     getAudit: vi.fn(async () => ok({ status: 'none' as const })),
     getSkillMd: vi.fn(async () => ok(null)),
-    searchSkills: vi.fn(async () => ok([])),
   };
 }
 
@@ -40,7 +40,10 @@ function cronRequest(secret?: string): Request {
 }
 
 function cronSync(client: MarketSkillsClient = fakeClient([{ items: [listingItem('a/one')] }])) {
-  return { client, sync: new MarketSync({ store: new InMemoryMarketStore(), client }) };
+  return {
+    client,
+    sync: new MarketSync({ store: new InMemoryMarketStore(), client, classifier: new FakeSkillClassifier() }),
+  };
 }
 
 describe('handleCronSyncRequest', () => {
@@ -71,18 +74,33 @@ describe('handleCronSyncRequest', () => {
     expect(response.status).toBe(401);
   });
 
-  it('runs MarketSync.sync with maxDetail 40 when authorized', async () => {
-    const items = Array.from({ length: 45 }, (_, i) => listingItem(`a/${i}`));
-    const { client, sync } = cronSync(fakeClient([{ items }]));
+  it('runs MarketSync.sync with maxDetail 40 when authorized, without a listing crawl', async () => {
+    const client = fakeClient([]);
+    const store = new InMemoryMarketStore();
+    await store.upsertField({
+      slug: 'frontend',
+      roleSlug: 'swe',
+      label: 'Frontend',
+      q: 'frontend ui',
+      sortOrder: 1,
+      shelfSize: 50,
+      active: true,
+    });
+    for (let i = 0; i < 45; i += 1) {
+      await store.upsertListing(listingItem(`a/${i}`, 45 - i), '2026-01-01T00:00:00.000Z');
+    }
+    const sync = new MarketSync({ store, client, classifier: new FakeSkillClassifier() });
 
     const response = await handleCronSyncRequest(cronRequest('secret'), { cronSecret: 'secret', sync });
-    const body = (await response.json()) as { hydrated: number; listingQueued: number };
+    const body = (await response.json()) as { hydrated: number; listingQueued: number; shelfQueued: number };
 
     expect(response.status).toBe(200);
     expect(CRON_MAX_DETAIL).toBe(40);
+    expect(client.listPage).not.toHaveBeenCalled();
     expect(client.getSkill).toHaveBeenCalledTimes(40);
     expect(body.hydrated).toBe(40);
-    expect(body.listingQueued).toBe(45);
+    expect(body.listingQueued).toBe(0);
+    expect(body.shelfQueued).toBe(45);
   });
 
   it('returns 500 when authorized but sync is not wired', async () => {

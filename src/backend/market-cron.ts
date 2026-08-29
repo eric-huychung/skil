@@ -21,8 +21,9 @@ function unauthorized(): Response {
  * Vercel Cron handler for the weekly market-index refresh. Auth is
  * `Authorization: Bearer $CRON_SECRET` (Vercel sets this automatically
  * when `CRON_SECRET` is in the project env). Same `MarketSync` as
- * `scripts/sync-market.ts`, capped at `CRON_MAX_DETAIL` so one invocation
- * cannot drain the 20k first fill.
+ * `scripts/sync-market.ts` (`createMarketSync` → `refreshActiveFields`),
+ * but only classify + `CRON_MAX_DETAIL` hydrates — not the 20k listing
+ * crawl, which times out on Vercel.
  */
 export async function handleCronSyncRequest(request: Request, deps: CronSyncDeps): Promise<Response> {
   const { cronSecret, sync } = deps;

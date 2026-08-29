@@ -3,6 +3,7 @@
 @import 'shadcn/tailwind.css';
 @import '../../public/brand.css';
 @import '../../public/theme.css';
+@import '../../public/status.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -131,11 +132,281 @@
     -webkit-backdrop-filter: blur(20px);
   }
 
+  /* Opaque enough to stay readable over busy page content, unlike
+     .glass-panel-strong (~5% tint) which is meant for surfaces that sit on
+     a plain background, not a dialog stacked on top of arbitrary content. */
+  .glass-modal {
+    background-color: color-mix(in srgb, var(--popover) 96%, transparent);
+    border: 1px solid rgb(var(--glass-border));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow:
+      inset 0 1px 0 0 rgb(var(--glass-highlight)),
+      0 8px 30px -8px rgb(0 0 0 / 0.35);
+  }
+
   .glass-hairline {
     border-color: rgb(var(--glass-border));
   }
 
   .ambient-glow {
     background: radial-gradient(closest-side, rgb(var(--glow)), transparent);
+  }
+
+  /* Same hover affordance as the GUI's filter chips (.filter-row .filter in
+     gui/src/renderer/src/styles/globals.css): a subtle outline ring instead
+     of a background fill, so selection state (background) and hover state
+     (outline) never compete for the same visual channel. */
+  .chip-hover {
+    transition:
+      outline-color 0.15s ease,
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .chip-hover:hover {
+    outline: 1px solid color-mix(in srgb, var(--foreground) 22%, transparent);
+    outline-offset: 0;
+  }
+}
+
+/* Search box + leaderboard row styling below is copied verbatim from the
+   GUI's Discover surface (`gui/src/renderer/src/styles/globals.css`'s
+   `.search-box` / `.library-skill` rules) so the two surfaces read
+   identically. Shared CSS variables (--ink, --muted-ink, --line-strong,
+   --highlight, --surface-soft, --radius-hover, --brand...) come from
+   `public/theme.css` / `public/brand.css`, which both apps import. */
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgb(var(--glass-border));
+  border-radius: 1rem;
+  padding: 0 12px 0 16px;
+  min-height: 48px;
+  color: var(--muted-foreground);
+  background-color: rgb(var(--glass-bg));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.search-box:focus-within {
+  border-color: var(--line-strong);
+  outline: 2px solid var(--highlight);
+  outline-offset: 2px;
+}
+
+.search-box input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 10px 0;
+}
+
+.search-box input:focus,
+.search-box input:focus-visible {
+  outline: none;
+}
+
+.search-box .search-submit {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted-ink);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.search-box .search-submit:hover {
+  color: var(--ink);
+}
+
+.search-box .search-submit:focus-visible {
+  outline: none;
+  color: var(--ink);
+  background: var(--surface-soft);
+}
+
+.skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.library-skill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid rgb(var(--glass-border));
+  border-radius: var(--radius-hover);
+  padding: 14px 16px;
+  font-size: 0.875rem;
+  background-color: rgb(var(--glass-bg));
+  backdrop-filter: blur(20px);
+}
+
+.library-skill-interactive {
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.library-skill-interactive:hover {
+  background: var(--surface-soft);
+  border-color: var(--line-strong);
+  color: var(--foreground);
+  transform: translateY(-1px);
+}
+
+.library-skill-interactive:hover .skill-rank,
+.library-skill-interactive:hover .skill-installs {
+  color: var(--muted-foreground);
+}
+
+.library-skill-interactive:active {
+  background: color-mix(in srgb, var(--surface-soft) 80%, var(--line));
+  transform: translateY(0);
+}
+
+.skill-rank {
+  flex: 0 0 28px;
+  width: 28px;
+  color: var(--muted-ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: right;
+}
+
+.skill-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.skill-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.skill-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 10px;
+}
+
+.skill-installs {
+  color: var(--muted-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* Copy-with-hover-fill button, matching the GUI's `.primary-button` (used
+   for the Discover preview dialog's install-command Copy button there). */
+.primary-button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--brand-foreground);
+  background: var(--brand);
+  transition: color 0.5s ease, background-color 0s linear;
+}
+
+.primary-button > * {
+  position: relative;
+  z-index: 1;
+}
+
+.primary-button::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  /* Must stay behind the label: the button text is a bare text node, so it
+     can't be lifted with z-index like the icon. Matches the GUI's rule. */
+  z-index: -1;
+  width: 250%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--import-hover-fill);
+  transform: translate(-50%, 50%) scale(0);
+  transform-origin: center;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.primary-button:hover:not(:disabled)::before {
+  transform: translate(-50%, 50%) scale(1);
+}
+
+.primary-button:hover:not(:disabled) {
+  color: var(--import-hover-foreground);
+  background: var(--import-hover-fill);
+  transition: color 0s, background-color 0s linear 0.48s;
+}
+
+.skill-copy-button {
+  flex-shrink: 0;
+}
+
+/* Secondary/outlined CTA button, matching the GUI's `.outline-button`
+   ("View source" here, next to the primary-button "Download" CTA). */
+.outline-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background-color: rgb(var(--glass-bg));
+  color: var(--foreground);
+  border: 1px solid rgb(var(--glass-border));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.outline-button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--hover-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library-skill-interactive,
+  .primary-button::before {
+    transition: none;
+    animation: none;
+    transform: none;
+  }
+
+  .primary-button:hover:not(:disabled)::before {
+    transform: none;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding-bottom: 0;
+    aspect-ratio: auto;
+    border-radius: inherit;
   }
 }

@@ -72,3 +72,18 @@ function normalizeWatchPath(path: string): string {
 function isGitPath(path: string): boolean {
   return normalizeWatchPath(path).split('/').includes('.git');
 }
+
+/** Group file paths by parent dir so we can watch the parent (non-recursive). */
+export function watchFilesByParent(paths: string[]): Array<{ dir: string; names: string[] }> {
+  const grouped = new Map<string, string[]>();
+  for (const path of paths) {
+    const normalized = normalizeWatchPath(path);
+    const slash = normalized.lastIndexOf('/');
+    const dir = slash === -1 ? '' : normalized.slice(0, slash);
+    const name = slash === -1 ? normalized : normalized.slice(slash + 1);
+    const names = grouped.get(dir) ?? [];
+    names.push(name);
+    grouped.set(dir, names);
+  }
+  return [...grouped.entries()].map(([dir, names]) => ({ dir, names }));
+}

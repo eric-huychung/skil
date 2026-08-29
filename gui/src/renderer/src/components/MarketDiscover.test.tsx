@@ -1,10 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MarketDiscover from './MarketDiscover';
 import { createInMemoryEngine, createTestBridge, renderWithProviders } from '../test-utils';
 import { err, ok, type Result } from '../../../../../src/core/result.js';
-import type { MarketPreviewData, MarketSearchRow, ShelfRole } from '../../../shared/ipc.js';
+import type { MarketPreviewData, MarketSearchRow, ShelfRole, Skill } from '../../../shared/ipc.js';
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
 
 const SHELVES: ShelfRole[] = [
   {
@@ -45,14 +53,16 @@ const PREVIEW: MarketPreviewData = {
 };
 
 describe('MarketDiscover', () => {
-  it('falls back to the live skills.sh browse when the market index is empty', async () => {
+  it('stays on Top and Trending when the market index is empty', async () => {
     const engine = createInMemoryEngine();
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<MarketDiscover />, { bridge });
 
-    await waitFor(() => expect(screen.getByLabelText('Search skills')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Top' })).toBeInTheDocument());
+    expect(screen.getByRole('tab', { name: 'Trending' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'SWE' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
   });
 
   it('shows role and category chips with rank, name, and installs', async () => {
@@ -124,7 +134,65 @@ describe('MarketDiscover', () => {
     await userEvent.type(screen.getByLabelText('Search skills'), 'zzzz');
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('market search unavailable'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Search didn't go through/));
+    expect(screen.queryByText('market search unavailable')).not.toBeInTheDocument();
+  });
+
+  it('shows a list skeleton while the market index loads', async () => {
+    const engine = createInMemoryEngine();
+    const deferred = createDeferred<Result<ShelfRole[]>>();
+    const bridge = { ...createTestBridge(engine), marketShelves: () => deferred.promise };
+
+    renderWithProviders(<MarketDiscover />, { bridge });
+
+    expect(screen.getByRole('status', { name: 'Loading skills' })).toBeInTheDocument();
+    expect(screen.queryByText('Loading\u2026')).not.toBeInTheDocument();
+
+    deferred.resolve(ok(SHELVES));
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
+  });
+
+  it('does not refetch Top or Trending after the first successful load', async () => {
+    const engine = createInMemoryEngine();
+    const inner = createTestBridge(engine);
+    const browseSkills = vi.fn(inner.browseSkills);
+    const bridge = {
+      ...inner,
+      marketShelves: async (): Promise<Result<ShelfRole[]>> => ok(SHELVES),
+      browseSkills,
+    };
+
+    renderWithProviders(<MarketDiscover />, { bridge });
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Top' })).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Top' }));
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Trending' }));
+    await waitFor(() => expect(screen.getByText('vercel-labs/security-review')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Top' }));
+    await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
+
+    expect(browseSkills).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows a friendly error when the live leaderboard fails, not the raw failure', async () => {
+    const engine = createInMemoryEngine();
+    const bridge = {
+      ...createTestBridge(engine),
+      marketShelves: async (): Promise<Result<ShelfRole[]>> => ok(SHELVES),
+      browseSkills: async (): Promise<Result<Skill[]>> => err(new Error('leaderboard unreachable')),
+    };
+
+    renderWithProviders(<MarketDiscover />, { bridge });
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Top' })).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Top' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Couldn't load skills/));
+    expect(screen.queryByText(/leaderboard unreachable/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 
   it('opens a preview with skillMd and audit status', async () => {

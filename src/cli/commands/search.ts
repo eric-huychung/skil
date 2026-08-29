@@ -1,46 +1,47 @@
 import Table from 'cli-table3';
 import type { Command } from 'commander';
-import type { ICollectionEngine } from '../../interfaces/engine.js';
+import type { Discover, DiscoverHit } from '../../backend/discover.js';
 import { isOk } from '../../core/result.js';
-import type { BrowseView, Skill } from '../../types/index.js';
+import { statusLine } from '../../core/status-copy.js';
+import type { BrowseView } from '../../types/index.js';
 import { printOutcome, type CommandOutcome } from '../output.js';
 
 const BROWSE_DISPLAY_LIMIT = 10;
 
 export async function runSearch(
-  engine: ICollectionEngine,
+  discover: Discover,
   query: string,
   options: { trending?: boolean } = {},
 ): Promise<CommandOutcome> {
   const trimmed = query.trim();
   if (trimmed.length > 0) {
-    return runTypedSearch(engine, trimmed);
+    return runTypedSearch(discover, trimmed);
   }
-  return runBrowse(engine, options.trending ? 'trending' : 'all-time');
+  return runBrowse(discover, options.trending ? 'trending' : 'all-time');
 }
 
-async function runTypedSearch(engine: ICollectionEngine, query: string): Promise<CommandOutcome> {
-  const result = await engine.search(query);
+async function runTypedSearch(discover: Discover, query: string): Promise<CommandOutcome> {
+  const result = await discover.search(query);
   if (!isOk(result)) {
-    return { message: result.error.message, isError: true };
+    return { message: statusLine('search'), isError: true };
   }
 
   if (result.value.length === 0) {
     return { message: `No skills found for '${query}'`, isError: false, isInfo: true };
   }
 
-  const table = new Table({ head: ['Skill', 'Source'] });
-  for (const skill of result.value) {
-    table.push([skill.id, skill.source]);
+  const table = new Table({ head: ['Skill', 'Installs'] });
+  for (const hit of result.value) {
+    table.push([hit.id, formatInstalls(hit)]);
   }
 
   return { message: table.toString(), isError: false, isInfo: true };
 }
 
-async function runBrowse(engine: ICollectionEngine, view: BrowseView): Promise<CommandOutcome> {
-  const result = await engine.browse(view);
+async function runBrowse(discover: Discover, view: BrowseView): Promise<CommandOutcome> {
+  const result = await discover.browse(view);
   if (!isOk(result)) {
-    return { message: result.error.message, isError: true };
+    return { message: statusLine('load'), isError: true };
   }
 
   const skills = result.value.slice(0, BROWSE_DISPLAY_LIMIT);
@@ -56,16 +57,16 @@ async function runBrowse(engine: ICollectionEngine, view: BrowseView): Promise<C
   return { message: table.toString(), isError: false, isInfo: true };
 }
 
-function formatInstalls(skill: Skill): string {
-  return skill.installs === undefined ? '' : String(skill.installs);
+function formatInstalls(hit: DiscoverHit): string {
+  return hit.installs === undefined ? '' : String(hit.installs);
 }
 
-export function registerSearchCommand(program: Command, engine: ICollectionEngine): void {
+export function registerSearchCommand(program: Command, discover: Discover): void {
   program
     .command('search [query]')
-    .description('Search skills.sh, or list the all-time leaderboard when query is omitted')
+    .description('Search the market index, or list the all-time leaderboard when query is omitted')
     .option('--trending', 'list the trending leaderboard instead of all-time (ignored when a query is given)')
     .action(async (query = '', options: { trending?: boolean }) => {
-      printOutcome(await runSearch(engine, query, options));
+      printOutcome(await runSearch(discover, query, options));
     });
 }

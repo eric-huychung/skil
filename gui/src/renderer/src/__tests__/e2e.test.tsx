@@ -67,7 +67,7 @@ describe('GUI workflow (real engine)', () => {
 
     renderWithProviders(<App />);
     await screen.findByTitle(DEFAULT_TEST_PROJECT_ROOT);
-    await userEvent.click(screen.getByRole('tab', { name: 'Inbox' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Skills' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Delete tdd' }));
     expect(await screen.findByRole('dialog', { name: 'Delete tdd?' })).toHaveTextContent(
       '.cursor/skills/tdd'

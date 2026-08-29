@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DiskWatch } from './disk-watch.js';
+import { ROOT_RULE_FILES } from '../core/project-rules.js';
+import { DiskWatch, watchFilesByParent } from './disk-watch.js';
 
 describe('DiskWatch', () => {
   afterEach(() => {
@@ -48,5 +49,12 @@ describe('DiskWatch', () => {
     vi.advanceTimersByTime(500);
 
     expect(onFlush).not.toHaveBeenCalled();
+  });
+
+  it('groups root rule files by parent so CLAUDE.md is watched at the project root', () => {
+    expect(watchFilesByParent(ROOT_RULE_FILES.map((file) => file.path))).toEqual([
+      { dir: '', names: ['CLAUDE.md', 'AGENTS.md'] },
+      { dir: '.github', names: ['copilot-instructions.md'] },
+    ]);
   });
 });

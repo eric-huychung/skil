@@ -27,8 +27,7 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
   private installError: Error | null = null;
   private searchError: Error | null = null;
   private browseError: Error | null = null;
-  private convertError: Error | null = null;
-  private convertCalls = 0;
+  private hashes = new Map<string, string | null>();
 
   async search(_query: string): Promise<Result<Skill[]>> {
     if (this.searchError) {
@@ -53,26 +52,22 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     return ok(undefined);
   }
 
-  async convert(_skillId: string, _targetIDE: IDE): Promise<Result<void>> {
-    this.convertCalls += 1;
-    if (this.convertError) {
-      return err(this.convertError);
-    }
-    return ok(undefined);
-  }
-
   getInstalled(): Skill[] {
     return [...this.installed];
+  }
+
+  async skillHash(skillId: string): Promise<Result<string | null>> {
+    return ok(this.hashes.has(skillId) ? this.hashes.get(skillId)! : null);
+  }
+
+  /** Test helper: live market hash for originChecks. `null` = no snapshot. */
+  setSkillHash(skillId: string, hash: string | null): void {
+    this.hashes.set(skillId, hash);
   }
 
   /** Test helper: (skillId, ide) pairs passed to install(). */
   getInstalls(): Array<{ skillId: string; ide: IDE; cwd?: string }> {
     return [...this.installs];
-  }
-
-  /** Test helper: how many times leftover convert() was called. */
-  getConvertCallCount(): number {
-    return this.convertCalls;
   }
 
   /** Test helper: makes the next install() call(s) fail with `error`. */
@@ -90,11 +85,6 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     this.browseError = error;
   }
 
-  /** Test helper: makes the next convert() call(s) fail with `error`. */
-  setConvertError(error: Error): void {
-    this.convertError = error;
-  }
-
   /** Test helper: seeds skills as if already installed by external tooling. */
   seedInstalled(skills: Skill[]): void {
     this.installed.push(...skills);
@@ -107,7 +97,6 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     this.installError = null;
     this.searchError = null;
     this.browseError = null;
-    this.convertError = null;
-    this.convertCalls = 0;
+    this.hashes.clear();
   }
 }

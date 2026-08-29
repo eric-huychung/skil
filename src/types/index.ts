@@ -61,6 +61,14 @@ export interface UsageRow {
   count: number;
 }
 
+/** Market origin vs disk vs live skills.sh, for Inbox Update. */
+export type OriginStatus = 'current' | 'update' | 'edited';
+
+export interface OriginCheck {
+  skillId: string;
+  status: OriginStatus;
+}
+
 /** One observed skill read. Aggregated by `engine.usage()`. */
 export interface UsageEvent {
   skillId: string;
@@ -80,6 +88,28 @@ export interface SkillRecord {
   paths: string[];
   deployedTo: Array<{ ide: IDE; path: string; installedAt: string }>;
   source: 'local' | 'skills.sh';
+  /**
+   * sha256 of SKILL.md at the moment we copied from the market. Scan
+   * updates `hash` but not this. Missing on local skills and on records
+   * installed before origin tracking.
+   */
+  originHash?: string;
+}
+
+/** One rule file found on disk. Disk is SoT — we do not persist this. */
+export interface RuleRecord {
+  /** Path relative to the project root (`.cursor/rules/behavior.mdc`). */
+  id: string;
+  /** Display name (`pair-programming/behavior`, `CLAUDE`). */
+  name: string;
+  /** Same as `id`. Kept so callers can show the path without a second lookup. */
+  path: string;
+  /** Dock this file belongs to (root `AGENTS.md` is `agents`). */
+  dock: IDE;
+  /** Cursor `alwaysApply`, Copilot `applyTo: **`, or a root always-on file. */
+  alwaysApply: boolean;
+  /** False for whole-file roots (`CLAUDE.md`, `AGENTS.md`, copilot-instructions). */
+  canToggle: boolean;
 }
 
 /** Outcome of `scan()` — pull. */
@@ -122,25 +152,10 @@ export interface State {
   installedSkills: Skill[];
 }
 
-/** Parsed representation of a team `.contextkit.yml` file. */
-export interface Config {
-  version: string;
-  /** Map of collection name to the list of skill IDs it contains. */
-  collections: Record<string, string[]>;
-}
-
-/** Outcome of a sync operation, merging a team config into local state. */
-export interface SyncResult {
-  /** Names of collections added or updated from the config file. */
-  synced: string[];
-  /** Actionable messages about local collections not present in the config. */
-  warnings: string[];
-}
-
-/** Outcome of an export. Product `exportCommand` puts the command file and any copied/installed skill paths in `succeeded`. Leftover skillsmith `export` still uses `"command:skillId"` pairs. */
+/** Outcome of an export. Product `exportCommand` puts the command file and any copied/installed skill paths in `succeeded`. */
 export interface ExportResult {
-  /** Written command-file / skill dest paths (`exportCommand`) or leftover convert pairs. */
+  /** Written command-file / skill dest paths (`exportCommand`). */
   succeeded: string[];
-  /** Skill deploy failures, or leftover convert failures. The command file may still have been written. */
+  /** Skill deploy failures. The command file may still have been written. */
   failures: string[];
 }

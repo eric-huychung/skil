@@ -1,9 +1,9 @@
 import type { Result } from '../core/result.js';
-import type { BrowseView, Collection, ExportResult, IDE, ScanResult, Skill, SkillRecord, SyncResult, UsageRow } from '../types/index.js';
+import type { BrowseView, Collection, ExportResult, IDE, OriginCheck, RuleRecord, ScanResult, Skill, SkillRecord, UsageRow } from '../types/index.js';
 
 /**
  * CollectionEngine is skil's deep module: a small interface backed by
- * all business logic (state management, validation, skill install/convert
+ * all business logic (state management, validation, skill install
  * coordination). CLI and GUI layers only ever call these methods.
  */
 export interface ICollectionEngine {
@@ -35,26 +35,9 @@ export interface ICollectionEngine {
   removeSkill(name: string, skillId: string, ide?: IDE): Result<Collection>;
 
   /**
-   * Returns the command template stored for a collection, for `skil
-   * run` to execute. Returns an error Result if the collection doesn't
-   * exist or has no command defined.
-   */
-  getCommand(name: string): Result<string>;
-
-  /**
    * Returns the project command map. `ide` is ignored (one list).
    */
   list(ide?: IDE): Collection[];
-
-  /**
-   * Merges collections from a team config file into local state. Additive:
-   * config collections overwrite local collections with the same name, but
-   * local-only collections are never deleted.
-   * Returns an error Result if the config file is missing or invalid, or if
-   * the merged state can't be saved to disk (in which case local state is
-   * left unchanged — `sync` can be safely retried).
-   */
-  sync(configPath: string): Result<SyncResult>;
 
   /**
    * Installs a skill via the SkillsAdapter into `targetIDE`, then upserts
@@ -65,7 +48,7 @@ export interface ICollectionEngine {
    * be saved (in which case no deploy is recorded — `install` can be
    * safely retried).
    */
-  install(skillId: string, targetIDE: IDE, opts?: { dest?: string }): Promise<Result<SkillRecord>>;
+  install(skillId: string, targetIDE: IDE, opts?: { dest?: string; replace?: boolean }): Promise<Result<SkillRecord>>;
 
   /**
    * Searches skills.sh for skills matching `query`, via the SkillsAdapter.
@@ -81,24 +64,11 @@ export interface ICollectionEngine {
   browse(view: BrowseView): Promise<Result<Skill[]>>;
 
   /**
-   * Converts a skill to `targetIDE`'s format via the SkillsAdapter's
-   * `skillsmith` wrapper. Returns an error Result if the conversion fails.
-   */
-  convert(skillId: string, targetIDE: IDE): Promise<Result<void>>;
-
-  /**
-   * Leftover skillsmith convert-all. Product export is `exportCommand`
-   * (one command) and `exportAll` (whole workspace). CLI still calls
-   * `exportCommand`; GUI calls `exportAll`.
-   */
-  export(collectionNames: string[], targetIDE: IDE): Promise<Result<ExportResult>>;
-
-  /**
    * Writes our stamped command file for `name` into `targetIDE`'s
    * commands dir, then ensures each filed skill exists in that IDE's
    * skills dir. Local folders already on disk are copied (never
    * overwritten if dest has SKILL.md). Discover-only ids go through
-   * `install`. Does not scan `commands/` and does not call `convert`.
+   * `install`. Does not scan `commands/`.
    * First write gets Goal/Sequence/Rules as one-line comments plus a
    * `## Skills` list. Later writes refresh frontmatter `skills:` and
    * `## Skills` and keep the user's Goal/Sequence/Rules (and anything
@@ -161,6 +131,14 @@ export interface ICollectionEngine {
   deleteSkill(skillId: string): Result<void>;
 
   /**
+   * Reads the SKILL.md body for a catalog id. Disk owns the text — this
+   * does not persist it. First readable copy in `paths` wins (scan order,
+   * `.cursor` first). Missing catalog row or no SKILL.md on disk is an
+   * error. Discover-only Inbox ids are not catalog rows.
+   */
+  readSkillMd(skillId: string): Result<string>;
+
+  /**
    * Adds an Inbox ID onto an existing command. Inbox stays a staging
    * pool: the id is not removed. One persist; rollback on write failure.
    * Error if the command is missing or the ID is not in Inbox. Does not
@@ -199,15 +177,15 @@ export interface ICollectionEngine {
   ): Promise<Result<ExportResult>>;
 
   /**
-   * Copies one IDE's skill folders and stamped command files from
-   * `sourceRoot` into this project. New ids are added (folders + Inbox).
-   * Command names union into the project map. Existing dest `SKILL.md`
-   * with a different hash or an unstamped dest command file is an error
-   * unless `replace` is true — then dest bodies and that command's list
-   * are overwritten. Same-hash skills and matching command lists are left
-   * alone. Unstamped source command files, other IDEs, and source Inbox /
-   * `state.json` are ignored. Empty source is an error. Does not bind
-   * `sourceRoot`.
+   * Copies one IDE's skill folders, stamped command files, and rule
+   * files from `sourceRoot` into this project. New ids are added
+   * (folders + Inbox). Command names union into the project map. Rules
+   * copy into the same dock paths. Existing dest `SKILL.md` with a
+   * different hash, an unstamped dest command file, or a dest rule with
+   * a different hash is an error unless `replace` is true. Same-hash
+   * skills/rules and matching command lists are left alone. Unstamped
+   * source command files, other IDEs, and source Inbox / `state.json`
+   * are ignored. Empty source is an error. Does not bind `sourceRoot`.
    */
   importFrom(
     sourceRoot: string,
@@ -234,9 +212,56 @@ export interface ICollectionEngine {
   skills(): SkillRecord[];
 
   /**
+   * For each catalog skill with a market originHash: current (in sync),
+   * update (market moved, disk still the template), or edited (disk
+   * diverged). Missing market snapshot is current. Fetch failures skip
+   * that id. Does not write disk.
+   */
+  originChecks(): Promise<Result<OriginCheck[]>>;
+
+  /**
+   * Re-installs `skillId` over the dock copies we deployed, then sets
+   * originHash to the new disk hash. Refuses if the copy was edited
+   * unless `replaceEdited` is true. Does not auto-run.
+   */
+  updateFromMarket(skillId: string, opts?: { replaceEdited?: boolean; dest?: string }): Promise<Result<SkillRecord>>;
+
+  /**
    * Counts of how often catalog skills were read. Claude logs first.
    * Missing logs → empty list, not a crash. Collector failure is an error;
    * scan still works.
    */
   usage(): Promise<Result<UsageRow[]>>;
+
+  /**
+   * Rule files on disk (every dock + root CLAUDE.md / AGENTS.md /
+   * copilot-instructions). Disk is SoT — not persisted. Missing dirs
+   * are skipped. Does not touch Inbox.
+   */
+  rules(): RuleRecord[];
+
+  /**
+   * Reads a rule file by its path id. Missing file is an error.
+   */
+  readRule(id: string): Result<string>;
+
+  /**
+   * Sets `alwaysApply` on every dock copy of that rule. Root always-on
+   * files (`CLAUDE.md`, `AGENTS.md`, copilot-instructions) are an error.
+   */
+  setAlwaysApply(id: string, alwaysApply: boolean): Result<RuleRecord>;
+
+  /**
+   * Copies scanned rules into the dest dock. Folder docks get
+   * `dir/name.ext`. Codex writes `.codex/rules` plus `AGENTS.md`
+   * sections. Agents writes `.agents/rules` plus `AGENTS.md` sections.
+   * Root files stay at dest root when that dock uses them. Same-hash
+   * dest is reported in `succeeded` (not an empty success). Different
+   * dest needs `replace: true`. Empty scan is an error. `dest` writes
+   * into that folder without rebinding the workspace.
+   */
+  exportRules(
+    targetIDE: IDE,
+    opts?: { replace?: boolean; dest?: string }
+  ): Promise<Result<ExportResult>>;
 }

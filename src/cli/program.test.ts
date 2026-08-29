@@ -4,13 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { SKIL_VERSION } from '../index.js';
 import { CollectionEngine } from '../core/collection-engine.js';
-import { InMemoryConfigAdapter } from '../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../adapters/in-memory-skills.js';
 import { createProgram } from './program.js';
 
 function buildEngine(): CollectionEngine {
-  return new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+  return new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemorySkillsAdapter());
 }
 
 function captureOutput(run: (write: (text: string) => void) => void): string {
@@ -55,9 +54,13 @@ describe('createProgram', () => {
     expect(program.name()).toBe('skil');
     expect(output).toContain('Usage: skil');
     expect(output).toContain('inbox');
+    expect(output).toContain('rules');
     expect(output).toContain('delete');
     expect(output).toContain('scan');
     expect(output).toContain('copy');
+    expect(program.commands.map((command) => command.name())).not.toEqual(
+      expect.arrayContaining(['convert', 'sync', 'run'])
+    );
     expect(output).not.toMatch(/\s--ide\b/);
     expect(output.toLowerCase()).not.toContain('staging');
     expect(output.toLowerCase()).not.toContain('collection');
@@ -80,9 +83,10 @@ describe('createProgram', () => {
   it('exposes skil as the primary bin and keeps contextkit as an alias', () => {
     const pkg = JSON.parse(
       readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../package.json'), 'utf-8')
-    ) as { bin: Record<string, string> };
+    ) as { bin: Record<string, string>; version: string };
 
     expect(pkg.bin.skil).toBe('dist/cli/index.js');
     expect(pkg.bin.contextkit).toBe('dist/cli/index.js');
+    expect(SKIL_VERSION).toBe(pkg.version);
   });
 });

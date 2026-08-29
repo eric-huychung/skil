@@ -1,12 +1,11 @@
 /**
- * Thin client for the skil market index read API (`api/market/*`). Web is a
- * static export deployed to the same Vercel project as `api/`, so these are
- * same-origin, unauthenticated reads — no OIDC, no service role, just
- * `fetch`. Types here are a local mirror of `src/backend/market-types.ts`,
- * not an import from it: `web/` has never depended on `src/` (see
- * `web/lib/preview-data.ts`), and these are just the JSON shapes the read
- * handlers already return.
+ * Thin client for Discover reads (`api/market/*` + live `api/skills` browse).
+ * Web is a static export on the same Vercel project as `api/`, so these are
+ * same-origin, unauthenticated — no OIDC, no `src/` import. Types are a
+ * local mirror of the JSON shapes those handlers already return.
  */
+
+export type BrowseView = 'all-time' | 'trending'
 
 export interface ShelfSkill {
   id: string
@@ -55,6 +54,17 @@ async function getJson<T>(path: string): Promise<T> {
 
 export function fetchShelves(): Promise<ShelfRole[]> {
   return getJson<ShelfRole[]>('/api/market/shelves')
+}
+
+export interface BrowseHit {
+  id: string
+  name?: string
+  installs?: number
+}
+
+export function fetchBrowse(view: BrowseView): Promise<BrowseHit[]> {
+  const params = new URLSearchParams({ view })
+  return getJson<BrowseHit[]>(`/api/skills?${params.toString()}`)
 }
 
 export function searchMarket(query: string, limit = 25): Promise<MarketSearchRow[]> {

@@ -47,8 +47,8 @@ describe('groupInboxSkills', () => {
   it('splits Discover pulls from skills scanned on disk', () => {
     expect(
       groupInboxSkills(['obra/react-patterns', 'tdd', 'ui/styling'], [
-        { id: 'tdd', source: 'local' },
-        { id: 'ui/styling', source: 'local' },
+        { id: 'tdd', paths: ['.cursor/skills/tdd'] },
+        { id: 'ui/styling', paths: ['.cursor/skills/ui/styling'] },
       ])
     ).toEqual([
       { key: 'market', label: 'Market', skills: ['obra/react-patterns'] },
@@ -56,9 +56,23 @@ describe('groupInboxSkills', () => {
     ]);
   });
 
-  it('omits empty groups', () => {
-    expect(groupInboxSkills(['tdd'], [{ id: 'tdd', source: 'local' }])).toEqual([
-      { key: 'project', label: 'Project', skills: ['tdd'] },
+  it('moves an installed market skill into Project even when source is skills.sh', () => {
+    expect(
+      groupInboxSkills(['obra/react-patterns', 'addyosmani/api-design'], [
+        {
+          id: 'obra/react-patterns',
+          paths: ['.cursor/skills/obra/react-patterns'],
+        },
+      ])
+    ).toEqual([
+      { key: 'market', label: 'Market', skills: ['addyosmani/api-design'] },
+      { key: 'project', label: 'Project', skills: ['obra/react-patterns'] },
     ]);
+  });
+
+  it('omits empty groups', () => {
+    expect(
+      groupInboxSkills(['tdd'], [{ id: 'tdd', paths: ['.cursor/skills/tdd'] }])
+    ).toEqual([{ key: 'project', label: 'Project', skills: ['tdd'] }]);
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "skil",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "CLI-first AI skill collection manager for Cursor, Claude, and Windsurf",
   "type": "module",
   "bin": {

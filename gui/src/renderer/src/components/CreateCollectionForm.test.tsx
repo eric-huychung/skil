@@ -50,7 +50,7 @@ describe('CreateCollectionForm', () => {
     await userEvent.type(screen.getByLabelText('Name'), 'frontend');
     await userEvent.click(screen.getByRole('button', { name: 'Create command' }));
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/already exists/));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Couldn't create that command/));
     expect(engine.list()).toHaveLength(1);
   });
 

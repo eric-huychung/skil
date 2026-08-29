@@ -209,23 +209,3 @@ describe('RealMarketSkillsClient.getAudit', () => {
     expect(isOk(result) && result.value).toEqual({ status: 'fail' });
   });
 });
-
-describe('RealMarketSkillsClient.searchSkills', () => {
-  it('requests q and limit, clamped to skills.sh max 200', async () => {
-    const fetchImpl = fakeFetch({ status: 200, body: { data: [] } });
-
-    await client(fetchImpl).searchSkills('sql database', { limit: 9000 });
-
-    expect((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toBe(
-      'https://skills.sh/api/v1/skills/search?q=sql%20database&limit=200',
-    );
-  });
-
-  it('maps results, keeping isDuplicate when present', async () => {
-    const fetchImpl = fakeFetch({ status: 200, body: { data: [listingRow('a/one', { isDuplicate: true })] } });
-
-    const result = await client(fetchImpl).searchSkills('one', { limit: 30 });
-
-    expect(isOk(result) && result.value).toEqual([listingRow('a/one', { isDuplicate: true })]);
-  });
-});

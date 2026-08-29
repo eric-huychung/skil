@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { CollectionEngine } from '../../core/collection-engine.js';
-import { InMemoryConfigAdapter } from '../../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../../adapters/in-memory-skills.js';
 import { runDelete } from './delete.js';
 
 function buildEngine(): CollectionEngine {
-  return new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+  return new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemorySkillsAdapter());
 }
 
 describe('runDelete', () => {

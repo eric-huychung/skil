@@ -39,6 +39,24 @@ describe('InMemoryMarketStore.upsertListing', () => {
   });
 });
 
+describe('InMemoryMarketStore.listTopListings', () => {
+  it('returns active rows by installs descending and includes description', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertListing(listing('a/low', { name: 'Low', installs: 1 }), '2026-01-01T00:00:00.000Z');
+    await store.upsertListing(listing('a/high', { name: 'High', installs: 50 }), '2026-01-02T00:00:00.000Z');
+    await store.upsertListing(listing('a/mid', { name: 'Mid', installs: 10 }), '2026-01-02T00:00:00.000Z');
+    await store.setDetail('a/high', { description: 'A popular skill', hash: 'h1' });
+    await store.markInactiveBefore('2026-01-02T00:00:00.000Z');
+
+    const top = await store.listTopListings(2);
+
+    expect(isOk(top) && top.value).toEqual([
+      { id: 'a/high', name: 'High', slug: 'a/high', installs: 50, description: 'A popular skill', hash: 'h1' },
+      { id: 'a/mid', name: 'Mid', slug: 'a/mid', installs: 10, description: null, hash: null },
+    ]);
+  });
+});
+
 describe('InMemoryMarketStore.listShelves', () => {
   it('returns roles -> fields -> skills by rank, capped at shelf_size', async () => {
     const store = new InMemoryMarketStore();

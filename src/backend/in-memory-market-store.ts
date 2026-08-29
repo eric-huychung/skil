@@ -1,6 +1,7 @@
 import { ok, type Result } from '../core/result.js';
 import type { MarketStore } from './market-store.js';
 import type {
+  MarketClassifyRow,
   MarketDetailInput,
   MarketField,
   MarketListingDetail,
@@ -39,6 +40,22 @@ export class InMemoryMarketStore implements MarketStore {
 
   async listActiveFields(): Promise<Result<MarketField[]>> {
     return ok([...this.fields.values()].filter((field) => field.active));
+  }
+
+  async listTopListings(limit: number): Promise<Result<MarketClassifyRow[]>> {
+    const rows = [...this.skills.values()]
+      .filter((row) => !row.inactive)
+      .sort((a, b) => b.installs - a.installs)
+      .slice(0, Math.max(0, limit))
+      .map((row) => ({
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        installs: row.installs,
+        description: row.description,
+        hash: row.hash,
+      }));
+    return ok(rows);
   }
 
   async upsertListing(listing: MarketListingInput, seenAt: string): Promise<Result<void>> {

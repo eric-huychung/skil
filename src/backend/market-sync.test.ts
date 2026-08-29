@@ -3,6 +3,8 @@ import { err, isOk, ok } from '../core/result.js';
 import { InMemoryMarketStore } from './in-memory-market-store.js';
 import type { MarketListingPage, MarketSkillsClient } from './market-client.js';
 import { MarketSync } from './market-sync.js';
+import { FakeSkillClassifier } from './skill-classifier.js';
+import { GOLD_LABELS, GOLD_LISTINGS } from './shelf-gold.fixture.js';
 
 function listingItem(id: string, installs = 0) {
   return {
@@ -27,8 +29,22 @@ function fakeClient(pages: MarketListingPage[]): MarketSkillsClient {
     getSkill: vi.fn(async () => ok({ description: null, hash: 'unused' })),
     getAudit: vi.fn(async () => ok({ status: 'none' as const })),
     getSkillMd: vi.fn(async () => ok(null)),
-    searchSkills: vi.fn(async () => ok([])),
   };
+}
+
+const noopClassifier = new FakeSkillClassifier();
+
+function syncOf(
+  store: InMemoryMarketStore,
+  client: MarketSkillsClient,
+  extra: { now?: () => string; classifier?: FakeSkillClassifier } = {},
+) {
+  return new MarketSync({
+    store,
+    client,
+    classifier: extra.classifier ?? noopClassifier,
+    now: extra.now,
+  });
 }
 
 describe('MarketSync.crawlListing', () => {
@@ -38,7 +54,7 @@ describe('MarketSync.crawlListing', () => {
       { items: [listingItem('a/one'), listingItem('a/two')], nextCursor: 'page-2' },
       { items: [listingItem('a/three')] },
     ]);
-    const sync = new MarketSync({ store, client, now: () => '2026-01-01T00:00:00.000Z' });
+    const sync = syncOf(store, client, { now: () => '2026-01-01T00:00:00.000Z' });
 
     const result = await sync.crawlListing();
 
@@ -57,7 +73,7 @@ describe('MarketSync.crawlListing', () => {
     await store.setDetail('a/known', { description: 'known', hash: 'hash-1' });
 
     const client = fakeClient([{ items: [listingItem('a/known'), listingItem('a/new')] }]);
-    const sync = new MarketSync({ store, client, now: () => '2026-01-01T00:00:00.000Z' });
+    const sync = syncOf(store, client, { now: () => '2026-01-01T00:00:00.000Z' });
 
     const result = await sync.crawlListing();
 
@@ -71,9 +87,8 @@ describe('MarketSync.crawlListing', () => {
       getSkill: vi.fn(async () => ok({ description: null, hash: 'unused' })),
       getAudit: vi.fn(async () => ok({ status: 'none' as const })),
       getSkillMd: vi.fn(async () => ok(null)),
-      searchSkills: vi.fn(async () => ok([])),
     };
-    const sync = new MarketSync({ store, client });
+    const sync = syncOf(store, client);
 
     const result = await sync.crawlListing();
 
@@ -87,7 +102,7 @@ describe('MarketSync.hydrateDetails', () => {
     await store.upsertListing(listingItem('a/new'), '2026-01-01T00:00:00.000Z');
     const client = fakeClient([]);
     client.getSkill = vi.fn(async () => ok({ description: 'A skill.', hash: 'hash-1' }));
-    const sync = new MarketSync({ store, client });
+    const sync = syncOf(store, client);
 
     const result = await sync.hydrateDetails(['a/new']);
 
@@ -102,7 +117,7 @@ describe('MarketSync.hydrateDetails', () => {
     await store.setDetail('a/same', { description: 'Old description', hash: 'hash-1' });
     const client = fakeClient([]);
     client.getSkill = vi.fn(async () => ok({ description: 'New description', hash: 'hash-1' }));
-    const sync = new MarketSync({ store, client });
+    const sync = syncOf(store, client);
 
     const result = await sync.hydrateDetails(['a/same']);
 
@@ -118,7 +133,7 @@ describe('MarketSync.hydrateDetails', () => {
     await store.setDetail('a/changed', { description: 'Old', hash: 'hash-1' });
     const client = fakeClient([]);
     client.getSkill = vi.fn(async () => ok({ description: 'New', hash: 'hash-2' }));
-    const sync = new MarketSync({ store, client });
+    const sync = syncOf(store, client);
 
     const result = await sync.hydrateDetails(['a/changed']);
 
@@ -135,7 +150,7 @@ describe('MarketSync.hydrateDetails', () => {
     client.getSkill = vi.fn(async (id: string) =>
       id === 'a/fails' ? err(new Error('404')) : ok({ description: 'ok', hash: 'hash-1' }),
     );
-    const sync = new MarketSync({ store, client });
+    const sync = syncOf(store, client);
 
     const result = await sync.hydrateDetails(['a/fails', 'a/ok']);
 
@@ -147,7 +162,7 @@ describe('MarketSync.hydrateDetails', () => {
     await store.upsertListing(listingItem('a/no-desc'), '2026-01-01T00:00:00.000Z');
     const client = fakeClient([]);
     client.getSkill = vi.fn(async () => ok({ description: null, hash: 'hash-1' }));
-    const sync = new MarketSync({ store, client });
+    const sync = syncOf(store, client);
 
     const result = await sync.hydrateDetails(['a/no-desc']);
 
@@ -175,10 +190,10 @@ describe('MarketSync.syncListing', () => {
   it('marks a skill missing from a full second crawl as inactive, keeping the present one active', async () => {
     const store = new InMemoryMarketStore();
     const firstCrawl = fakeClient([{ items: [listingItem('a/gone'), listingItem('a/stays')] }]);
-    await new MarketSync({ store, client: firstCrawl, now: () => '2026-01-01T00:00:00.000Z' }).syncListing();
+    await syncOf(store, firstCrawl, { now: () => '2026-01-01T00:00:00.000Z' }).syncListing();
 
     const secondCrawl = fakeClient([{ items: [listingItem('a/stays')] }]);
-    const sync = new MarketSync({ store, client: secondCrawl, now: () => '2026-01-02T00:00:00.000Z' });
+    const sync = syncOf(store, secondCrawl, { now: () => '2026-01-02T00:00:00.000Z' });
     const result = await sync.syncListing();
 
     expect(isOk(result)).toBe(true);
@@ -188,7 +203,7 @@ describe('MarketSync.syncListing', () => {
   it('does not call markInactiveBefore when the crawl fails partway (no mass wipe)', async () => {
     const store = new InMemoryMarketStore();
     const seed = fakeClient([{ items: [listingItem('a/stays')] }]);
-    await new MarketSync({ store, client: seed, now: () => '2026-01-01T00:00:00.000Z' }).syncListing();
+    await syncOf(store, seed, { now: () => '2026-01-01T00:00:00.000Z' }).syncListing();
 
     let call = 0;
     const failingClient: MarketSkillsClient = {
@@ -199,10 +214,9 @@ describe('MarketSync.syncListing', () => {
       getSkill: vi.fn(async () => ok({ description: null, hash: 'unused' })),
       getAudit: vi.fn(async () => ok({ status: 'none' as const })),
       getSkillMd: vi.fn(async () => ok(null)),
-      searchSkills: vi.fn(async () => ok([])),
     };
     const markInactiveBefore = vi.spyOn(store, 'markInactiveBefore');
-    const sync = new MarketSync({ store, client: failingClient, now: () => '2026-01-02T00:00:00.000Z' });
+    const sync = syncOf(store, failingClient, { now: () => '2026-01-02T00:00:00.000Z' });
 
     const result = await sync.syncListing();
 
@@ -214,59 +228,55 @@ describe('MarketSync.syncListing', () => {
 });
 
 describe('MarketSync.refreshActiveFields', () => {
-  it('ranks a field shelf by installs descending and caps at shelf_size', async () => {
-    const store = new InMemoryMarketStore();
+  async function seedGold(store: InMemoryMarketStore) {
     await store.upsertRole({ slug: 'swe', label: 'SWE', sortOrder: 1, active: true });
-    await store.upsertField({
-      slug: 'frontend',
-      roleSlug: 'swe',
-      label: 'Frontend',
-      q: 'frontend ui',
-      sortOrder: 1,
-      shelfSize: 2,
-      active: true,
-    });
+    for (const slug of ['frontend', 'testing', 'review', 'workflow', 'integrations', 'prd']) {
+      await store.upsertField({
+        slug,
+        roleSlug: slug === 'workflow' ? 'agent' : slug === 'integrations' ? 'other' : 'swe',
+        label: slug,
+        q: slug,
+        sortOrder: 1,
+        shelfSize: 30,
+        active: true,
+      });
+    }
+    for (const row of GOLD_LISTINGS) {
+      await store.upsertListing(
+        {
+          id: row.id,
+          name: row.name,
+          slug: row.slug,
+          source: 'github.com/example',
+          installs: row.installs,
+          installUrl: null,
+          url: `https://github.com/${row.id}`,
+        },
+        '2026-01-01T00:00:00.000Z',
+      );
+      await store.setDetail(row.id, { description: row.description, hash: row.hash });
+    }
+  }
+
+  it('puts gold listings on the right shelves and does not call search', async () => {
+    const store = new InMemoryMarketStore();
+    await seedGold(store);
     const client = fakeClient([]);
-    client.searchSkills = vi.fn(async () =>
-      ok([listingItem('a/low', 5), listingItem('a/high', 50), listingItem('a/mid', 20)]),
-    );
-    const sync = new MarketSync({ store, client, now: () => '2026-01-01T00:00:00.000Z' });
+    const classifier = new FakeSkillClassifier(new Map(GOLD_LABELS.map((label) => [label.id, label.fieldSlugs])));
+    const sync = syncOf(store, client, { classifier });
 
     const result = await sync.refreshActiveFields();
 
-    expect(isOk(result) && result.value.refreshed).toEqual(['frontend']);
+    expect(isOk(result) && result.value.failed).toEqual([]);
     const shelves = await store.listShelves();
-    expect(isOk(shelves) && shelves.value[0]?.fields[0]?.skills).toEqual([
-      { id: 'a/high', name: 'a/high', installs: 50, rank: 1 },
-      { id: 'a/mid', name: 'a/mid', installs: 20, rank: 2 },
-    ]);
+    const frontend = isOk(shelves) ? shelves.value.flatMap((role) => role.fields).find((f) => f.slug === 'frontend') : undefined;
+    const testing = isOk(shelves) ? shelves.value.flatMap((role) => role.fields).find((f) => f.slug === 'testing') : undefined;
+    expect(frontend?.skills.map((s) => s.id)).toContain('anthropics/skills/frontend-design');
+    expect(testing?.skills.map((s) => s.id)).toEqual(['mattpocock/skills/tdd']);
+    expect(client.listPage).not.toHaveBeenCalled();
   });
 
-  it('drops is_duplicate rows before ranking', async () => {
-    const store = new InMemoryMarketStore();
-    await store.upsertRole({ slug: 'swe', label: 'SWE', sortOrder: 1, active: true });
-    await store.upsertField({
-      slug: 'frontend',
-      roleSlug: 'swe',
-      label: 'Frontend',
-      q: 'frontend ui',
-      sortOrder: 1,
-      shelfSize: 30,
-      active: true,
-    });
-    const client = fakeClient([]);
-    client.searchSkills = vi.fn(async () =>
-      ok([{ ...listingItem('a/dup', 999), isDuplicate: true }, listingItem('a/real', 10)]),
-    );
-    const sync = new MarketSync({ store, client });
-
-    await sync.refreshActiveFields();
-
-    const shelves = await store.listShelves();
-    expect(isOk(shelves) && shelves.value[0]?.fields[0]?.skills.map((s) => s.id)).toEqual(['a/real']);
-  });
-
-  it('skips an inactive field', async () => {
+  it('skips an inactive field and still writes the active ones', async () => {
     const store = new InMemoryMarketStore();
     await store.upsertField({
       slug: 'legacy',
@@ -277,19 +287,29 @@ describe('MarketSync.refreshActiveFields', () => {
       shelfSize: 30,
       active: false,
     });
-    const client = fakeClient([]);
-    client.searchSkills = vi.fn(async () => ok([listingItem('a/one', 10)]));
-    const sync = new MarketSync({ store, client });
+    await store.upsertField({
+      slug: 'frontend',
+      roleSlug: 'swe',
+      label: 'Frontend',
+      q: 'frontend',
+      sortOrder: 2,
+      shelfSize: 30,
+      active: true,
+    });
+    await store.upsertListing(listingItem('a/one', 10), '2026-01-01T00:00:00.000Z');
+    const sync = syncOf(store, fakeClient([]), {
+      classifier: new FakeSkillClassifier(new Map([['a/one', ['frontend']]])),
+    });
 
     const result = await sync.refreshActiveFields();
 
-    expect(isOk(result) && result.value.refreshed).toEqual([]);
-    expect(client.searchSkills).not.toHaveBeenCalled();
+    expect(isOk(result) && result.value.refreshed).toEqual(['frontend']);
   });
 
-  it('picks up a 21st active field with no code change', async () => {
+  it('picks up a 22nd active field because fields come from the store', async () => {
     const store = new InMemoryMarketStore();
-    for (let i = 1; i <= 21; i += 1) {
+    await store.upsertListing(listingItem('a/one', 10), '2026-01-01T00:00:00.000Z');
+    for (let i = 1; i <= 22; i += 1) {
       await store.upsertField({
         slug: `field-${i}`,
         roleSlug: 'swe',
@@ -300,213 +320,102 @@ describe('MarketSync.refreshActiveFields', () => {
         active: true,
       });
     }
-    const client = fakeClient([]);
-    client.searchSkills = vi.fn(async () => ok([listingItem('a/one', 10)]));
-    const sync = new MarketSync({ store, client });
+    const sync = syncOf(store, fakeClient([]));
 
     const result = await sync.refreshActiveFields();
 
-    expect(isOk(result) && result.value.refreshed).toHaveLength(21);
-    expect(client.searchSkills).toHaveBeenCalledTimes(21);
+    expect(isOk(result) && result.value.refreshed).toHaveLength(22);
   });
 
-  it('skips a field whose search fails, continuing the rest', async () => {
+  it('writes no shelves when classify fails', async () => {
     const store = new InMemoryMarketStore();
+    await store.upsertRole({ slug: 'swe', label: 'SWE', sortOrder: 1, active: true });
     await store.upsertField({
-      slug: 'fails',
+      slug: 'frontend',
       roleSlug: 'swe',
-      label: 'Fails',
-      q: 'fails',
+      label: 'Frontend',
+      q: 'frontend',
       sortOrder: 1,
       shelfSize: 30,
       active: true,
     });
-    await store.upsertField({
-      slug: 'ok',
-      roleSlug: 'swe',
-      label: 'Ok',
-      q: 'ok',
-      sortOrder: 2,
-      shelfSize: 30,
-      active: true,
-    });
-    const client = fakeClient([]);
-    client.searchSkills = vi.fn(async (q: string) =>
-      q === 'fails' ? err(new Error('upstream error')) : ok([listingItem('a/one', 10)]),
-    );
-    const sync = new MarketSync({ store, client });
+    await store.upsertListing(listingItem('a/keep', 10), '2026-01-01T00:00:00.000Z');
+    await store.setFieldShelf('frontend', ['a/keep']);
+    const classifier = { classify: async () => err(new Error('gateway down')) };
+    const sync = new MarketSync({ store, client: fakeClient([]), classifier });
 
     const result = await sync.refreshActiveFields();
 
-    expect(isOk(result) && result.value.failed).toEqual(['fails']);
-    expect(isOk(result) && result.value.refreshed).toEqual(['ok']);
+    expect(isOk(result)).toBe(false);
+    const shelves = await store.listShelves();
+    expect(isOk(shelves) && shelves.value[0]?.fields[0]?.skills.map((s) => s.id)).toEqual(['a/keep']);
   });
 
-  it('queues a search result with no stored hash, even though it is not in any listing crawl', async () => {
+  it('queues pool ids with no hash and skips ids that already have one', async () => {
     const store = new InMemoryMarketStore();
     await store.upsertField({
       slug: 'frontend',
       roleSlug: 'swe',
       label: 'Frontend',
-      q: 'frontend ui',
+      q: 'frontend',
       sortOrder: 1,
       shelfSize: 30,
       active: true,
     });
-    const client = fakeClient([]);
-    // 'a/search-only' never appears in a listPage call anywhere in this test —
-    // it is discovered purely through search, the way skills.sh can surface
-    // a result that its own paginated listing never returns.
-    client.searchSkills = vi.fn(async () => ok([listingItem('a/search-only', 10)]));
-    const sync = new MarketSync({ store, client });
-
-    const result = await sync.refreshActiveFields();
-
-    expect(isOk(result) && result.value.queued).toEqual(['a/search-only']);
-  });
-
-  it('does not re-queue a search result that already has a hash', async () => {
-    const store = new InMemoryMarketStore();
-    await store.upsertField({
-      slug: 'frontend',
-      roleSlug: 'swe',
-      label: 'Frontend',
-      q: 'frontend ui',
-      sortOrder: 1,
-      shelfSize: 30,
-      active: true,
-    });
-    await store.upsertListing(listingItem('a/known', 10), '2025-12-01T00:00:00.000Z');
+    await store.upsertListing(listingItem('a/new', 20), '2026-01-01T00:00:00.000Z');
+    await store.upsertListing(listingItem('a/known', 10), '2026-01-01T00:00:00.000Z');
     await store.setDetail('a/known', { description: 'known', hash: 'hash-1' });
-    const client = fakeClient([]);
-    client.searchSkills = vi.fn(async () => ok([listingItem('a/known', 10)]));
-    const sync = new MarketSync({ store, client });
+    const sync = syncOf(store, fakeClient([]));
 
     const result = await sync.refreshActiveFields();
 
-    expect(isOk(result) && result.value.queued).toEqual([]);
-  });
-
-  it('dedupes a queued id that shows up on more than one field shelf', async () => {
-    const store = new InMemoryMarketStore();
-    await store.upsertField({
-      slug: 'frontend',
-      roleSlug: 'swe',
-      label: 'Frontend',
-      q: 'frontend ui',
-      sortOrder: 1,
-      shelfSize: 30,
-      active: true,
-    });
-    await store.upsertField({
-      slug: 'design-system',
-      roleSlug: 'ui-ux',
-      label: 'Design system',
-      q: 'design system',
-      sortOrder: 2,
-      shelfSize: 30,
-      active: true,
-    });
-    const client = fakeClient([]);
-    client.searchSkills = vi.fn(async () => ok([listingItem('a/shared', 10)]));
-    const sync = new MarketSync({ store, client });
-
-    const result = await sync.refreshActiveFields();
-
-    expect(isOk(result) && result.value.queued).toEqual(['a/shared']);
+    expect(isOk(result) && result.value.queued).toEqual(['a/new']);
   });
 });
 
 describe('MarketSync.sync({ maxDetail })', () => {
-  it('hydrates at most maxDetail listing ids, not the whole queue', async () => {
+  async function seedPool(store: InMemoryMarketStore, count: number) {
+    await store.upsertField({
+      slug: 'frontend',
+      roleSlug: 'swe',
+      label: 'Frontend',
+      q: 'frontend',
+      sortOrder: 1,
+      shelfSize: 30,
+      active: true,
+    });
+    for (let i = 0; i < count; i += 1) {
+      await store.upsertListing(listingItem(`a/skill-${i}`, count - i), '2026-01-01T00:00:00.000Z');
+    }
+  }
+
+  it('does not crawl the listing', async () => {
     const store = new InMemoryMarketStore();
-    const items = Array.from({ length: 50 }, (_, i) => listingItem(`a/skill-${i}`));
-    const client = fakeClient([{ items }]);
+    await seedPool(store, 1);
+    const client = fakeClient([{ items: [listingItem('a/listed')] }]);
+    const sync = syncOf(store, client);
+
+    await sync.sync({ maxDetail: 40 });
+
+    expect(client.listPage).not.toHaveBeenCalled();
+  });
+
+  it('hydrates at most maxDetail of the no-hash pool', async () => {
+    const store = new InMemoryMarketStore();
+    await seedPool(store, 50);
+    const client = fakeClient([]);
     client.getSkill = vi.fn(async (id: string) => ok({ description: 'd', hash: `hash-${id}` }));
-    const sync = new MarketSync({ store, client, now: () => '2026-01-01T00:00:00.000Z' });
+    const sync = syncOf(store, client);
 
     const result = await sync.sync({ maxDetail: 40 });
 
     expect(isOk(result)).toBe(true);
     expect(client.getSkill).toHaveBeenCalledTimes(40);
     if (isOk(result)) {
-      expect(result.value.listingQueued).toHaveLength(50);
+      expect(result.value.listingQueued).toEqual([]);
+      expect(result.value.shelfQueued).toHaveLength(50);
       expect(result.value.hydrated).toHaveLength(40);
-    }
-  });
-
-  it('uses leftover maxDetail budget on search-only ids after listing hydrate', async () => {
-    const store = new InMemoryMarketStore();
-    await store.upsertField({
-      slug: 'frontend',
-      roleSlug: 'swe',
-      label: 'Frontend',
-      q: 'frontend ui',
-      sortOrder: 1,
-      shelfSize: 30,
-      active: true,
-    });
-    const listingItems = Array.from({ length: 5 }, (_, i) => listingItem(`a/list-${i}`));
-    const searchItems = Array.from({ length: 10 }, (_, i) => listingItem(`a/search-${i}`, 10));
-    const client = fakeClient([{ items: listingItems }]);
-    client.searchSkills = vi.fn(async () => ok(searchItems));
-    client.getSkill = vi.fn(async (id: string) => ok({ description: 'd', hash: `hash-${id}` }));
-    const sync = new MarketSync({ store, client, now: () => '2026-01-01T00:00:00.000Z' });
-
-    const result = await sync.sync({ maxDetail: 40 });
-
-    expect(isOk(result)).toBe(true);
-    expect(client.getSkill).toHaveBeenCalledTimes(15);
-    if (isOk(result)) {
-      expect(result.value.listingQueued).toHaveLength(5);
-      expect(result.value.shelfQueued).toHaveLength(10);
-      expect(result.value.hydrated).toHaveLength(15);
       expect(result.value.refreshed).toEqual(['frontend']);
     }
-  });
-
-  it('does not hydrate search-only ids once the listing queue has used the whole budget', async () => {
-    const store = new InMemoryMarketStore();
-    await store.upsertField({
-      slug: 'frontend',
-      roleSlug: 'swe',
-      label: 'Frontend',
-      q: 'frontend ui',
-      sortOrder: 1,
-      shelfSize: 30,
-      active: true,
-    });
-    const listingItems = Array.from({ length: 40 }, (_, i) => listingItem(`a/list-${i}`));
-    const client = fakeClient([{ items: listingItems }]);
-    client.searchSkills = vi.fn(async () => ok([listingItem('a/search-only', 10)]));
-    client.getSkill = vi.fn(async (id: string) => ok({ description: 'd', hash: `hash-${id}` }));
-    const sync = new MarketSync({ store, client, now: () => '2026-01-01T00:00:00.000Z' });
-
-    const result = await sync.sync({ maxDetail: 40 });
-
-    expect(isOk(result)).toBe(true);
-    expect(client.getSkill).toHaveBeenCalledTimes(40);
-    expect(client.getSkill).not.toHaveBeenCalledWith('a/search-only');
-    if (isOk(result)) {
-      expect(result.value.shelfQueued).toEqual(['a/search-only']);
-    }
-  });
-
-  it('does not hydrate or refresh when the listing crawl fails', async () => {
-    const store = new InMemoryMarketStore();
-    const client: MarketSkillsClient = {
-      listPage: vi.fn(async () => err(new Error('rate limited'))),
-      getSkill: vi.fn(async () => ok({ description: null, hash: 'unused' })),
-      getAudit: vi.fn(async () => ok({ status: 'none' as const })),
-      getSkillMd: vi.fn(async () => ok(null)),
-      searchSkills: vi.fn(async () => ok([])),
-    };
-    const sync = new MarketSync({ store, client });
-
-    const result = await sync.sync({ maxDetail: 40 });
-
-    expect(isOk(result)).toBe(false);
-    expect(client.getSkill).not.toHaveBeenCalled();
-    expect(client.searchSkills).not.toHaveBeenCalled();
   });
 });

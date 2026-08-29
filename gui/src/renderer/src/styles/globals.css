@@ -8,6 +8,7 @@
 @import '@fontsource/fredoka/700.css';
 @import '../../../../../public/brand.css';
 @import '../../../../../public/theme.css';
+@import '../../../../../public/status.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -104,6 +105,13 @@
   background: var(--background);
   color: var(--foreground);
   transition: background 0.3s ease, color 0.3s ease;
+}
+
+.boot-failure {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
 }
 
 .topbar {
@@ -281,7 +289,8 @@
 
 .workspace-search .library-panel,
 .workspace-config .config-panel,
-.workspace-inbox .inbox-panel {
+.workspace-inbox .inbox-panel,
+.workspace-rules .rules-panel {
   min-height: 0;
   border-right: 0;
   overflow-y: auto;
@@ -301,12 +310,14 @@
 }
 
 .workspace-search .library-panel,
-.workspace-inbox .inbox-panel {
+.workspace-inbox .inbox-panel,
+.workspace-rules .rules-panel {
   width: 100%;
   max-width: none;
 }
 
-.workspace-collections .panel-section {
+.workspace-collections .panel-section,
+.workspace-rules .rules-panel {
   padding: 48px clamp(28px, 4vw, 64px);
 }
 
@@ -324,7 +335,10 @@
 }
 
 .rail {
+  position: relative;
+  z-index: 5;
   width: 80px;
+  overflow: visible;
   border-right: 1px solid rgb(var(--glass-border));
   padding: 16px 0;
   display: flex;
@@ -341,6 +355,7 @@
 }
 
 .rail-item {
+  position: relative;
   width: 44px;
   min-height: 44px;
   flex-direction: column;
@@ -353,8 +368,31 @@
   line-height: 0;
 }
 
-.rail-item > span:not(.rail-icon) {
-  display: none;
+.rail-label {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 6;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid rgb(var(--glass-border));
+  border-radius: var(--radius-hover);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.rail-item:hover .rail-label,
+.rail-item:focus-visible .rail-label {
+  opacity: 1;
+  visibility: visible;
 }
 
 .rail-icon {
@@ -524,6 +562,89 @@
   color: var(--muted-ink);
   font-size: 0.75rem;
   margin-top: 2px;
+}
+
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.command-stage .rules-grid {
+  margin-top: 8px;
+}
+
+.rule-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 112px;
+  padding: 16px;
+  border: 1px solid rgb(var(--glass-border));
+  border-radius: var(--radius-hover);
+  background-color: rgb(var(--glass-bg));
+  backdrop-filter: blur(20px);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.rule-card:hover {
+  background: var(--surface-soft);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.rule-card:has(.library-skill-hit:active) {
+  background: color-mix(in srgb, var(--surface-soft) 80%, var(--line));
+  transform: translateY(0);
+}
+
+.rule-card-name {
+  position: relative;
+  z-index: 0;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.always-on-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  min-height: 28px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.always-on-toggle.on {
+  color: var(--accent-blue);
+}
+
+button.always-on-toggle {
+  z-index: 2;
+}
+
+button.always-on-toggle:hover {
+  color: var(--ink);
+}
+
+button.always-on-toggle.on:hover {
+  color: var(--accent-blue);
 }
 
 .mini-dot {
@@ -698,7 +819,8 @@
   }
 }
 
-.inbox-panel > .muted-copy {
+.inbox-panel > .muted-copy,
+.rules-panel > .muted-copy {
   margin: 16px 0 0;
 }
 
@@ -869,6 +991,15 @@
   color: var(--foreground);
 }
 
+/* Role selection (top-level tablist on Discover) reads as the primary
+   choice, so its active state uses the brand purple instead of the neutral
+   `--accent` every other filter row shares — matches the landing page's
+   role chips (`web/components/landing/discover.tsx`). */
+.role-tabs .active-filter {
+  background: var(--accent-blue);
+  color: var(--accent-blue-foreground);
+}
+
 .library-skill {
   justify-content: space-between;
   padding: 14px 16px;
@@ -923,7 +1054,9 @@
   z-index: 0;
 }
 
-.library-skill-interactive .add-icon-button {
+.library-skill-interactive .add-icon-button,
+.library-skill-interactive .delete-card,
+.library-skill-interactive .update-card {
   position: relative;
   z-index: 2;
 }
@@ -936,6 +1069,9 @@
 }
 
 .skill-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex: 1;
   min-width: 0;
 }
@@ -1007,17 +1143,144 @@
   transform: translate(1px, -1px);
 }
 
+/* Audit / installs / repository on one line, matching the landing preview
+   dialog (`web/components/landing/discover.tsx`'s `PreviewDialog`) instead
+   of the previous stacked `dl`. */
+.skill-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.audit-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.skill-meta-row .skill-installs {
+  font-size: 12px;
+}
+
+.skill-meta-row .skill-details-link {
+  gap: 5px;
+  font-size: 12px;
+}
+
 .skill-md-preview {
-  max-height: 260px;
+  max-height: 55vh;
   overflow: auto;
   margin: 4px 0 0;
-  padding: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.skill-md-preview > :first-child {
+  margin-top: 0;
+}
+
+.skill-md-preview h1,
+.skill-md-preview h2,
+.skill-md-preview h3 {
+  margin: 14px 0 4px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.skill-md-preview h1 {
+  font-size: 15px;
+}
+
+.skill-md-preview h2 {
+  font-size: 14px;
+}
+
+.skill-md-preview h3 {
+  font-size: 13px;
+}
+
+.skill-md-preview p {
+  margin: 6px 0;
+}
+
+.skill-md-preview ul,
+.skill-md-preview ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.skill-md-preview li + li {
+  margin-top: 2px;
+}
+
+.skill-md-preview a {
+  color: var(--accent-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.skill-md-preview code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.skill-md-preview pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow: auto;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.skill-md-preview pre code {
+  padding: 0;
+  background: none;
+}
+
+.skill-md-preview hr {
+  margin: 12px 0;
+  border: 0;
+  border-top: 1px solid rgb(var(--glass-border));
+}
+
+/* npx install-command copy bar, matching the landing preview dialog's
+   footer (`web/components/landing/discover.tsx`). */
+.skill-copy-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid rgb(var(--glass-border));
+}
+
+.skill-copy-command {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 10px 14px;
   border-radius: 10px;
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   font-family: var(--font-mono);
   font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
+}
+
+.skill-copy-button {
+  flex-shrink: 0;
 }
 
 .skill-meta {
@@ -1134,7 +1397,8 @@
 }
 
 .config-panel,
-.inbox-panel {
+.inbox-panel,
+.rules-panel {
   grid-column: 2 / -1;
 }
 
@@ -1531,7 +1795,7 @@ button.recent-card:hover {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 10;
+  z-index: 60;
   display: grid;
   place-items: center;
   padding: 20px;
@@ -1546,7 +1810,7 @@ button.recent-card:hover {
   display: grid;
   place-items: start center;
   align-content: start;
-  padding: 72px 32px 24px;
+  padding: 40px 32px;
   background: rgba(16, 20, 24, 0.18);
   backdrop-filter: blur(22px) saturate(1.35);
   -webkit-backdrop-filter: blur(22px) saturate(1.35);
@@ -1571,46 +1835,22 @@ button.recent-card:hover {
 }
 
 .skill-details-modal {
-  width: min(100%, 680px);
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.52);
-  border-radius: 20px;
-  padding: 28px 36px;
+  width: min(94vw, 960px);
+  overflow: hidden auto;
+  max-height: calc(100vh - 80px);
+  padding: 32px 40px;
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.58);
-  backdrop-filter: blur(40px) saturate(1.8);
-  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  /* Opaque enough to stay readable over whatever's behind it, matching
+     .help-modal's pattern instead of the previous ~10-58% white overlay
+     (glassy but unreadable, especially in dark mode). */
+  background-color: color-mix(in srgb, var(--popover) 96%, transparent);
+  border: 1px solid rgb(var(--glass-border));
+  border-radius: 20px;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   box-shadow:
-    0 18px 60px rgba(0, 0, 0, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.78),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.12);
-}
-
-.skill-details-modal::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.42), transparent 42%);
-}
-
-.skill-details-modal > * {
-  z-index: 1;
-}
-
-.dark .skill-details-modal {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.dark .skill-details-modal::before {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 46%);
+    inset 0 1px 0 0 rgb(var(--glass-highlight)),
+    0 18px 60px -8px rgba(0, 0, 0, 0.3);
 }
 
 .help-modal.status-success {
@@ -1764,6 +2004,60 @@ button.recent-card:hover {
   color: var(--destructive);
 }
 
+.update-card {
+  color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+  border: 0;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  border-radius: 0.5rem;
+}
+
+.origin-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.origin-row-current {
+  box-shadow: inset 3px 0 0 #10b981;
+}
+
+.origin-row-update,
+.origin-row-edited {
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.update-card:hover {
+  color: var(--accent-blue);
+}
+
+.skill-origin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 12px;
+}
+
+.origin-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
 .inbox-toggle {
   display: flex;
   align-items: center;
@@ -1872,6 +2166,7 @@ select:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .app-shell,
   .collection-card,
+  .rule-card,
   .library-skill-interactive,
   .skill-details-link,
   .skill-details-link svg,

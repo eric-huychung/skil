@@ -1,8 +1,8 @@
 import type { Result } from '../../../src/core/result.js';
-import type { BrowseView, Collection, ExportResult, IDE, ScanResult, Skill, SkillRecord, UsageRow } from '../../../src/types/index.js';
+import type { BrowseView, Collection, ExportResult, IDE, OriginCheck, OriginStatus, RuleRecord, ScanResult, Skill, SkillRecord, UsageRow } from '../../../src/types/index.js';
 import type { MarketSearchRow, ShelfRole } from '../../../src/backend/market-types.js';
 
-export type { BrowseView, Collection, ExportResult, IDE, MarketSearchRow, Result, ScanResult, ShelfRole, Skill, SkillRecord, UsageRow };
+export type { BrowseView, Collection, ExportResult, IDE, MarketSearchRow, OriginCheck, OriginStatus, Result, RuleRecord, ScanResult, ShelfRole, Skill, SkillRecord, UsageRow };
 
 /**
  * Client-side shape of `GET /api/market/preview`'s `data` — not exported by
@@ -32,7 +32,6 @@ export const IPC_CHANNELS = {
   removeSkillFromCollection: 'skil:remove-skill-from-collection',
   exportAll: 'skil:export-all',
   importFrom: 'skil:import-from',
-  searchSkills: 'skil:search-skills',
   browseSkills: 'skil:browse-skills',
   listInbox: 'skil:list-inbox',
   listSkills: 'skil:list-skills',
@@ -52,6 +51,13 @@ export const IPC_CHANNELS = {
   marketShelves: 'skil:market-shelves',
   marketSearch: 'skil:market-search',
   marketPreview: 'skil:market-preview',
+  readSkillMd: 'skil:read-skill-md',
+  originChecks: 'skil:origin-checks',
+  updateFromMarket: 'skil:update-from-market',
+  listRules: 'skil:list-rules',
+  readRule: 'skil:read-rule',
+  setAlwaysApply: 'skil:set-always-apply',
+  exportRules: 'skil:export-rules',
 } as const;
 
 /**
@@ -64,15 +70,13 @@ export interface SkilBridge {
   listCollections(ide?: IDE): Promise<Collection[]>;
   createCollection(name: string, skillIds: string[], ide?: IDE): Promise<Result<Collection>>;
   removeSkillFromCollection(name: string, skillId: string, ide?: IDE): Promise<Result<Collection>>;
-  /** Push stamped command files (for docks that have one) and deploy filed skills for every command. The GUI's one push action. */
   exportAll(targetIDE: IDE, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>;
-  /** Copy one IDE's skills and stamped commands from another project folder. Does not bind. */
+  /** Copy one IDE's skills, stamped commands, and rules from another project folder. Does not bind. */
   importFrom(
     sourceRoot: string,
     ide: IDE,
     opts?: { replace?: boolean }
   ): Promise<Result<ExportResult>>;
-  searchSkills(query: string): Promise<Result<Skill[]>>;
   browseSkills(view: BrowseView): Promise<Result<Skill[]>>;
   listInbox(): Promise<string[]>;
   /** Catalog rows from the last scan. Used by Sync for counts and source bars. */
@@ -91,7 +95,6 @@ export interface SkilBridge {
   /** Up to five most recently bound folders, current first. Survives app restart. */
   listRecentFolders(): Promise<string[]>;
   /** Drop a folder from recents. If it is the bound folder, the session disconnects. Returns the remaining list. */
-  removeRecentFolder(path: string): Promise<string[]>;
   removeRecentFolder(path: string): Promise<string[]>;
   /** Pull: scan SKILL.md folders. New ids go to Inbox if missing. Does not install. */
   scan(): Promise<Result<ScanResult>>;
@@ -113,4 +116,18 @@ export interface SkilBridge {
   marketSearch(query: string): Promise<Result<MarketSearchRow[]>>;
   /** Market index preview: stored listing fields plus a live SKILL.md/audit fetch. */
   marketPreview(id: string): Promise<Result<MarketPreviewData>>;
+  /** On-disk SKILL.md for a catalog id. Missing catalog row or file is an error. */
+  readSkillMd(skillId: string): Promise<Result<string>>;
+  /** Market origin vs disk vs live SKILL.md. Empty if none of the catalog has originHash. */
+  originChecks(): Promise<Result<OriginCheck[]>>;
+  /** Re-install from the market. `replaceEdited` resets a forked copy. */
+  updateFromMarket(skillId: string, opts?: { replaceEdited?: boolean }): Promise<Result<SkillRecord>>;
+  /** Rule files on disk (every dock). Disk is SoT. */
+  listRules(): Promise<RuleRecord[]>;
+  /** Reads a rule file by path id. */
+  readRule(id: string): Promise<Result<string>>;
+  /** Sets alwaysApply on a Cursor `.mdc` rule. */
+  setAlwaysApply(id: string, alwaysApply: boolean): Promise<Result<RuleRecord>>;
+  /** Copy scanned rules into the dest dock's rules dir. */
+  exportRules(targetIDE: IDE, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>;
 }

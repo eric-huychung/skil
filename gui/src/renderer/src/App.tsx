@@ -1,26 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowsClockwise, Clock, Cube, Folder, MagnifyingGlass, Moon, Question, Sun, Tray, X } from '@phosphor-icons/react';
+import { ArrowsClockwise, BookOpen, Clock, Compass, Cube, Folder, Lightning, Moon, Question, Sun, Terminal, X } from '@phosphor-icons/react';
 import { useTheme } from './theme';
 import { useBridge } from './bridge-context';
 import { FOCUS_RING } from './lib/focus-ring';
 import { countSkillsBySource, formatScannedAt } from './lib/skill-sources';
-import { isImportConflict, parseImportConflictLabels } from './lib/command-conflicts';
+import { conflictLabels, isImportConflict } from './lib/command-conflicts';
+import { statusLine } from '../../../../shared/status';
 import { folderLabel, folderPreview } from '../../shared/recent-folders';
 import type { ExportResult, IDE, Result, SkillRecord } from '../../shared/ipc';
 import CollectionList from './components/CollectionList';
 import CreateCollectionForm from './components/CreateCollectionForm';
 import InboxPanel from './components/InboxPanel';
 import MarketDiscover from './components/MarketDiscover';
+import RulesPanel from './components/RulesPanel';
 import { StatusDialog } from './components/StatusDialog';
 import { FORMAT_LABELS, IDE_OPTIONS } from './components/format-context';
 
-type WorkspaceTab = 'config' | 'search' | 'inbox' | 'collections';
+type WorkspaceTab = 'config' | 'search' | 'inbox' | 'collections' | 'rules';
 
 const TABS: { id: WorkspaceTab; label: string; icon: typeof Folder }[] = [
   { id: 'config', label: 'Sync', icon: ArrowsClockwise },
-  { id: 'search', label: 'Discover', icon: MagnifyingGlass },
-  { id: 'inbox', label: 'Inbox', icon: Tray },
-  { id: 'collections', label: 'Commands', icon: Folder },
+  { id: 'search', label: 'Discover', icon: Compass },
+  { id: 'inbox', label: 'Skills', icon: Lightning },
+  { id: 'collections', label: 'Commands', icon: Terminal },
+  { id: 'rules', label: 'Rules', icon: BookOpen },
 ];
 
 function ThemeToggle() {
@@ -76,12 +79,12 @@ function ConfigPanel({
       ...(replace ? { replace: true } : {}),
     });
     if (!result.ok) {
-      if (isImportConflict(result.error.message)) {
+      if (isImportConflict(result)) {
         setImportOutcome(null);
-        setImportConflict(parseImportConflictLabels(result.error.message));
+        setImportConflict(conflictLabels(result));
         return;
       }
-      setImportOutcome({ status: 'error', message: result.error.message });
+      setImportOutcome({ status: 'error', message: statusLine('import') });
       return;
     }
     if (result.value.failures.length > 0) {
@@ -282,7 +285,7 @@ function ConfigPanel({
             <p className="eyebrow">Workspace</p>
             <h2 id="switch-folder-title">Switch folder?</h2>
             <p className="muted-copy">
-              Open {folderLabel(pendingSwitch)} instead. Sync, Inbox, and Commands will reload from that
+              Open {folderLabel(pendingSwitch)} instead. Sync, Skills, Commands, and Rules will reload from that
               project.
             </p>
             <p className="recent-card-path">{pendingSwitch}</p>
@@ -358,7 +361,7 @@ function ConfigPanel({
             <p className="eyebrow">Project</p>
             <h2 id="import-project-title">Import</h2>
             <p className="muted-copy">
-              Copy skills and stamped commands from another project into this folder. Market inbox stays
+              Copy skills, stamped commands, and rules from another project into this folder. Market inbox stays
               shared.
             </p>
             <div role="radiogroup" aria-label="Format" className="filter-row">
@@ -445,11 +448,11 @@ function ConfigPanel({
             <p className="eyebrow">Sync</p>
             <h2 id="import-conflict-title">Replace existing files?</h2>
             <p className="muted-copy">
-              These skills or commands already exist in this project. Replace overwrites them with the other
+              These skills, commands, or rules already exist in this project. Replace overwrites them with the other
               folder&apos;s versions.
             </p>
             {importConflict.length > 0 && (
-              <ul className="conflict-list" aria-label="Conflicting skills and commands">
+              <ul className="conflict-list" aria-label="Conflicting skills, commands, and rules">
                 {importConflict.map((name) => (
                   <li key={name}>{name}</li>
                 ))}
@@ -621,7 +624,6 @@ export default function App() {
                   key={item.id}
                   type="button"
                   role="tab"
-                  title={item.label}
                   aria-label={item.label}
                   aria-selected={selected}
                   className={`rail-item ${selected ? 'active' : ''} ${FOCUS_RING}`}
@@ -637,6 +639,9 @@ export default function App() {
                       />
                     )}
                   </span>
+                  <span className="rail-label" aria-hidden="true">
+                    {item.label}
+                  </span>
                 </button>
               );
             })}
@@ -645,10 +650,12 @@ export default function App() {
             type="button"
             className={`rail-item help-item ${FOCUS_RING}`}
             aria-label="Help"
-            title="Help"
             onClick={() => setHelpOpen(true)}
           >
             <Question size={16} weight="regular" aria-hidden="true" />
+            <span className="rail-label" aria-hidden="true">
+              Help
+            </span>
           </button>
         </nav>
 
@@ -675,13 +682,15 @@ export default function App() {
             <CreateCollectionForm />
           </CollectionList>
         )}
+
+        {tab === 'rules' && <RulesPanel key={collectionsVersion} onProjectBound={handleProjectBound} />}
       </div>
 
       <footer className="footer-bar">
         <span>
           <span className="live-dot" aria-hidden="true" />
         </span>
-        <span>skil 0.2.2</span>
+        <span>skil 0.3.0</span>
       </footer>
 
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
@@ -705,8 +714,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
         <p className="eyebrow">Support</p>
         <h2 id="help-title">How can we help?</h2>
         <p className="muted-copy">
-          Sync, export, and search all run through the same engine the CLI uses. Config sync in the GUI is
-          still in development.
+          Sync, export, and search all run through the same engine the CLI uses.
         </p>
         <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={onClose}>
           Close

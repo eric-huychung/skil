@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { CollectionEngine } from '../../core/collection-engine.js';
-import { InMemoryConfigAdapter } from '../../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../../adapters/in-memory-skills.js';
 import { ok } from '../../core/result.js';
 import type { ISkillsAdapter } from '../../interfaces/adapters.js';
 import type { Skill } from '../../types/index.js';
+import { engineAsDiscover } from '../../backend/discover.js';
 import { createProgram } from '../program.js';
 import { runSearch } from './search.js';
 
 function buildEngine(skills: ISkillsAdapter = new InMemorySkillsAdapter()): CollectionEngine {
-  return new CollectionEngine(new InMemoryFileSystemAdapter(), new InMemoryConfigAdapter(), skills);
+  return new CollectionEngine(new InMemoryFileSystemAdapter(), skills);
 }
 
 function elevenBrowseHits(): Skill[] {
@@ -26,7 +26,7 @@ describe('runSearch', () => {
   it('lists matching skills', async () => {
     const engine = buildEngine();
 
-    const outcome = await runSearch(engine, 'react');
+    const outcome = await runSearch(engineAsDiscover(engine), 'react');
 
     expect(outcome.isError).toBe(false);
     expect(outcome.message).toContain('obra/react-patterns');
@@ -37,11 +37,11 @@ describe('runSearch', () => {
       search: async () => ok([]),
       browse: async () => ok([]),
       install: async () => ok(undefined),
-      convert: async () => ok(undefined),
       getInstalled: () => [],
+      skillHash: async () => ok(null),
     });
 
-    const outcome = await runSearch(engine, 'nonexistent');
+    const outcome = await runSearch(engineAsDiscover(engine), 'nonexistent');
 
     expect(outcome.isError).toBe(false);
     expect(outcome.message).toBe("No skills found for 'nonexistent'");
@@ -52,16 +52,17 @@ describe('runSearch', () => {
     skills.setSearchError(new Error('network unreachable'));
     const engine = buildEngine(skills);
 
-    const outcome = await runSearch(engine, 'react');
+    const outcome = await runSearch(engineAsDiscover(engine), 'react');
 
     expect(outcome.isError).toBe(true);
-    expect(outcome.message).toContain('network unreachable');
+    expect(outcome.message).toBe("Search didn't go through. Check your connection and try again.");
+    expect(outcome.message).not.toContain('network unreachable');
   });
 
   it('lists the all-time leaderboard with install counts when query is empty', async () => {
     const engine = buildEngine();
 
-    const outcome = await runSearch(engine, '');
+    const outcome = await runSearch(engineAsDiscover(engine), '');
 
     expect(outcome.isError).toBe(false);
     expect(outcome.message).toContain('obra/react-patterns');
@@ -72,7 +73,7 @@ describe('runSearch', () => {
   it('lists the trending leaderboard when --trending is set and query is empty', async () => {
     const engine = buildEngine();
 
-    const outcome = await runSearch(engine, '', { trending: true });
+    const outcome = await runSearch(engineAsDiscover(engine), '', { trending: true });
 
     expect(outcome.isError).toBe(false);
     expect(outcome.message).toContain('vercel-labs/security-review');
@@ -83,7 +84,7 @@ describe('runSearch', () => {
   it('ignores --trending and typed-searches when a query is given', async () => {
     const engine = buildEngine();
 
-    const outcome = await runSearch(engine, 'react', { trending: true });
+    const outcome = await runSearch(engineAsDiscover(engine), 'react', { trending: true });
 
     expect(outcome.isError).toBe(false);
     expect(outcome.message).toContain('obra/react-patterns');
@@ -95,11 +96,11 @@ describe('runSearch', () => {
       search: async () => ok([]),
       browse: async () => ok(elevenBrowseHits()),
       install: async () => ok(undefined),
-      convert: async () => ok(undefined),
       getInstalled: () => [],
+      skillHash: async () => ok(null),
     });
 
-    const outcome = await runSearch(engine, '');
+    const outcome = await runSearch(engineAsDiscover(engine), '');
 
     expect(outcome.message).toContain('skill/0');
     expect(outcome.message).toContain('skill/9');
@@ -111,11 +112,11 @@ describe('runSearch', () => {
       search: async () => ok([]),
       browse: async () => ok([]),
       install: async () => ok(undefined),
-      convert: async () => ok(undefined),
       getInstalled: () => [],
+      skillHash: async () => ok(null),
     });
 
-    const outcome = await runSearch(engine, '');
+    const outcome = await runSearch(engineAsDiscover(engine), '');
 
     expect(outcome.isError).toBe(false);
     expect(outcome.message).toBe('No skills found on the all-time leaderboard');
@@ -126,10 +127,13 @@ describe('runSearch', () => {
     skills.setBrowseError(new Error('leaderboard unreachable'));
     const engine = buildEngine(skills);
 
-    const outcome = await runSearch(engine, '');
+    const outcome = await runSearch(engineAsDiscover(engine), '');
 
     expect(outcome.isError).toBe(true);
-    expect(outcome.message).toContain('leaderboard unreachable');
+    expect(outcome.message).toBe(
+      "Couldn't load skills. The catalog is temporarily unavailable. Try again in a moment.",
+    );
+    expect(outcome.message).not.toContain('leaderboard unreachable');
   });
 });
 

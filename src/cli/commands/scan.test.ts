@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { CollectionEngine, STATE_PATH } from '../../core/collection-engine.js';
-import { InMemoryConfigAdapter } from '../../adapters/in-memory-config.js';
 import { InMemoryFileSystemAdapter } from '../../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../../adapters/in-memory-skills.js';
 import { isOk } from '../../core/result.js';
@@ -8,7 +7,7 @@ import { createProgram } from '../program.js';
 import { runScan } from './scan.js';
 
 function buildEngine(fs: InMemoryFileSystemAdapter = new InMemoryFileSystemAdapter()): CollectionEngine {
-  return new CollectionEngine(fs, new InMemoryConfigAdapter(), new InMemorySkillsAdapter());
+  return new CollectionEngine(fs, new InMemorySkillsAdapter());
 }
 
 describe('runScan', () => {

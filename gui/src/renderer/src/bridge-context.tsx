@@ -1,10 +1,14 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import type { SkilBridge } from '../../shared/ipc';
+import { BootFailure } from './components/BootFailure';
 
 const BridgeContext = createContext<SkilBridge | null>(null);
 
 /** Provides the `SkilBridge` to the component tree. Real app uses `window.skil`; tests inject a bridge backed by an in-memory engine. */
-export function BridgeProvider({ bridge, children }: { bridge: SkilBridge; children: ReactNode }) {
+export function BridgeProvider({ bridge, children }: { bridge?: SkilBridge; children: ReactNode }) {
+  if (!bridge) {
+    return <BootFailure />;
+  }
   return <BridgeContext.Provider value={bridge}>{children}</BridgeContext.Provider>;
 }
 

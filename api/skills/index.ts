@@ -16,6 +16,6 @@ export async function GET(request: Request): Promise<Response> {
       getOidcToken: () => getVercelOidcToken(),
     });
   } catch (error) {
-    return Response.json({ error: 'function_error', message: (error as Error).message }, { status: 500 });
+    return Response.json({ error: 'function_error', message: 'Request failed.' }, { status: 500 });
   }
 }

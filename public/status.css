@@ -1,0 +1,160 @@
+/* Status templates used by GUI Discover/Inbox/Rules and the landing Discover.
+   Keep visuals here so both apps stay in sync. */
+
+.status-skeleton {
+  pointer-events: none;
+}
+
+.status-skeleton-row {
+  cursor: default;
+}
+
+.status-bar {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-ink) 18%, transparent);
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+.status-bar-rank {
+  flex: 0 0 28px;
+  width: 28px;
+}
+
+.status-bar-name {
+  flex: 1;
+  max-width: 42%;
+}
+
+.status-skeleton-row:nth-child(2) .status-bar-name {
+  max-width: 56%;
+}
+
+.status-skeleton-row:nth-child(3) .status-bar-name {
+  max-width: 34%;
+}
+
+.status-skeleton-row:nth-child(4) .status-bar-name {
+  max-width: 48%;
+}
+
+.status-skeleton-row:nth-child(5) .status-bar-name {
+  max-width: 40%;
+}
+
+.status-skeleton-row:nth-child(6) .status-bar-name {
+  max-width: 52%;
+}
+
+.status-bar-meta {
+  flex: 0 0 36px;
+  width: 36px;
+}
+
+.status-skeleton-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.status-skeleton-preview .status-bar-line {
+  max-width: 40%;
+}
+
+.status-skeleton-preview .status-bar-line.wide {
+  max-width: 70%;
+}
+
+.status-skeleton-preview .status-bar-block {
+  height: 72px;
+  max-width: 100%;
+  border-radius: 10px;
+  margin-top: 8px;
+}
+
+.status-skeleton-cards {
+  margin-top: 28px;
+}
+
+.status-skeleton-card {
+  pointer-events: none;
+  cursor: default;
+}
+
+.status-skeleton-card:hover {
+  transform: none;
+  background-color: rgb(var(--glass-bg));
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.status-notice {
+  margin-top: 28px;
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.status-notice-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.status-notice-copy {
+  margin: 6px 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--muted-ink);
+}
+
+.status-retry {
+  margin-top: 16px;
+  border: 1px solid rgb(var(--glass-border));
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--foreground);
+  background-color: rgb(var(--glass-bg));
+  cursor: pointer;
+}
+
+.status-retry:hover {
+  background: var(--surface-soft);
+}
+
+.status-retry:focus-visible {
+  outline: 2px solid var(--highlight);
+  outline-offset: 2px;
+}
+
+.skill-details-modal .status-notice,
+.help-modal .status-notice,
+.glass-modal .status-notice {
+  margin-top: 12px;
+  padding: 8px 0 4px;
+  text-align: left;
+}
+
+.status-notice-inline {
+  color: var(--muted-ink);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-bar {
+    animation: none;
+  }
+}

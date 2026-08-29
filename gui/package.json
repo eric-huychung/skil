@@ -1,6 +1,6 @@
 {
   "name": "skil-gui",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Desktop GUI for skil, sharing CollectionEngine with the CLI",
   "private": true,
   "type": "module",
@@ -26,6 +26,8 @@
     "electron-vite": "^5.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.6"

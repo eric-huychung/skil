@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { createHash } from 'node:crypto';
 import { execa } from 'execa';
 import type { ISkillsAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
@@ -80,7 +81,7 @@ export class SkillsAdapter implements ISkillsAdapter {
   async browse(view: BrowseView): Promise<Result<Skill[]>> {
     try {
       const response = await axios.get<SkillsListResponse>(`${this.apiBaseUrl}/api/skills`, {
-        params: { view, limit: 500 },
+        params: { view },
       });
 
       return ok(response.data.data.map(mapSkillsShHit));
@@ -115,19 +116,23 @@ export class SkillsAdapter implements ISkillsAdapter {
     }
   }
 
-  async convert(skillId: string, targetIDE: IDE): Promise<Result<void>> {
-    try {
-      await execa('skillsmith', ['convert', skillId, '--to', targetIDE], { cwd: this.projectRoot });
-      return ok(undefined);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return err(new Error("skillsmith is not installed. Run 'npm install -g skillsmith' and try again."));
-      }
-      return err(new Error(`Failed to convert skill '${skillId}' for ${targetIDE}: ${(error as Error).message}`));
-    }
-  }
-
   getInstalled(): Skill[] {
     return [];
+  }
+
+  async skillHash(skillId: string): Promise<Result<string | null>> {
+    try {
+      const response = await axios.get<{ data: { skillMd: string | null } }>(
+        `${this.apiBaseUrl}/api/market/preview`,
+        { params: { id: skillId } }
+      );
+      const skillMd = response.data.data.skillMd;
+      if (!skillMd) {
+        return ok(null);
+      }
+      return ok(createHash('sha256').update(skillMd, 'utf8').digest('hex'));
+    } catch {
+      return ok(null);
+    }
   }
 }

@@ -10,6 +10,7 @@ const PREVIEW_CACHE_CONTROL = 'public, s-maxage=300, stale-while-revalidate=60';
 
 const SEARCH_DEFAULT_LIMIT = 25;
 const SEARCH_MAX_LIMIT = 50;
+const STORE_UNAVAILABLE = 'Market index is temporarily unavailable.';
 
 export interface MarketReadDeps {
   store: MarketStore;
@@ -32,7 +33,7 @@ export interface MarketPreviewDeps {
 export async function handleShelvesRequest(_request: Request, deps: MarketReadDeps): Promise<Response> {
   const result = await deps.store.listShelves();
   if (!isOk(result)) {
-    return Response.json({ error: 'store_error', message: result.error.message }, { status: 500 });
+    return Response.json({ error: 'store_error', message: STORE_UNAVAILABLE }, { status: 500 });
   }
 
   return Response.json({ data: result.value }, { headers: { 'Cache-Control': SHELVES_CACHE_CONTROL } });
@@ -66,7 +67,7 @@ export async function handleMarketSearchRequest(request: Request, deps: MarketRe
   const limit = parseSearchLimit(params.get('limit'));
   const result = await deps.store.searchListings(q, { limit });
   if (!isOk(result)) {
-    return Response.json({ error: 'store_error', message: result.error.message }, { status: 500 });
+    return Response.json({ error: 'store_error', message: STORE_UNAVAILABLE }, { status: 500 });
   }
 
   return Response.json({ data: result.value });
@@ -92,7 +93,7 @@ export async function handleMarketPreviewRequest(request: Request, deps: MarketP
 
   const listing = await deps.store.getListing(id);
   if (!isOk(listing)) {
-    return Response.json({ error: 'store_error', message: listing.error.message }, { status: 500 });
+    return Response.json({ error: 'store_error', message: STORE_UNAVAILABLE }, { status: 500 });
   }
   if (listing.value === null) {
     return Response.json({ error: 'not_found', message: `Unknown skill id '${id}'.` }, { status: 404 });

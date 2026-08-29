@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { err, ok, type Result } from '../core/result.js';
 import type { MarketStore } from './market-store.js';
 import type {
+  MarketClassifyRow,
   MarketDetailInput,
   MarketField,
   MarketListingDetail,
@@ -92,6 +93,27 @@ export class SupabaseMarketStore implements MarketStore {
         sortOrder: row.sort_order,
         shelfSize: row.shelf_size,
         active: row.active,
+      })),
+    );
+  }
+
+  async listTopListings(limit: number): Promise<Result<MarketClassifyRow[]>> {
+    const { data, error } = await this.client
+      .from('market_skills')
+      .select('id, name, slug, installs, description, hash')
+      .eq('inactive', false)
+      .order('installs', { ascending: false })
+      .limit(Math.max(0, limit));
+    if (error) return err(toError(error.message));
+
+    return ok(
+      data.map((row) => ({
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        installs: row.installs,
+        description: row.description,
+        hash: row.hash,
       })),
     );
   }
