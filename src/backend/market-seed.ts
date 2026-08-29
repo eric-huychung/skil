@@ -1,16 +1,17 @@
 import type { MarketField, MarketRole } from './market-types.js';
 
 /**
- * v1 seed: 4 roles / 20 fields (categories). Not a schema cap — insert
- * more rows into `market_roles` / `market_fields` later; the next sync
- * picks them up (`MarketStore.listActiveFields`, `MarketSync.refreshActiveFields`).
- * Prefer 2+ word `q` (semantic search). See `tasks/plan.md`, "v1 seed".
+ * Seed: 6 roles / 22 fields. Not a schema cap — insert more rows later;
+ * `listActiveFields` picks them up. `q` is unused for shelves (classify
+ * path) but the column is NOT NULL so placeholders stay.
  */
 export const SEED_ROLES: MarketRole[] = [
   { slug: 'swe', label: 'SWE', sortOrder: 1, active: true },
   { slug: 'ui-ux', label: 'UI/UX', sortOrder: 2, active: true },
   { slug: 'pm', label: 'PM', sortOrder: 3, active: true },
   { slug: 'data', label: 'Data', sortOrder: 4, active: true },
+  { slug: 'agent', label: 'Agent', sortOrder: 5, active: true },
+  { slug: 'other', label: 'Other', sortOrder: 6, active: true },
 ];
 
 const SHELF_SIZE = 30;
@@ -40,6 +41,9 @@ export const SEED_FIELDS: MarketField[] = [
   field('sql', 'data', 'SQL', 'sql warehouse', 2),
   field('metrics', 'data', 'Metrics', 'ab testing metrics', 3),
   field('viz', 'data', 'Viz', 'data visualization', 4),
+  // Agent + Other (classify leftovers / agent-workflow)
+  field('workflow', 'agent', 'Workflow', 'agent workflow', 1),
+  field('integrations', 'other', 'Integrations', 'vendor integrations', 1),
 ];
 
 function field(slug: string, roleSlug: string, label: string, q: string, sortOrder: number): MarketField {

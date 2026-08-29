@@ -1,7 +1,7 @@
 import { getVercelOidcToken } from '@vercel/oidc';
 import { createClient } from '@supabase/supabase-js';
 import { handleCronSyncRequest } from '../../dist/backend/market-cron.js';
-import { RealMarketSkillsClient } from '../../dist/backend/market-skills-client.js';
+import { createMarketSync } from '../../dist/backend/create-market-sync.js';
 import { MarketSync } from '../../dist/backend/market-sync.js';
 import { SupabaseMarketStore } from '../../dist/backend/supabase-market-store.js';
 
@@ -24,9 +24,10 @@ export async function GET(request: Request): Promise<Response> {
     let sync: MarketSync | undefined;
     if (supabaseUrl && serviceRoleKey) {
       const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-      sync = new MarketSync({
+      sync = createMarketSync({
         store: new SupabaseMarketStore(supabase),
-        client: new RealMarketSkillsClient({ fetchImpl: fetch, getOidcToken: () => getVercelOidcToken() }),
+        getOidcToken: () => getVercelOidcToken(),
+        getGatewayToken: async () => process.env.AI_GATEWAY_API_KEY?.trim() || getVercelOidcToken(),
       });
     }
 

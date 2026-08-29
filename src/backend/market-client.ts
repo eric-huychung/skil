@@ -21,15 +21,10 @@ export interface MarketAudit {
   status: AuditStatus;
 }
 
-/** One skills.sh search result row. `isDuplicate` rows are dropped before ranking a shelf. */
-export interface MarketSearchResult extends MarketListingInput {
-  isDuplicate?: boolean;
-}
-
 /**
  * skills.sh operations `MarketSync` needs. Isolates sync logic from the
  * real HTTP client (`skills-proxy.ts`) so tests inject a fake — no network,
- * no OIDC.
+ * no OIDC. Shelf refresh no longer searches — it classifies our index.
  */
 export interface MarketSkillsClient {
   /** Pages the full listing, `per_page=500`, until a page omits `nextCursor`. */
@@ -43,7 +38,4 @@ export interface MarketSkillsClient {
 
   /** Fetches one skill's full SKILL.md body for preview-on-click. Never stored — DB only ever holds the capped search `description`. `null` if the skill has no SKILL.md file. */
   getSkillMd(id: string): Promise<Result<string | null>>;
-
-  /** Searches skills.sh for `q`, used to build/refresh one field's shelf. */
-  searchSkills(q: string, opts: { limit: number }): Promise<Result<MarketSearchResult[]>>;
 }

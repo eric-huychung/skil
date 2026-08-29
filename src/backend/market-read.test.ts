@@ -182,7 +182,6 @@ function fakeClient(overrides: Partial<MarketSkillsClient> = {}): MarketSkillsCl
     getSkill: async () => ok({ description: null, hash: 'unused' }),
     getAudit: async () => ok({ status: 'none' }),
     getSkillMd: async () => ok(null),
-    searchSkills: async () => ok([]),
     ...overrides,
   };
 }

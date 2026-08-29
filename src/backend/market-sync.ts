@@ -1,10 +1,16 @@
-import { isOk, ok, type Result } from '../core/result.js';
+import { err, isOk, ok, type Result } from '../core/result.js';
 import type { MarketSkillsClient } from './market-client.js';
 import type { MarketStore } from './market-store.js';
+import type { SkillClassifier } from './skill-classifier.js';
+import { buildShelves, dedupByName } from './shelf-assembler.js';
+
+/** Classify pool size — not 10k, not “until every shelf has 30.” */
+export const CLASSIFY_POOL_SIZE = 1000;
 
 export interface MarketSyncDeps {
   store: MarketStore;
   client: MarketSkillsClient;
+  classifier: SkillClassifier;
   /** Injected clock so tests control `seenAt`. Defaults to `() => new Date().toISOString()`. */
   now?: () => string;
 }
@@ -28,14 +34,9 @@ export interface HydrateDetailsResult {
 export interface RefreshShelvesResult {
   /** Field slugs whose shelf was rewritten. */
   refreshed: string[];
-  /** Field slugs skipped because their search request failed. */
+  /** Always empty — classify is all-or-nothing (no per-field search skip). */
   failed: string[];
-  /**
-   * Ids with no stored hash yet, found only via search results (not the
-   * paginated listing). `crawlListing` never sees these ids, so this is
-   * the only place they get queued for detail hydrate. Deduped across
-   * fields.
-   */
+  /** Deduped pool ids with no stored hash, for the existing hydrate cap. */
   queued: string[];
 }
 
@@ -60,11 +61,13 @@ export interface MarketSyncRunResult {
 export class MarketSync {
   private readonly store: MarketStore;
   private readonly client: MarketSkillsClient;
+  private readonly classifier: SkillClassifier;
   private readonly now: () => string;
 
   constructor(deps: MarketSyncDeps) {
     this.store = deps.store;
     this.client = deps.client;
+    this.classifier = deps.classifier;
     this.now = deps.now ?? (() => new Date().toISOString());
   }
 
@@ -176,17 +179,9 @@ export class MarketSync {
   }
 
   /**
-   * Refreshes every active field's shelf: search `field.q`, drop
-   * `isDuplicate` rows, rank by installs descending, keep the top
-   * `field.shelfSize`. Fields load from the store — not a hardcoded list —
-   * so a newly-added active field is picked up with no code change. A
-   * field whose search fails is skipped; the rest still refresh.
-   *
-   * Also queues any ranked id with no stored hash. Search results are not
-   * guaranteed to appear in the paginated listing `crawlListing` walks, so
-   * without this a popular skill could sit on a shelf forever with no
-   * description (search-by-description would never find it, even though
-   * re-running the full sync never fails on it).
+   * Rebuilds every active field's shelf from the top of our index.
+   * Dedup by name → classify → rank by installs. Classify error writes
+   * no shelves (last week stays). Empty pool is also fail-closed.
    */
   async refreshActiveFields(): Promise<Result<RefreshShelvesResult>> {
     const fields = await this.store.listActiveFields();
@@ -194,43 +189,33 @@ export class MarketSync {
       return fields;
     }
 
-    const seenAt = this.now();
-    const refreshed: string[] = [];
-    const failed: string[] = [];
-    const queued = new Set<string>();
-
-    for (const field of fields.value) {
-      const search = await this.client.searchSkills(field.q, { limit: field.shelfSize });
-      if (!isOk(search)) {
-        failed.push(field.slug);
-        continue;
-      }
-
-      const ranked = search.value
-        .filter((item) => !item.isDuplicate)
-        .sort((a, b) => b.installs - a.installs)
-        .slice(0, field.shelfSize);
-
-      for (const item of ranked) {
-        const upserted = await this.store.upsertListing(item, seenAt);
-        if (!isOk(upserted)) {
-          return upserted;
-        }
-
-        const hash = await this.store.getHash(item.id);
-        if (isOk(hash) && hash.value === null) {
-          queued.add(item.id);
-        }
-      }
-
-      const shelved = await this.store.setFieldShelf(field.slug, ranked.map((item) => item.id));
-      if (!isOk(shelved)) {
-        return shelved;
-      }
-      refreshed.push(field.slug);
+    const pool = await this.store.listTopListings(CLASSIFY_POOL_SIZE);
+    if (!isOk(pool)) {
+      return pool;
+    }
+    if (pool.value.length === 0) {
+      return err(new Error('MarketSync: classify pool is empty'));
     }
 
-    return ok({ refreshed, failed, queued: [...queued] });
+    const unique = dedupByName(pool.value);
+    const classified = await this.classifier.classify(unique, fields.value);
+    if (!isOk(classified)) {
+      return classified;
+    }
+
+    const shelves = buildShelves({ listings: unique, labels: classified.value, fields: fields.value });
+    for (const shelf of shelves) {
+      const written = await this.store.setFieldShelf(shelf.fieldSlug, shelf.skillIds);
+      if (!isOk(written)) {
+        return written;
+      }
+    }
+
+    return ok({
+      refreshed: shelves.map((shelf) => shelf.fieldSlug),
+      failed: [],
+      queued: unique.filter((row) => row.hash === null).map((row) => row.id),
+    });
   }
 
   /**

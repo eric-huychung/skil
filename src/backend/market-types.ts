@@ -59,6 +59,16 @@ export interface ShelfRole {
   fields: ShelfField[];
 }
 
+/** One row from the classify pool (`listTopListings`). Description is the stored search excerpt, not SKILL.md. */
+export interface MarketClassifyRow {
+  id: string;
+  name: string;
+  slug: string;
+  installs: number;
+  description: string | null;
+  hash: string | null;
+}
+
 /** One row from `MarketStore.searchListings`: list fields only, same shape as `ShelfSkill` minus rank (search has no rank concept). */
 export interface MarketSearchRow {
   id: string;

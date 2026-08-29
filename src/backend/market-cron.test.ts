@@ -6,6 +6,7 @@ import { InMemoryMarketStore } from './in-memory-market-store.js';
 import { CRON_MAX_DETAIL, handleCronSyncRequest } from './market-cron.js';
 import type { MarketListingPage, MarketSkillsClient } from './market-client.js';
 import { MarketSync } from './market-sync.js';
+import { FakeSkillClassifier } from './skill-classifier.js';
 
 function listingItem(id: string, installs = 0) {
   return {
@@ -30,7 +31,6 @@ function fakeClient(pages: MarketListingPage[]): MarketSkillsClient {
     getSkill: vi.fn(async (id: string) => ok({ description: id, hash: `hash-${id}` })),
     getAudit: vi.fn(async () => ok({ status: 'none' as const })),
     getSkillMd: vi.fn(async () => ok(null)),
-    searchSkills: vi.fn(async () => ok([])),
   };
 }
 
@@ -40,7 +40,10 @@ function cronRequest(secret?: string): Request {
 }
 
 function cronSync(client: MarketSkillsClient = fakeClient([{ items: [listingItem('a/one')] }])) {
-  return { client, sync: new MarketSync({ store: new InMemoryMarketStore(), client }) };
+  return {
+    client,
+    sync: new MarketSync({ store: new InMemoryMarketStore(), client, classifier: new FakeSkillClassifier() }),
+  };
 }
 
 describe('handleCronSyncRequest', () => {
@@ -72,9 +75,7 @@ describe('handleCronSyncRequest', () => {
   });
 
   it('runs MarketSync.sync with maxDetail 40 when authorized, without a listing crawl', async () => {
-    const items = Array.from({ length: 45 }, (_, i) => listingItem(`a/${i}`, 45 - i));
     const client = fakeClient([]);
-    client.searchSkills = vi.fn(async () => ok(items));
     const store = new InMemoryMarketStore();
     await store.upsertField({
       slug: 'frontend',
@@ -85,7 +86,10 @@ describe('handleCronSyncRequest', () => {
       shelfSize: 50,
       active: true,
     });
-    const sync = new MarketSync({ store, client });
+    for (let i = 0; i < 45; i += 1) {
+      await store.upsertListing(listingItem(`a/${i}`, 45 - i), '2026-01-01T00:00:00.000Z');
+    }
+    const sync = new MarketSync({ store, client, classifier: new FakeSkillClassifier() });
 
     const response = await handleCronSyncRequest(cronRequest('secret'), { cronSecret: 'secret', sync });
     const body = (await response.json()) as { hydrated: number; listingQueued: number; shelfQueued: number };

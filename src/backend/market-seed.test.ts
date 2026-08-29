@@ -4,9 +4,12 @@ import { InMemoryMarketStore } from './in-memory-market-store.js';
 import { SEED_FIELDS, SEED_ROLES } from './market-seed.js';
 
 describe('market-seed', () => {
-  it('seeds 4 roles and 20 fields', () => {
-    expect(SEED_ROLES).toHaveLength(4);
-    expect(SEED_FIELDS).toHaveLength(20);
+  it('seeds 6 roles and 22 fields', () => {
+    expect(SEED_ROLES).toHaveLength(6);
+    expect(SEED_FIELDS).toHaveLength(22);
+    expect(SEED_ROLES.map((role) => role.slug)).toEqual(['swe', 'ui-ux', 'pm', 'data', 'agent', 'other']);
+    expect(SEED_FIELDS.some((field) => field.slug === 'workflow')).toBe(true);
+    expect(SEED_FIELDS.some((field) => field.slug === 'integrations')).toBe(true);
   });
 
   it('every field points at a seeded role', () => {
@@ -34,9 +37,9 @@ describe('market-seed', () => {
     expect(isOk(shelves)).toBe(true);
     if (!isOk(shelves)) return;
 
-    expect(shelves.value.map((role) => role.slug)).toEqual(['swe', 'ui-ux', 'pm', 'data']);
+    expect(shelves.value.map((role) => role.slug)).toEqual(['swe', 'ui-ux', 'pm', 'data', 'agent', 'other']);
     const totalFields = shelves.value.reduce((sum, role) => sum + role.fields.length, 0);
-    expect(totalFields).toBe(20);
+    expect(totalFields).toBe(22);
     for (const role of shelves.value) {
       for (const field of role.fields) {
         expect(field.skills).toEqual([]);

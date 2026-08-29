@@ -4,17 +4,15 @@ import type {
   AuditStatus,
   MarketAudit,
   MarketListingPage,
-  MarketSearchResult,
   MarketSkillDetail,
   MarketSkillsClient,
 } from './market-client.js';
+import type { MarketListingInput } from './market-types.js';
 import { parseSkillDescription } from './parse-skill-description.js';
 
 const SKILLS_SH_SKILLS_URL = 'https://skills.sh/api/v1/skills';
 /** skills.sh max per page (docs: "Results per page, 1-500"). */
 const LISTING_PER_PAGE = 500;
-/** skills.sh max search limit (docs: "Maximum results to return, 1-200"). */
-const SEARCH_MAX_LIMIT = 200;
 
 export interface MarketSkillsClientDeps {
   fetchImpl: typeof fetch;
@@ -43,10 +41,6 @@ interface ListingApiResponse {
   pagination: { page: number; perPage: number; total: number; hasMore: boolean };
 }
 
-interface SearchApiResponse {
-  data: ListingApiRow[];
-}
-
 interface SkillDetailApiResponse {
   id: string;
   source: string;
@@ -66,7 +60,7 @@ interface AuditApiResponse {
 
 const AUDIT_SEVERITY: Record<Exclude<AuditStatus, 'none'>, number> = { pass: 0, warn: 1, fail: 2 };
 
-function toListingInput(row: ListingApiRow): MarketSearchResult {
+function toListingInput(row: ListingApiRow): MarketListingInput {
   return {
     id: row.id,
     name: row.name,
@@ -75,7 +69,6 @@ function toListingInput(row: ListingApiRow): MarketSearchResult {
     installs: row.installs,
     installUrl: row.installUrl,
     url: row.url,
-    isDuplicate: row.isDuplicate,
   };
 }
 
@@ -192,18 +185,6 @@ export class RealMarketSkillsClient implements MarketSkillsClient {
 
     const audits = (body as AuditApiResponse).audits ?? [];
     return ok({ status: worstAuditStatus(audits.map((audit) => audit.status)) });
-  }
-
-  async searchSkills(q: string, opts: { limit: number }): Promise<Result<MarketSearchResult[]>> {
-    const limit = Math.min(Math.max(opts.limit, 1), SEARCH_MAX_LIMIT);
-    const url = `${SKILLS_SH_SKILLS_URL}/search?q=${encodeURIComponent(q)}&limit=${limit}`;
-
-    const result = await this.get<SearchApiResponse>(url);
-    if (!isOk(result)) {
-      return result;
-    }
-
-    return ok(result.value.data.map(toListingInput));
   }
 
   private async get<T>(url: string): Promise<Result<T>> {

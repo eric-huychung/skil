@@ -1,5 +1,6 @@
 import type { Result } from '../core/result.js';
 import type {
+  MarketClassifyRow,
   MarketDetailInput,
   MarketField,
   MarketListingDetail,
@@ -10,6 +11,7 @@ import type {
 } from './market-types.js';
 
 export type {
+  MarketClassifyRow,
   MarketDetailInput,
   MarketField,
   MarketListingDetail,
@@ -35,6 +37,12 @@ export interface MarketStore {
 
   /** Active fields only, for `MarketSync` to refresh shelves from — not a hardcoded list. */
   listActiveFields(): Promise<Result<MarketField[]>>;
+
+  /**
+   * Classify pool: active rows, installs descending, includes description
+   * and hash. No new index — 10k rows is a plain sort + limit.
+   */
+  listTopListings(limit: number): Promise<Result<MarketClassifyRow[]>>;
 
   /**
    * Upserts installs/name/slug/url/`installUrl` and marks the row seen at

@@ -8,7 +8,8 @@
  *
  * Steps: seed roles/fields from `market-seed.ts` -> full listing crawl +
  * inactive reconcile -> drain the detail-hydrate queue (paced under
- * skills.sh's 600 req/min) -> refresh every active field's shelf.
+ * skills.sh's 600 req/min) -> classify top 1000 into shelves (same
+ * `refreshActiveFields` as the weekly cron).
  *
  * Flags: `--max-detail=N` caps how many queued ids this run hydrates
  * (for a small local smoke run); default drains the whole queue.
@@ -18,7 +19,7 @@ import { getVercelOidcToken } from '@vercel/oidc';
 import { createClient } from '@supabase/supabase-js';
 import { isOk } from '../src/core/result.js';
 import { SEED_FIELDS, SEED_ROLES } from '../src/backend/market-seed.js';
-import { RealMarketSkillsClient } from '../src/backend/market-skills-client.js';
+import { createMarketSync } from '../src/backend/create-market-sync.js';
 import { MarketSync } from '../src/backend/market-sync.js';
 import { SupabaseMarketStore } from '../src/backend/supabase-market-store.js';
 
@@ -95,13 +96,22 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  const gatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
+  if (!gatewayKey) {
+    console.error('Missing AI_GATEWAY_API_KEY. Add it to .env (Vercel AI Gateway).');
+    process.exitCode = 1;
+    return;
+  }
 
   const maxDetail = parseMaxDetail(process.argv.slice(2));
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
   const store = new SupabaseMarketStore(supabase);
-  const client = new RealMarketSkillsClient({ fetchImpl: fetch, getOidcToken: () => getVercelOidcToken() });
-  const sync = new MarketSync({ store, client });
+  const sync = createMarketSync({
+    store,
+    getOidcToken: () => getVercelOidcToken(),
+    getGatewayToken: async () => gatewayKey,
+  });
 
   console.log(`Seeding ${SEED_ROLES.length} roles / ${SEED_FIELDS.length} fields...`);
   for (const role of SEED_ROLES) {
@@ -120,20 +130,13 @@ async function main(): Promise<void> {
 
   await drainHydrateQueue(sync, crawl.value.queued, maxDetail);
 
-  console.log('Refreshing shelves for every active field...');
+  console.log('Classifying top 1000 into shelves (dedup → LLM → rank)...');
   const shelves = await sync.refreshActiveFields();
   if (!isOk(shelves)) throw shelves.error;
-  console.log(`Shelves refreshed: ${shelves.value.refreshed.length} ok, ${shelves.value.failed.length} failed.`);
-  if (shelves.value.failed.length > 0) {
-    console.log(`Failed fields: ${shelves.value.failed.join(', ')}`);
-  }
+  console.log(`Shelves written: ${shelves.value.refreshed.join(', ')}`);
 
-  // Search can surface an id `syncListing`'s paginated crawl never sees (skills.sh's
-  // search index and its listing endpoint are not guaranteed to agree). Without this,
-  // that id would sit on a shelf with no description forever, no matter how many
-  // times the script re-runs.
   if (shelves.value.queued.length > 0) {
-    console.log(`Shelf refresh found ${shelves.value.queued.length} more id(s) with no hash (search-only, not in the listing)...`);
+    console.log(`Classify pool has ${shelves.value.queued.length} id(s) with no hash; hydrating...`);
     await drainHydrateQueue(sync, shelves.value.queued, maxDetail);
   }
 
