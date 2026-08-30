@@ -182,19 +182,19 @@ describe('InMemorySkillsAdapter', () => {
   });
 
   it('install() records the skill as installed', async () => {
-    await skills.install('obra/react-patterns', 'cursor');
+    await skills.install('obra/react-patterns');
 
     const installed = skills.getInstalled();
     expect(installed.some((s) => s.id === 'obra/react-patterns')).toBe(true);
   });
 
-  it('install() records the skillId and target IDE', async () => {
-    await skills.install('obra/x', 'cursor');
-    await skills.install('obra/x', 'claude');
+  it('install() records each skillId, with no dock argument', async () => {
+    await skills.install('obra/x');
+    await skills.install('obra/y', { cwd: '/tmp/other' });
 
     expect(skills.getInstalls()).toEqual([
-      { skillId: 'obra/x', ide: 'cursor' },
-      { skillId: 'obra/x', ide: 'claude' },
+      { skillId: 'obra/x' },
+      { skillId: 'obra/y', cwd: '/tmp/other' },
     ]);
   });
 
@@ -203,7 +203,7 @@ describe('InMemorySkillsAdapter', () => {
   });
 
   it('reset() clears installed skills', async () => {
-    await skills.install('obra/react-patterns', 'cursor');
+    await skills.install('obra/react-patterns');
 
     skills.reset();
 

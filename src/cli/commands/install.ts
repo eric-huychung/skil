@@ -1,29 +1,29 @@
 import type { Command } from 'commander';
 import type { ICollectionEngine } from '../../interfaces/engine.js';
 import { isOk } from '../../core/result.js';
-import type { IDE } from '../../types/index.js';
 import { toOption } from '../ides.js';
 import { printOutcome, type CommandOutcome } from '../output.js';
 
-export async function runInstall(
-  engine: ICollectionEngine,
-  skillId: string,
-  targetIDE: IDE
-): Promise<CommandOutcome> {
-  const result = await engine.install(skillId, targetIDE);
+export async function runInstall(engine: ICollectionEngine, skillId: string): Promise<CommandOutcome> {
+  const result = await engine.install(skillId);
   if (!isOk(result)) {
     return { message: result.error.message, isError: true };
   }
-  return { message: `Installed skill '${skillId}'`, isError: false };
+  return { message: `Installed skill '${skillId}' into .agents/skills and .claude/skills`, isError: false };
 }
 
 export function registerInstallCommand(program: Command, engine: ICollectionEngine): void {
   program
     .command('install <skillId>')
-    .description('Install a skill into a dock skills dir via npx skills add')
-    .addOption(toOption().makeOptionMandatory())
-    .action(async (skillId: string, options: { to: IDE }) => {
-      console.log(`Installing '${skillId}' for ${options.to}...`);
-      printOutcome(await runInstall(engine, skillId, options.to));
+    .description('Install a market skill into the live trees (.agents/skills + .claude/skills)')
+    // Leftover flag from the dock-picker era: accepted but ignored so old
+    // scripts keep working until it is removed (see tasks/plan.md Task 10).
+    .addOption(toOption('--to <dock>', 'Ignored: installs always write the live trees'))
+    .action(async (skillId: string, _options: unknown, command: Command) => {
+      if (command.getOptionValueSource('to') === 'cli') {
+        console.log("Note: '--to' is ignored — installs write .agents/skills + .claude/skills.");
+      }
+      console.log(`Installing '${skillId}'...`);
+      printOutcome(await runInstall(engine, skillId));
     });
 }

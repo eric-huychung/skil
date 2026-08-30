@@ -6,7 +6,7 @@ import { InMemorySkillsAdapter } from '../../../../src/adapters/in-memory-skills
 import { InMemoryUsageCollector } from '../../../../src/adapters/in-memory-usage.js';
 import type { ICollectionEngine } from '../../../../src/interfaces/engine.js';
 import { isOk, ok, type Result } from '../../../../src/core/result.js';
-import type { IDE, MarketPreviewData, MarketSearchRow, ShelfRole, SkilBridge, ScanResult } from '../../shared/ipc.js';
+import type { MarketPreviewData, MarketSearchRow, ShelfRole, SkilBridge, ScanResult } from '../../shared/ipc.js';
 import { forgetFolder, rememberFolder } from '../../shared/recent-folders.js';
 import { marketInboxIds, mergeMarketInbox, rememberMarketSkill } from '../../shared/market-inbox.js';
 import { ThemeProvider } from './theme';
@@ -49,14 +49,12 @@ export class NpxLayoutSkillsAdapter extends InMemorySkillsAdapter {
     super();
   }
 
-  override async install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }) {
-    const result = await super.install(skillId, targetIDE, opts);
+  override async install(skillId: string, opts?: { cwd?: string }) {
+    const result = await super.install(skillId, opts);
     if (!isOk(result)) return result;
     const shortName = skillId.split('/').filter(Boolean).at(-1) ?? skillId;
     const prefix = opts?.cwd ? `${opts.cwd.replace(/\\/g, '/').replace(/\/+$/, '')}/` : '';
-    const root =
-      targetIDE === 'claude' ? '.claude/skills' : targetIDE === 'windsurf' ? '.windsurf/skills' : '.agents/skills';
-    this.disk.writeFile(`${prefix}${root}/${shortName}/SKILL.md`, this.skillBody || `# ${shortName}\n`);
+    this.disk.writeFile(`${prefix}.agents/skills/${shortName}/SKILL.md`, this.skillBody || `# ${shortName}\n`);
     return result;
   }
 }

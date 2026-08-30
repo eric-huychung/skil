@@ -101,7 +101,7 @@ describe('InboxPanel', () => {
   it('moves a Discover skill to Project after it lands on disk', async () => {
     const engine = createInMemoryEngine();
     engine.addToInbox('obra/react-patterns');
-    await engine.install('obra/react-patterns', 'cursor');
+    await engine.install('obra/react-patterns');
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<InboxPanel />, { bridge });
@@ -116,8 +116,8 @@ describe('InboxPanel', () => {
   it('offers Update on a Project row when the market copy moved', async () => {
     const { engine, fs, skills } = createInMemoryWorkspace();
     engine.addToInbox('obra/react-patterns');
-    await engine.install('obra/react-patterns', 'cursor');
-    fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# original\n');
+    await engine.install('obra/react-patterns');
+    fs.writeFile('.agents/skills/obra/react-patterns/SKILL.md', '# original\n');
     engine.scan();
     skills.setSkillHash('obra/react-patterns', 'market-moved');
     const bridge = createTestBridge(engine);
@@ -268,8 +268,9 @@ describe('InboxPanel', () => {
   it('offers Reset in preview when a market skill was edited on disk', async () => {
     const { engine, fs } = createNpxWorkspace();
     engine.addToInbox('obra/react-patterns');
-    await engine.install('obra/react-patterns', 'cursor');
-    fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+    await engine.install('obra/react-patterns');
+    fs.writeFile('.agents/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+    fs.writeFile('.claude/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
     engine.scan();
     const bridge = createTestBridge(engine);
 
@@ -286,8 +287,9 @@ describe('InboxPanel', () => {
   it('stacks the Reset confirm in front of the still-open preview', async () => {
     const { engine, fs } = createNpxWorkspace();
     engine.addToInbox('obra/react-patterns');
-    await engine.install('obra/react-patterns', 'cursor');
-    fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+    await engine.install('obra/react-patterns');
+    fs.writeFile('.agents/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+    fs.writeFile('.claude/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
     engine.scan();
     const bridge = createTestBridge(engine);
 
@@ -306,8 +308,9 @@ describe('InboxPanel', () => {
   it('keeps a Reset market skill in Project inbox after confirm', async () => {
     const { engine, fs, skills } = createNpxWorkspace();
     engine.addToInbox('obra/react-patterns');
-    await engine.install('obra/react-patterns', 'cursor');
-    fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+    await engine.install('obra/react-patterns');
+    fs.writeFile('.agents/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+    fs.writeFile('.claude/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
     engine.scan();
     skills.skillBody = '# from market\n';
     const bridge = createTestBridge(engine);
@@ -323,7 +326,11 @@ describe('InboxPanel', () => {
     expect(await screen.findByText('obra/react-patterns')).toBeInTheDocument();
     expect(screen.getByText('Project')).toBeInTheDocument();
     expect(engine.inbox()).toEqual(['obra/react-patterns']);
-    expect(fs.readFile('.cursor/skills/obra/react-patterns/SKILL.md')).toEqual({
+    expect(fs.readFile('.agents/skills/obra/react-patterns/SKILL.md')).toEqual({
+      ok: true,
+      value: '# from market\n',
+    });
+    expect(fs.readFile('.claude/skills/obra/react-patterns/SKILL.md')).toEqual({
       ok: true,
       value: '# from market\n',
     });
@@ -332,8 +339,9 @@ describe('InboxPanel', () => {
   it('shows a loading state while Reset fetches the market copy', async () => {
     const { engine, fs, skills } = createNpxWorkspace();
     engine.addToInbox('obra/react-patterns');
-    await engine.install('obra/react-patterns', 'cursor');
-    fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+    await engine.install('obra/react-patterns');
+    fs.writeFile('.agents/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+    fs.writeFile('.claude/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
     engine.scan();
     skills.skillBody = '# from market\n';
     let release: () => void = () => {};
@@ -369,10 +377,11 @@ describe('InboxPanel', () => {
   it('badges a synced market skill and an edited one', async () => {
     const { engine, fs } = createNpxWorkspace();
     engine.addToInbox('obra/react-patterns');
-    await engine.install('obra/react-patterns', 'cursor');
+    await engine.install('obra/react-patterns');
     engine.addToInbox('addyosmani/api-design');
-    await engine.install('addyosmani/api-design', 'cursor');
-    fs.writeFile('.cursor/skills/addyosmani/api-design/SKILL.md', '# edited locally\n');
+    await engine.install('addyosmani/api-design');
+    fs.writeFile('.agents/skills/addyosmani/api-design/SKILL.md', '# edited locally\n');
+    fs.writeFile('.claude/skills/addyosmani/api-design/SKILL.md', '# edited locally\n');
     engine.scan();
     const bridge = createTestBridge(engine);
 

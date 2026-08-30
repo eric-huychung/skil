@@ -14,14 +14,17 @@ function buildEngine(skills: InMemorySkillsAdapter = new InMemorySkillsAdapter()
 }
 
 describe('runInstall', () => {
-  it('installs a skill and reports success', async () => {
+  it('installs a skill into the live pair and reports success', async () => {
     const { engine } = buildEngine();
 
-    const outcome = await runInstall(engine, 'obra/react-patterns', 'cursor');
+    const outcome = await runInstall(engine, 'obra/react-patterns');
 
     expect(outcome.isError).toBe(false);
-    expect(outcome.message).toBe("Installed skill 'obra/react-patterns'");
-    expect(engine.skills()[0]?.deployedTo).toEqual([expect.objectContaining({ ide: 'cursor' })]);
+    expect(outcome.message).toBe("Installed skill 'obra/react-patterns' into .agents/skills and .claude/skills");
+    expect(engine.skills()[0]?.paths).toEqual([
+      '.agents/skills/obra/react-patterns',
+      '.claude/skills/obra/react-patterns',
+    ]);
   });
 
   it('reports an error when install fails', async () => {
@@ -29,7 +32,7 @@ describe('runInstall', () => {
     skills.setInstallError(new Error('npx: command failed'));
     const { engine } = buildEngine(skills);
 
-    const outcome = await runInstall(engine, 'obra/react-patterns', 'cursor');
+    const outcome = await runInstall(engine, 'obra/react-patterns');
 
     expect(outcome.isError).toBe(true);
     expect(outcome.message).toContain('command failed');
@@ -38,40 +41,21 @@ describe('runInstall', () => {
 });
 
 describe('registerInstallCommand', () => {
-  it('defaults --to to cursor', () => {
+  it('installs with no dock argument', () => {
     const { engine, skills } = buildEngine();
     const program = createProgram(engine);
     program.exitOverride();
 
     program.parse(['install', 'obra/x'], { from: 'user' });
-    expect(skills.getInstalls()).toEqual([expect.objectContaining({ skillId: 'obra/x', ide: 'cursor' })]);
+    expect(skills.getInstalls()).toEqual([{ skillId: 'obra/x' }]);
   });
 
-  it('accepts --to codex', () => {
+  it('ignores a leftover --to dock and still writes the live pair', () => {
     const { engine, skills } = buildEngine();
     const program = createProgram(engine);
     program.exitOverride();
 
     program.parse(['install', 'obra/x', '--to', 'codex'], { from: 'user' });
-    expect(skills.getInstalls()).toEqual([expect.objectContaining({ skillId: 'obra/x', ide: 'codex' })]);
-  });
-
-  it('accepts --to copilot', () => {
-    const { engine, skills } = buildEngine();
-    const program = createProgram(engine);
-    program.exitOverride();
-
-    program.parse(['install', 'obra/x', '--to', 'copilot'], { from: 'user' });
-    expect(skills.getInstalls()).toEqual([expect.objectContaining({ skillId: 'obra/x', ide: 'copilot' })]);
-  });
-
-  it('rejects an unknown IDE before the engine', () => {
-    const { engine, skills } = buildEngine();
-    const program = createProgram(engine);
-    program.exitOverride();
-
-    expect(() => program.parse(['install', 'obra/x', '--to', 'vscode'], { from: 'user' })).toThrow();
-    expect(skills.getInstalls()).toEqual([]);
-    expect(engine.skills()).toEqual([]);
+    expect(skills.getInstalls()).toEqual([{ skillId: 'obra/x' }]);
   });
 });

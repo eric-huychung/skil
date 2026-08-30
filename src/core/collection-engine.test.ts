@@ -10,24 +10,10 @@ import { RealFileSystemAdapter } from '../adapters/real-fs-adapter.js';
 import type { IDE } from '../types/index.js';
 
 /**
- * `npx skills add --agent` project dirs (vercel-labs/skills). Cursor, Codex,
- * and Copilot dump into `.agents/skills`, not their dock folders. Folder
- * name is the last id segment.
+ * Mimics `npx skills add --agent universal` (vercel-labs/skills): dumps
+ * into `.agents/skills/<short-name>`, where the folder name is the last
+ * id segment. The engine relocates and mirrors from there.
  */
-function npxProjectSkillRoot(ide: IDE): string {
-  switch (ide) {
-    case 'cursor':
-    case 'agents':
-    case 'codex':
-    case 'copilot':
-      return '.agents/skills';
-    case 'claude':
-      return '.claude/skills';
-    case 'windsurf':
-      return '.windsurf/skills';
-  }
-}
-
 class NpxLayoutSkillsAdapter extends InMemorySkillsAdapter {
   skillBody = '';
 
@@ -35,15 +21,15 @@ class NpxLayoutSkillsAdapter extends InMemorySkillsAdapter {
     super();
   }
 
-  override async install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }) {
-    const result = await super.install(skillId, targetIDE, opts);
+  override async install(skillId: string, opts?: { cwd?: string }) {
+    const result = await super.install(skillId, opts);
     if (!isOk(result)) {
       return result;
     }
     const shortName = skillId.split('/').filter(Boolean).at(-1) ?? skillId;
     const prefix = opts?.cwd ? `${opts.cwd.replace(/\\/g, '/').replace(/\/+$/, '')}/` : '';
     this.disk.writeFile(
-      `${prefix}${npxProjectSkillRoot(targetIDE)}/${shortName}/SKILL.md`,
+      `${prefix}.agents/skills/${shortName}/SKILL.md`,
       this.skillBody || `# ${shortName}\n`
     );
     return result;
@@ -652,7 +638,7 @@ describe('CollectionEngine', () => {
         expect(result.value.succeeded).toContain('.claude/skills/obra/react-patterns');
         expect(result.value.failures).toEqual([]);
       }
-      expect(skills.getInstalls()).toEqual([{ skillId: 'obra/react-patterns', ide: 'claude' }]);
+      expect(skills.getInstalls()).toEqual([{ skillId: 'obra/react-patterns' }]);
     });
 
     it('exports filed skills to Codex without a command file', async () => {
@@ -810,7 +796,7 @@ describe('CollectionEngine', () => {
   });
 
   describe('market skill export (npx layout)', () => {
-    it('keeps a Discover skill on the Cursor command after save, in .cursor not .agents', async () => {
+    it('keeps a Discover skill on the Cursor command after save, with no stray npx short folder', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
       engine = new CollectionEngine(fs, npx);
 
@@ -836,39 +822,59 @@ describe('CollectionEngine', () => {
   });
 
   describe('install', () => {
-    it('installs a skill via the skills adapter and records deployedTo on the catalog', async () => {
-      const result = await engine.install('obra/react-patterns', 'cursor');
+    it('installs via the skills adapter and records both live paths on the catalog', async () => {
+      const result = await engine.install('obra/react-patterns');
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.id).toBe('obra/react-patterns');
         expect(result.value.source).toBe('skills.sh');
-        expect(result.value.paths).toEqual(['.cursor/skills/obra/react-patterns']);
-        expect(result.value.deployedTo).toEqual([
-          expect.objectContaining({
-            ide: 'cursor',
-            path: '.cursor/skills/obra/react-patterns',
-            installedAt: expect.any(String),
-          }),
+        expect(result.value.paths).toEqual([
+          '.agents/skills/obra/react-patterns',
+          '.claude/skills/obra/react-patterns',
         ]);
         expect(engine.skills()).toEqual([result.value]);
       }
       expect(engine.list()).toEqual([]);
-      expect(isErr(fs.readFile('.cursor/commands/obra/react-patterns.md'))).toBe(true);
+    });
+
+    it('writes both live folders with one npx run and removes the short-name dump', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, npx);
+
+      const result = await engine.install('obra/react-patterns');
+
+      expect(isOk(result)).toBe(true);
+      expect(isOk(fs.readFile('.agents/skills/obra/react-patterns/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('.claude/skills/obra/react-patterns/SKILL.md'))).toBe(true);
+      expect(isErr(fs.readFile('.agents/skills/react-patterns/SKILL.md'))).toBe(true);
+      expect(npx.getInstalls()).toEqual([{ skillId: 'obra/react-patterns' }]);
+    });
+
+    it('never creates a leftover skill root', async () => {
+      const npx = new NpxLayoutSkillsAdapter(fs);
+      engine = new CollectionEngine(fs, npx);
+
+      await engine.install('obra/react-patterns');
+
+      for (const root of ['.cursor', '.codex', '.github', '.windsurf']) {
+        expect(isErr(fs.readFile(`${root}/skills/obra/react-patterns/SKILL.md`))).toBe(true);
+      }
     });
 
     it('stamps originHash from the copied SKILL.md and keeps it after the file is edited', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
       engine = new CollectionEngine(fs, npx);
 
-      const result = await engine.install('obra/react-patterns', 'cursor');
+      const result = await engine.install('obra/react-patterns');
 
       expect(isOk(result)).toBe(true);
       if (!isOk(result)) return;
       expect(result.value.originHash).toBe(result.value.hash);
       expect(result.value.originHash).toMatch(/^[a-f0-9]{64}$/);
 
-      fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      fs.writeFile('.agents/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      fs.writeFile('.claude/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
       engine.scan();
 
       const row = engine.skills()[0];
@@ -879,114 +885,52 @@ describe('CollectionEngine', () => {
     it('persists the catalog deploy and does not require the id to be filed', async () => {
       engine.addToInbox('obra/react-patterns');
 
-      await engine.install('obra/react-patterns', 'cursor');
+      await engine.install('obra/react-patterns');
 
       expect(engine.inbox()).toEqual(['obra/react-patterns']);
-      const persisted = fs.readJSON<{ skills: Array<{ id: string; deployedTo: Array<{ ide: string }> }> }>(STATE_PATH);
+      const persisted = fs.readJSON<{ skills: Array<{ id: string; paths: string[] }> }>(STATE_PATH);
       expect(isOk(persisted)).toBe(true);
       if (isOk(persisted)) {
         expect(persisted.value.skills).toEqual([
           expect.objectContaining({
             id: 'obra/react-patterns',
             source: 'skills.sh',
-            deployedTo: [expect.objectContaining({ ide: 'cursor' })],
+            paths: ['.agents/skills/obra/react-patterns', '.claude/skills/obra/react-patterns'],
           }),
         ]);
       }
     });
 
-    it('keeps source local when installing a scanned skill to another IDE', async () => {
+    it('keeps source local when installing an already-scanned skill', async () => {
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
       engine.scan();
 
-      const result = await engine.install('tdd', 'claude');
+      const result = await engine.install('tdd');
 
       expect(isOk(result)).toBe(true);
       const record = engine.skills().find((s) => s.id === 'tdd');
       expect(record?.source).toBe('local');
-      expect(record?.paths).toEqual(['.cursor/skills/tdd', '.claude/skills/tdd']);
-      expect(record?.deployedTo).toEqual([
-        expect.objectContaining({ ide: 'claude', path: '.claude/skills/tdd' }),
-      ]);
+      expect(record?.paths).toEqual(['.cursor/skills/tdd', '.agents/skills/tdd', '.claude/skills/tdd']);
     });
 
-    it('installs to Codex under .codex/skills and records deployedTo', async () => {
-      const result = await engine.install('obra/x', 'codex');
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value.paths).toEqual(['.codex/skills/obra/x']);
-        expect(result.value.deployedTo).toEqual([
-          expect.objectContaining({ ide: 'codex', path: '.codex/skills/obra/x' }),
-        ]);
-      }
-      expect(isErr(fs.readFile('.codex/commands/obra/x.md'))).toBe(true);
-    });
-
-    it('installs to Copilot under .github/skills and records deployedTo', async () => {
-      const result = await engine.install('obra/x', 'copilot');
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value.paths).toEqual(['.github/skills/obra/x']);
-        expect(result.value.deployedTo).toEqual([
-          expect.objectContaining({ ide: 'copilot', path: '.github/skills/obra/x' }),
-        ]);
-      }
-    });
-
-    it('places a Cursor install under .cursor/skills and removes the vercel .agents dump', async () => {
+    it('installing twice keeps one catalog row and one live pair', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
       engine = new CollectionEngine(fs, npx);
 
-      const result = await engine.install('obra/react-patterns', 'cursor');
-
-      expect(isOk(result)).toBe(true);
-      expect(isOk(fs.readFile('.cursor/skills/obra/react-patterns/SKILL.md'))).toBe(true);
-      expect(isErr(fs.readFile('.agents/skills/react-patterns/SKILL.md'))).toBe(true);
-      expect(engine.skills()[0]?.paths).toEqual(['.cursor/skills/obra/react-patterns']);
-    });
-
-    it('places an agents install under .agents/skills', async () => {
-      const npx = new NpxLayoutSkillsAdapter(fs);
-      engine = new CollectionEngine(fs, npx);
-
-      const result = await engine.install('obra/react-patterns', 'agents');
-
-      expect(isOk(result)).toBe(true);
-      expect(isOk(fs.readFile('.agents/skills/obra/react-patterns/SKILL.md'))).toBe(true);
-      expect(engine.skills()[0]?.paths).toEqual(['.agents/skills/obra/react-patterns']);
-    });
-
-    it('places Codex and Copilot installs in their dock folders after a vercel .agents dump', async () => {
-      const npx = new NpxLayoutSkillsAdapter(fs);
-      engine = new CollectionEngine(fs, npx);
-
-      await engine.install('obra/x', 'codex');
-      expect(isOk(fs.readFile('.codex/skills/obra/x/SKILL.md'))).toBe(true);
-      expect(isErr(fs.readFile('.agents/skills/x/SKILL.md'))).toBe(true);
-
-      await engine.install('obra/y', 'copilot');
-      expect(isOk(fs.readFile('.github/skills/obra/y/SKILL.md'))).toBe(true);
-      expect(isErr(fs.readFile('.agents/skills/y/SKILL.md'))).toBe(true);
-    });
-
-    it('upserts deployedTo when the same skill is installed to a second IDE', async () => {
-      await engine.install('obra/x', 'cursor');
-      await engine.install('obra/x', 'windsurf');
+      await engine.install('obra/x');
+      await engine.install('obra/x');
 
       expect(engine.skills()).toHaveLength(1);
-      expect(engine.skills()[0]?.deployedTo.map((d) => d.ide)).toEqual(['cursor', 'windsurf']);
       expect(engine.skills()[0]?.paths).toEqual([
-        '.cursor/skills/obra/x',
-        '.windsurf/skills/obra/x',
+        '.agents/skills/obra/x',
+        '.claude/skills/obra/x',
       ]);
     });
 
     it('returns an error when the skills adapter fails to install', async () => {
       skills.setInstallError(new Error('npx: command failed'));
 
-      const result = await engine.install('obra/react-patterns', 'cursor');
+      const result = await engine.install('obra/react-patterns');
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
@@ -998,7 +942,7 @@ describe('CollectionEngine', () => {
       engine.create('frontend', []);
       skills.setInstallError(new Error('npx: command failed'));
 
-      await engine.install('obra/react-patterns', 'cursor');
+      await engine.install('obra/react-patterns');
 
       expect(engine.skills()).toEqual([]);
       const persisted = fs.readJSON<{ skills: unknown[] }>(STATE_PATH);
@@ -1012,7 +956,7 @@ describe('CollectionEngine', () => {
     it('returns an error and does not keep the deploy when persisting fails', async () => {
       fs.setWriteError(new Error('Disk full'));
 
-      const result = await engine.install('obra/react-patterns', 'cursor');
+      const result = await engine.install('obra/react-patterns');
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
@@ -1021,7 +965,7 @@ describe('CollectionEngine', () => {
       expect(engine.skills()).toEqual([]);
 
       fs.setWriteError(null);
-      await engine.install('obra/react-patterns', 'cursor');
+      await engine.install('obra/react-patterns');
       const persisted = fs.readJSON<{ skills: Array<{ id: string }> }>(STATE_PATH);
       expect(isOk(persisted)).toBe(true);
       if (isOk(persisted)) {
@@ -1031,19 +975,17 @@ describe('CollectionEngine', () => {
     });
 
     it('installs into dest and keeps catalog state on the current workspace', async () => {
-      const result = await engine.install('obra/react-patterns', 'cursor', { dest: '/tmp/other-project' });
+      const result = await engine.install('obra/react-patterns', { dest: '/tmp/other-project' });
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.value.deployedTo).toEqual([
-          expect.objectContaining({
-            ide: 'cursor',
-            path: '/tmp/other-project/.cursor/skills/obra/react-patterns',
-          }),
+        expect(result.value.paths).toEqual([
+          '/tmp/other-project/.agents/skills/obra/react-patterns',
+          '/tmp/other-project/.claude/skills/obra/react-patterns',
         ]);
       }
       expect(skills.getInstalls()).toEqual([
-        { skillId: 'obra/react-patterns', ide: 'cursor', cwd: '/tmp/other-project' },
+        { skillId: 'obra/react-patterns', cwd: '/tmp/other-project' },
       ]);
       const persisted = fs.readJSON<{ skills: Array<{ id: string }> }>(STATE_PATH);
       expect(isOk(persisted)).toBe(true);
@@ -1057,7 +999,7 @@ describe('CollectionEngine', () => {
     it('reports update when the market hash moved and the disk copy was not edited', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
       engine = new CollectionEngine(fs, npx);
-      await engine.install('obra/react-patterns', 'cursor');
+      await engine.install('obra/react-patterns');
       npx.setSkillHash('obra/react-patterns', 'market-moved');
 
       const result = await engine.originChecks();
@@ -1071,8 +1013,9 @@ describe('CollectionEngine', () => {
     it('reports edited when the on-disk hash no longer matches originHash', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
       engine = new CollectionEngine(fs, npx);
-      await engine.install('obra/react-patterns', 'cursor');
-      fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      await engine.install('obra/react-patterns');
+      fs.writeFile('.agents/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      fs.writeFile('.claude/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
       engine.scan();
 
       const result = await engine.originChecks();
@@ -1085,17 +1028,21 @@ describe('CollectionEngine', () => {
   });
 
   describe('updateFromMarket', () => {
-    it('overwrites an unedited copy and refreshes originHash', async () => {
+    it('overwrites an unedited copy in both live trees and refreshes originHash', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
       engine = new CollectionEngine(fs, npx);
-      await engine.install('obra/react-patterns', 'cursor');
+      await engine.install('obra/react-patterns');
       npx.skillBody = '# from market\n';
 
       const result = await engine.updateFromMarket('obra/react-patterns');
 
       expect(isOk(result)).toBe(true);
       if (!isOk(result)) return;
-      expect(fs.readFile('.cursor/skills/obra/react-patterns/SKILL.md')).toEqual({
+      expect(fs.readFile('.agents/skills/obra/react-patterns/SKILL.md')).toEqual({
+        ok: true,
+        value: '# from market\n',
+      });
+      expect(fs.readFile('.claude/skills/obra/react-patterns/SKILL.md')).toEqual({
         ok: true,
         value: '# from market\n',
       });
@@ -1106,8 +1053,9 @@ describe('CollectionEngine', () => {
     it('refuses to overwrite an edited copy unless replaceEdited is set', async () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
       engine = new CollectionEngine(fs, npx);
-      await engine.install('obra/react-patterns', 'cursor');
-      fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      await engine.install('obra/react-patterns');
+      fs.writeFile('.agents/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      fs.writeFile('.claude/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
       engine.scan();
 
       const blocked = await engine.updateFromMarket('obra/react-patterns');
@@ -1116,7 +1064,11 @@ describe('CollectionEngine', () => {
       npx.skillBody = '# from market\n';
       const reset = await engine.updateFromMarket('obra/react-patterns', { replaceEdited: true });
       expect(isOk(reset)).toBe(true);
-      expect(fs.readFile('.cursor/skills/obra/react-patterns/SKILL.md')).toEqual({
+      expect(fs.readFile('.agents/skills/obra/react-patterns/SKILL.md')).toEqual({
+        ok: true,
+        value: '# from market\n',
+      });
+      expect(fs.readFile('.claude/skills/obra/react-patterns/SKILL.md')).toEqual({
         ok: true,
         value: '# from market\n',
       });
@@ -1126,15 +1078,16 @@ describe('CollectionEngine', () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
       engine = new CollectionEngine(fs, npx);
       engine.addToInbox('obra/react-patterns');
-      await engine.install('obra/react-patterns', 'cursor');
-      fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      await engine.install('obra/react-patterns');
+      fs.writeFile('.agents/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      fs.writeFile('.claude/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
       engine.scan();
       npx.setInstallError(new Error('npx failed'));
 
       const result = await engine.updateFromMarket('obra/react-patterns', { replaceEdited: true });
 
       expect(isErr(result)).toBe(true);
-      expect(fs.readFile('.cursor/skills/obra/react-patterns/SKILL.md')).toEqual({
+      expect(fs.readFile('.agents/skills/obra/react-patterns/SKILL.md')).toEqual({
         ok: true,
         value: '# edited locally\n',
       });
@@ -1145,8 +1098,9 @@ describe('CollectionEngine', () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
       engine = new CollectionEngine(fs, npx);
       engine.addToInbox('obra/react-patterns');
-      await engine.install('obra/react-patterns', 'cursor');
-      fs.writeFile('.cursor/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      await engine.install('obra/react-patterns');
+      fs.writeFile('.agents/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
+      fs.writeFile('.claude/skills/obra/react-patterns/SKILL.md', '# edited locally\n');
       engine.scan();
       npx.skillBody = '# from market\n';
 
@@ -1157,7 +1111,7 @@ describe('CollectionEngine', () => {
 
       expect(engine.inbox()).toEqual(['obra/react-patterns']);
       expect(engine.skills().map((skill) => skill.id)).toEqual(['obra/react-patterns']);
-      expect(fs.readFile('.cursor/skills/obra/react-patterns/SKILL.md')).toEqual({
+      expect(fs.readFile('.agents/skills/obra/react-patterns/SKILL.md')).toEqual({
         ok: true,
         value: '# from market\n',
       });
@@ -1189,17 +1143,18 @@ describe('CollectionEngine', () => {
   });
 
   describe('loading installed skills on startup', () => {
-    it('does not treat leftover getInstalled() as the catalog; install records deployedTo', async () => {
+    it('does not treat leftover getInstalled() as the catalog; install records the live pair', async () => {
       skills.seedInstalled([{ id: 'obra/react-patterns', source: 'skills.sh', installedAt: '2024-01-01T00:00:00.000Z' }]);
       const loadedEngine = new CollectionEngine(fs, skills);
 
       expect(loadedEngine.skills()).toEqual([]);
 
-      await loadedEngine.install('addyosmani/performance-review', 'cursor');
+      await loadedEngine.install('addyosmani/performance-review');
 
       expect(loadedEngine.skills().map((s) => s.id)).toEqual(['addyosmani/performance-review']);
-      expect(loadedEngine.skills()[0]?.deployedTo).toEqual([
-        expect.objectContaining({ ide: 'cursor' }),
+      expect(loadedEngine.skills()[0]?.paths).toEqual([
+        '.agents/skills/addyosmani/performance-review',
+        '.claude/skills/addyosmani/performance-review',
       ]);
     });
   });
@@ -1527,7 +1482,7 @@ describe('CollectionEngine', () => {
       const npx = new NpxLayoutSkillsAdapter(fs);
       engine = new CollectionEngine(fs, npx);
       engine.addToInbox('obra/react-patterns');
-      await engine.install('obra/react-patterns', 'cursor');
+      await engine.install('obra/react-patterns');
       fs.writeFile('.agents/skills/react-patterns/SKILL.md', '# react-patterns\n');
 
       const result = engine.scan();
@@ -1539,7 +1494,8 @@ describe('CollectionEngine', () => {
       expect(engine.skills().map((skill) => skill.id)).toEqual(['obra/react-patterns']);
       expect(engine.inbox()).toEqual(['obra/react-patterns']);
       expect(engine.skills()[0]?.paths).toEqual([
-        '.cursor/skills/obra/react-patterns',
+        '.claude/skills/obra/react-patterns',
+        '.agents/skills/obra/react-patterns',
         '.agents/skills/react-patterns',
       ]);
     });

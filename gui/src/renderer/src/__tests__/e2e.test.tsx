@@ -55,7 +55,8 @@ describe('GUI workflow (real engine)', () => {
     if (isOk(written)) {
       expect(written.value).toContain('generated_by: skil');
     }
-    expect(engine.skills()[0]?.deployedTo.map((row) => row.ide)).toEqual(['claude']);
+    // Discover-only ids now install to the live pair; the Claude export dock is covered by it.
+    expect(engine.skills()[0]?.deployedTo.map((row) => row.ide)).toEqual(['agents', 'claude']);
     expect(engine.list()).toHaveLength(1);
   });
 

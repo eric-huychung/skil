@@ -40,15 +40,17 @@ export interface ICollectionEngine {
   list(ide?: IDE): Collection[];
 
   /**
-   * Installs a skill via the SkillsAdapter into `targetIDE`, then upserts
-   * the catalog `SkillRecord` (`source`, `paths`, `deployedTo`). Does not
-   * write command files and does not require the id to be filed. `dest`
-   * writes into that folder without rebinding the workspace. Returns an
-   * error Result if the adapter fails, or if the updated state can't
-   * be saved (in which case no deploy is recorded — `install` can be
-   * safely retried).
+   * Installs a market skill into the live pair: one `npx skills add`
+   * into `.agents/skills/<id>`, then a `copyDir` into
+   * `.claude/skills/<id>`. Never writes a leftover root. Upserts the
+   * catalog `SkillRecord` (`source: 'skills.sh'`, both live `paths`,
+   * `originHash` stamped). Does not write command files and does not
+   * require the id to be filed. `dest` writes into that folder without
+   * rebinding the workspace. Returns an error Result if the adapter
+   * fails, or if the updated state can't be saved (in which case no
+   * deploy is recorded — `install` can be safely retried).
    */
-  install(skillId: string, targetIDE: IDE, opts?: { dest?: string; replace?: boolean }): Promise<Result<SkillRecord>>;
+  install(skillId: string, opts?: { dest?: string; replace?: boolean }): Promise<Result<SkillRecord>>;
 
   /**
    * Searches skills.sh for skills matching `query`, via the SkillsAdapter.

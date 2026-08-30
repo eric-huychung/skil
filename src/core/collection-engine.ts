@@ -33,9 +33,8 @@ import {
 import {
   COMMAND_DIR_BY_IDE,
   COMMAND_EXTENSION_BY_IDE,
+  LIVE_IDES,
   liveSkillPaths,
-  NPX_PROJECT_SKILL_ROOT,
-  parkedSkillPath,
   SCAN_SKILL_ROOTS,
   SKILL_ROOTS,
   SKILL_ROOT_BY_IDE,
@@ -364,47 +363,56 @@ export class CollectionEngine implements ICollectionEngine {
 
   async install(
     skillId: string,
-    targetIDE: IDE,
     opts?: { dest?: string; replace?: boolean; refreshOrigin?: boolean }
   ): Promise<Result<SkillRecord>> {
-    const deployPath = underRoot(opts?.dest, `${SKILL_ROOT_BY_IDE[targetIDE]}/${skillId}`);
+    const livePaths = liveSkillPaths(skillId).map((path) => underRoot(opts?.dest, path));
+    const [agentsPath, ...mirrorPaths] = livePaths as [string, ...string[]];
 
-    const result = await this.skillsAdapter.install(
-      skillId,
-      targetIDE,
-      opts?.dest ? { cwd: opts.dest } : undefined
-    );
+    const result = await this.skillsAdapter.install(skillId, opts?.dest ? { cwd: opts.dest } : undefined);
     if (!isOk(result)) {
       return err(result.error);
     }
 
-    const placed = this.relocateNpxInstall(skillId, targetIDE, opts?.dest, opts?.replace === true);
+    const placed = this.relocateNpxInstall(skillId, opts?.dest, opts?.replace === true);
     if (!isOk(placed)) {
       return placed;
+    }
+
+    for (const mirrorPath of mirrorPaths) {
+      const mirrored = this.mirrorLiveInstall(skillId, agentsPath, mirrorPath, opts?.replace === true);
+      if (!isOk(mirrored)) {
+        return mirrored;
+      }
     }
 
     const installedAt = new Date().toISOString();
     const existingIndex = this.state.skills.findIndex((s) => s.id === skillId);
     const previous = existingIndex >= 0 ? cloneSkillRecord(this.state.skills[existingIndex]) : undefined;
-    const hash = hashSkillAt(this.fs, deployPath) ?? previous?.hash ?? '';
+    const hash = hashSkillAt(this.fs, agentsPath) ?? previous?.hash ?? '';
     const originHash = opts?.refreshOrigin
       ? hash || previous?.originHash
       : previous?.originHash ?? (hash || undefined);
+
+    const deploys = LIVE_IDES.map((ide, index) => ({
+      ide,
+      path: livePaths[index] as string,
+      installedAt,
+    }));
 
     const record: SkillRecord = previous
       ? {
           ...previous,
           hash,
           ...(originHash !== undefined ? { originHash } : {}),
-          paths: previous.paths.includes(deployPath) ? previous.paths : [...previous.paths, deployPath],
-          deployedTo: upsertDeploy(previous.deployedTo, { ide: targetIDE, path: deployPath, installedAt }),
+          paths: [...previous.paths, ...livePaths.filter((path) => !previous.paths.includes(path))],
+          deployedTo: deploys.reduce(upsertDeploy, previous.deployedTo),
         }
       : {
           id: skillId,
           hash,
           ...(hash ? { originHash: hash } : {}),
-          paths: [deployPath],
-          deployedTo: [{ ide: targetIDE, path: deployPath, installedAt }],
+          paths: [...livePaths],
+          deployedTo: deploys,
           source: 'skills.sh',
         };
 
@@ -424,7 +432,7 @@ export class CollectionEngine implements ICollectionEngine {
       return err(new Error(`Failed to save installed skill '${skillId}': ${persistResult.error.message}`));
     }
 
-    this.writtenPaths = [deployPath, `${deployPath}/SKILL.md`];
+    this.writtenPaths = livePaths.flatMap((path) => [path, `${path}/SKILL.md`]);
     return ok(record);
   }
 
@@ -483,27 +491,41 @@ export class CollectionEngine implements ICollectionEngine {
       }
 
       const record = this.state.skills.find((skill) => skill.id === skillId);
-      const source = record?.paths.find(
+      let source = record?.paths.find(
         (folder) => folder !== skillFolder && isOk(this.fs.readFile(`${folder}/SKILL.md`))
       );
-      if (source) {
-        const copyResult = this.fs.copyDir(source, skillFolder);
-        if (!isOk(copyResult)) {
-          failures.push(`'${skillId}': ${copyResult.error.message}`);
+
+      if (!source) {
+        // Discover-only id: install writes the live pair, then the dest
+        // dock (if it is not one of the live trees) is copied from there.
+        const installed = await this.install(skillId, opts?.dest ? { dest: opts.dest } : undefined);
+        if (!isOk(installed)) {
+          failures.push(`'${skillId}': ${installed.error.message}`);
           continue;
         }
-        this.recordLocalDeploy(skillId, targetIDE, skillFolder);
-        succeeded.push(skillFolder);
-        copied = true;
-        continue;
+        if (isOk(this.fs.readFile(`${skillFolder}/SKILL.md`))) {
+          succeeded.push(skillFolder);
+          continue;
+        }
+        source = installed.value.paths.find(
+          (folder) => folder !== skillFolder && isOk(this.fs.readFile(`${folder}/SKILL.md`))
+        );
+        if (!source) {
+          // Adapter reported success but delivered no folder (in-memory
+          // doubles): trust it, same as the pre-pivot install path did.
+          succeeded.push(skillFolder);
+          continue;
+        }
       }
 
-      const installed = await this.install(skillId, targetIDE, opts?.dest ? { dest: opts.dest } : undefined);
-      if (!isOk(installed)) {
-        failures.push(`'${skillId}': ${installed.error.message}`);
+      const copyResult = this.fs.copyDir(source, skillFolder);
+      if (!isOk(copyResult)) {
+        failures.push(`'${skillId}': ${copyResult.error.message}`);
         continue;
       }
+      this.recordLocalDeploy(skillId, targetIDE, skillFolder);
       succeeded.push(skillFolder);
+      copied = true;
     }
 
     if (copied) {
@@ -1286,24 +1308,13 @@ export class CollectionEngine implements ICollectionEngine {
     }
 
     const keepInInbox = this.state.inbox.includes(skillId);
-    const docks =
-      record.deployedTo.length > 0
-        ? [...new Set(record.deployedTo.map((deploy) => deploy.ide))]
-        : [DEFAULT_IDE];
-    let last: SkillRecord | undefined;
-    for (const dock of docks) {
-      const installed = await this.install(skillId, dock, {
-        dest: opts?.dest,
-        replace: true,
-        refreshOrigin: true,
-      });
-      if (!isOk(installed)) {
-        return installed;
-      }
-      last = installed.value;
-    }
-    if (!last) {
-      return err(new Error(`Skill '${skillId}' has no market origin to update from.`));
+    const installed = await this.install(skillId, {
+      dest: opts?.dest,
+      replace: true,
+      refreshOrigin: true,
+    });
+    if (!isOk(installed)) {
+      return installed;
     }
     if (keepInInbox && !this.state.inbox.includes(skillId)) {
       this.state.inbox.push(skillId);
@@ -1312,7 +1323,7 @@ export class CollectionEngine implements ICollectionEngine {
         return err(new Error(`Failed to save inbox: ${persistResult.error.message}`));
       }
     }
-    return ok(last);
+    return ok(installed.value);
   }
 
   private dropSkillId(id: string): void {
@@ -1535,23 +1546,18 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   /**
-   * `npx skills add --agent cursor` lands in `.agents/skills/<short-name>`.
-   * Move that folder to this IDE's skills tree under the market id so
-   * scan does not treat the id as gone and strip it from the command.
+   * `npx skills add --agent universal` lands in `.agents/skills/<short-name>`.
+   * Move that folder under the full market id so scan does not treat the id
+   * as gone and strip it from the command.
    */
-  private relocateNpxInstall(
-    skillId: string,
-    targetIDE: IDE,
-    dest?: string,
-    replace?: boolean
-  ): Result<void> {
-    const deployPath = underRoot(dest, `${SKILL_ROOT_BY_IDE[targetIDE]}/${skillId}`);
+  private relocateNpxInstall(skillId: string, dest?: string, replace?: boolean): Result<void> {
+    const deployPath = underRoot(dest, `${SKILL_ROOT_BY_IDE.agents}/${skillId}`);
     const destExists = isOk(this.fs.readFile(`${deployPath}/SKILL.md`));
     if (destExists && !replace) {
       return ok(undefined);
     }
 
-    const npxFolder = underRoot(dest, `${NPX_PROJECT_SKILL_ROOT[targetIDE]}/${skillFolderName(skillId)}`);
+    const npxFolder = underRoot(dest, `${SKILL_ROOT_BY_IDE.agents}/${skillFolderName(skillId)}`);
     const npxExists = npxFolder !== deployPath && isOk(this.fs.readFile(`${npxFolder}/SKILL.md`));
     if (!npxExists) {
       if (replace) {
@@ -1576,6 +1582,34 @@ export class CollectionEngine implements ICollectionEngine {
     const removed = this.fs.removeDir(npxFolder);
     if (!isOk(removed)) {
       return err(new Error(`Failed to remove stray skill folder '${npxFolder}': ${removed.error.message}`));
+    }
+    return ok(undefined);
+  }
+
+  /**
+   * Second half of a market install: mirror the fresh `.agents` copy into
+   * the other live tree. Skips when there is nothing on disk to mirror
+   * (an adapter that failed to deliver is surfaced by the empty hash, not
+   * a copy error) or when the mirror already exists and this is not a
+   * replace.
+   */
+  private mirrorLiveInstall(skillId: string, from: string, to: string, replace: boolean): Result<void> {
+    if (!isOk(this.fs.readFile(`${from}/SKILL.md`))) {
+      return ok(undefined);
+    }
+    const destExists = isOk(this.fs.readFile(`${to}/SKILL.md`));
+    if (destExists) {
+      if (!replace) {
+        return ok(undefined);
+      }
+      const cleared = this.fs.removeDir(to);
+      if (!isOk(cleared)) {
+        return err(new Error(`Failed to replace skill '${skillId}' at ${to}: ${cleared.error.message}`));
+      }
+    }
+    const copied = this.fs.copyDir(from, to);
+    if (!isOk(copied)) {
+      return err(new Error(`Failed to place skill '${skillId}' in ${to}: ${copied.error.message}`));
     }
     return ok(undefined);
   }
