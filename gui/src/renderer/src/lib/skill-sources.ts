@@ -1,11 +1,12 @@
-import type { IDE } from '../../../shared/ipc';
+import type { IDE, SkillRecord } from '../../../shared/ipc';
 import {
   SKILL_SOURCES,
   SKILL_SOURCE_BY_IDE,
+  skillPathState,
   type SkillSourceFolder,
 } from '../../../../../src/core/dock-layout.js';
 
-export { SKILL_SOURCES, type SkillSourceFolder };
+export { SKILL_SOURCES, skillPathState, type SkillSourceFolder };
 
 export const SOURCE_BY_IDE: Record<IDE, SkillSourceFolder> = SKILL_SOURCE_BY_IDE;
 
@@ -44,15 +45,20 @@ export type InboxSkillGroup = {
   skills: string[];
 };
 
+/**
+ * Market vs Project is a filter over `source`, not "has a path" — a
+ * market skill stays under Market after `+` writes it to disk. Only a
+ * catalog row scanned off local disk (`source: 'local'`) is Project.
+ */
 export function groupInboxSkills(
   inbox: string[],
-  catalog: Array<{ id: string; paths: string[] }>
+  catalog: Array<Pick<SkillRecord, 'id' | 'source'>>
 ): InboxSkillGroup[] {
-  const onDisk = new Set(catalog.filter((skill) => skill.paths.length > 0).map((skill) => skill.id));
+  const sourceById = new Map(catalog.map((skill) => [skill.id, skill.source]));
   const market: string[] = [];
   const project: string[] = [];
   for (const id of inbox) {
-    if (onDisk.has(id)) project.push(id);
+    if (sourceById.get(id) === 'local') project.push(id);
     else market.push(id);
   }
   const groups: InboxSkillGroup[] = [

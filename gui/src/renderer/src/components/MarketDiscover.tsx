@@ -59,10 +59,10 @@ export default function MarketDiscover() {
   }, [bridge]);
 
   useEffect(() => {
-    void bridge.listInbox().then((ids) => {
+    void bridge.listSkills().then((catalog) => {
       setAddStates((current) => {
         const next = { ...current };
-        for (const id of ids) next[id] = { status: 'success' };
+        for (const skill of catalog) next[skill.id] = { status: 'success' };
         return next;
       });
     });
@@ -152,7 +152,7 @@ export default function MarketDiscover() {
 
   async function handleAdd(skillId: string) {
     setAddingId(skillId);
-    const result = await bridge.addToInbox(skillId);
+    const result = await bridge.install(skillId);
     setAddingId(null);
     setAddStates((current) => ({
       ...current,
@@ -170,8 +170,8 @@ export default function MarketDiscover() {
           <p className="eyebrow">Workspace</p>
           <h1>Discover</h1>
           <p className="workspace-lede">
-            Browse the market index by role, then category. Add anything useful to Skills — install is a later
-            step.
+            Browse the market index by role, then category. `+` writes a skill into both live trees right away —
+            it shows up under Skills as Market.
           </p>
         </div>
       </div>

@@ -15,10 +15,10 @@ describe('statusCopy', () => {
     expect(statusLine('load')).toBe(
       "Couldn't load skills. The catalog is temporarily unavailable. Try again in a moment.",
     );
-    expect(statusCopy('export')).toEqual({
-      title: "Couldn't export",
+    expect(statusCopy('adopt')).toEqual({
+      title: "Couldn't adopt those leftovers",
       detail: 'Try again in a moment.',
     });
-    expect(statusLine('import')).toBe("Couldn't import. Try again in a moment.");
+    expect(statusLine('adopt')).toBe("Couldn't adopt those leftovers. Try again in a moment.");
   });
 });

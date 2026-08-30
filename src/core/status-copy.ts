@@ -7,9 +7,9 @@ export type StatusKind =
   | 'update'
   | 'rule'
   | 'toggle'
+  | 'enable'
   | 'create'
-  | 'export'
-  | 'import';
+  | 'adopt';
 
 /** User-facing copy for catalog and workspace failures. Never pass
  * Error.message through — those leak hostnames, paths, and stack fragments. */
@@ -50,19 +50,19 @@ export function statusCopy(kind: StatusKind): { title: string; detail: string } 
         title: "Couldn't update this rule",
         detail: 'Try again in a moment.',
       };
+    case 'enable':
+      return {
+        title: "Couldn't update this skill",
+        detail: 'Try again in a moment.',
+      };
     case 'create':
       return {
         title: "Couldn't create that command",
         detail: 'That name may already be on the map.',
       };
-    case 'export':
+    case 'adopt':
       return {
-        title: "Couldn't export",
-        detail: 'Try again in a moment.',
-      };
-    case 'import':
-      return {
-        title: "Couldn't import",
+        title: "Couldn't adopt those leftovers",
         detail: 'Try again in a moment.',
       };
     default:

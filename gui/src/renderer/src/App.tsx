@@ -1,20 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowsClockwise, BookOpen, Clock, Compass, Cube, Folder, Lightning, Moon, Question, Sun, Terminal, X } from '@phosphor-icons/react';
+import { ArrowsClockwise, BookOpen, Clock, Compass, Cube, Folder, Lightning, Moon, Question, Sun, Terminal, Trash, X } from '@phosphor-icons/react';
 import { useTheme } from './theme';
 import { useBridge } from './bridge-context';
 import { FOCUS_RING } from './lib/focus-ring';
 import { countSkillsBySource, formatScannedAt } from './lib/skill-sources';
-import { conflictLabels, isImportConflict } from './lib/command-conflicts';
 import { statusLine } from '../../../../shared/status';
 import { folderLabel, folderPreview } from '../../shared/recent-folders';
-import type { ExportResult, IDE, Result, SkillRecord } from '../../shared/ipc';
+import type { LeftoverRecord, SkillRecord } from '../../shared/ipc';
 import CollectionList from './components/CollectionList';
 import CreateCollectionForm from './components/CreateCollectionForm';
 import InboxPanel from './components/InboxPanel';
 import MarketDiscover from './components/MarketDiscover';
 import RulesPanel from './components/RulesPanel';
-import { StatusDialog } from './components/StatusDialog';
-import { FORMAT_LABELS, IDE_OPTIONS } from './components/format-context';
 
 type WorkspaceTab = 'config' | 'search' | 'inbox' | 'collections' | 'rules';
 
@@ -59,42 +56,29 @@ function ConfigPanel({
   const [recents, setRecents] = useState<string[]>([]);
   const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
   const [pendingRemove, setPendingRemove] = useState<string | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
-  const [importIde, setImportIde] = useState<IDE>('cursor');
-  const [importSource, setImportSource] = useState<string | null>(null);
-  const [importOutcome, setImportOutcome] = useState<{
-    status: 'loading' | 'success' | 'error';
-    message?: string;
-  } | null>(null);
-  const [importConflict, setImportConflict] = useState<string[] | null>(null);
+  const [leftovers, setLeftovers] = useState<LeftoverRecord[]>([]);
+  const [adopting, setAdopting] = useState(false);
+  const [adoptError, setAdoptError] = useState<string | null>(null);
 
-  const importSources = recents.filter((path) => path !== root);
+  async function refreshLeftovers(): Promise<void> {
+    if (!root) {
+      setLeftovers([]);
+      return;
+    }
+    const result = await bridge.listLeftovers();
+    if (result.ok) setLeftovers(result.value);
+  }
 
-  async function handleImport(replace = false): Promise<void> {
-    if (!root || !importSource) return;
-    setImportOpen(false);
-    setImportConflict(null);
-    setImportOutcome({ status: 'loading' });
-    const result: Result<ExportResult> = await bridge.importFrom(importSource, importIde, {
-      ...(replace ? { replace: true } : {}),
-    });
+  async function handleAdoptLeftovers(): Promise<void> {
+    setAdopting(true);
+    setAdoptError(null);
+    const result = await bridge.adoptLeftovers();
+    setAdopting(false);
     if (!result.ok) {
-      if (isImportConflict(result)) {
-        setImportOutcome(null);
-        setImportConflict(conflictLabels(result));
-        return;
-      }
-      setImportOutcome({ status: 'error', message: statusLine('import') });
+      setAdoptError(statusLine('adopt'));
       return;
     }
-    if (result.value.failures.length > 0) {
-      setImportOutcome({
-        status: 'error',
-        message: result.value.failures.join('\n'),
-      });
-      return;
-    }
-    setImportOutcome({ status: 'success' });
+    await refreshLeftovers();
   }
 
   useEffect(() => {
@@ -121,6 +105,16 @@ function ConfigPanel({
     };
   }, [bridge, root]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void bridge.listLeftovers().then((result) => {
+      if (!cancelled && result.ok) setLeftovers(result.value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge, root, lastScannedAt]);
+
   const bySource = countSkillsBySource(skills);
   const maxSourceCount = Math.max(...bySource.map((row) => row.count), 1);
 
@@ -130,20 +124,6 @@ function ConfigPanel({
         <div>
           <h1>Sync</h1>
           <p className="workspace-lede">Last scan of this folder. Re-scan if nothing on disk changed.</p>
-        </div>
-        <div className="library-heading-actions">
-          <button
-            type="button"
-            className={`import-button ${FOCUS_RING}`}
-            disabled={!connected || importOutcome?.status === 'loading'}
-            onClick={() => {
-              setImportSource(null);
-              setImportIde('cursor');
-              setImportOpen(true);
-            }}
-          >
-            Import
-          </button>
         </div>
       </div>
 
@@ -273,6 +253,40 @@ function ConfigPanel({
         </div>
       </div>
 
+      {connected && leftovers.length > 0 && (
+        <section className="leftovers-card glass-panel" aria-labelledby="leftovers-title">
+          <div className="section-heading">
+            <div>
+              <h2 id="leftovers-title">Leftovers</h2>
+              <p className="muted-copy">
+                Skill, command, and rule paths outside the two live trees. Not on/not off — just old homes we found.
+              </p>
+            </div>
+            <button
+              type="button"
+              className={`import-button ${FOCUS_RING}`}
+              disabled={adopting}
+              onClick={() => void handleAdoptLeftovers()}
+            >
+              <Trash size={14} weight="regular" aria-hidden="true" />
+              Use ours and remove leftovers
+            </button>
+          </div>
+          {adoptError && (
+            <p role="alert" className="muted-copy text-destructive">
+              {adoptError}
+            </p>
+          )}
+          <ul className="conflict-list" aria-label="Leftover paths">
+            {leftovers.map((row) => (
+              <li key={row.path}>
+                <span className="leftover-kind">{row.kind}</span> {row.path}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {pendingSwitch && (
         <div className="modal-backdrop" role="presentation" onClick={() => setPendingSwitch(null)}>
           <div
@@ -349,162 +363,6 @@ function ConfigPanel({
         </div>
       )}
 
-      {importOpen && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setImportOpen(false)}>
-          <div
-            className="help-modal import-project-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="import-project-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <p className="eyebrow">Project</p>
-            <h2 id="import-project-title">Import</h2>
-            <p className="muted-copy">
-              Copy skills, stamped commands, and rules from another project into this folder. Market inbox stays
-              shared.
-            </p>
-            <div role="radiogroup" aria-label="Format" className="filter-row">
-              {IDE_OPTIONS.map((ide) => (
-                <button
-                  key={ide}
-                  type="button"
-                  role="radio"
-                  aria-checked={importIde === ide}
-                  className={`filter ${importIde === ide ? 'active-filter' : ''} ${FOCUS_RING}`}
-                  onClick={() => setImportIde(ide)}
-                >
-                  {FORMAT_LABELS[ide]}
-                </button>
-              ))}
-            </div>
-            {importSources.length > 0 && (
-              <div className="recent-list import-source-list">
-                {importSources.map((path) => {
-                  const selected = path === importSource;
-                  return (
-                    <button
-                      key={path}
-                      type="button"
-                      className={`recent-card glass-panel ${FOCUS_RING}`}
-                      aria-pressed={selected}
-                      aria-label={`Import from ${path}`}
-                      title={path}
-                      onClick={() => setImportSource(path)}
-                    >
-                      <span className="connect-icon" aria-hidden="true">
-                        <Folder size={16} weight="regular" />
-                      </span>
-                      <div className="recent-card-body">
-                        <p className="recent-card-name">
-                          <span className="recent-card-label">{folderLabel(path)}</span>
-                          {selected && <span className="current-pill">Selected</span>}
-                        </p>
-                        <p className="recent-card-path">{folderPreview(path)}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {importSource && !importSources.includes(importSource) && (
-              <p className="recent-card-path">{importSource}</p>
-            )}
-            <div className="modal-actions">
-              <button
-                type="button"
-                className={`outline-button ${FOCUS_RING}`}
-                onClick={() => {
-                  void bridge.pickDestinationFolder().then((picked) => {
-                    if (!picked || picked === root) return;
-                    setImportSource(picked);
-                  });
-                }}
-              >
-                Choose folder
-              </button>
-              <button
-                type="button"
-                className={`import-button ${FOCUS_RING}`}
-                disabled={!importSource}
-                onClick={() => void handleImport()}
-              >
-                Import
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {importConflict && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setImportConflict(null)}>
-          <div
-            className="help-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="import-conflict-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <p className="eyebrow">Sync</p>
-            <h2 id="import-conflict-title">Replace existing files?</h2>
-            <p className="muted-copy">
-              These skills, commands, or rules already exist in this project. Replace overwrites them with the other
-              folder&apos;s versions.
-            </p>
-            {importConflict.length > 0 && (
-              <ul className="conflict-list" aria-label="Conflicting skills, commands, and rules">
-                {importConflict.map((name) => (
-                  <li key={name}>{name}</li>
-                ))}
-              </ul>
-            )}
-            <div className="modal-actions">
-              <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={() => setImportConflict(null)}>
-                Cancel
-              </button>
-              <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={() => void handleImport(true)}>
-                Replace
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {importOutcome && (
-        <StatusDialog
-          eyebrow="Import"
-          title={
-            importOutcome.status === 'loading'
-              ? 'Importing…'
-              : importOutcome.status === 'success'
-                ? 'Imported'
-                : 'Import failed'
-          }
-          kind={importOutcome.status}
-          errorDetail={importOutcome.status === 'error' ? importOutcome.message : undefined}
-          closeLabel="Close import status"
-          onClose={() => setImportOutcome(null)}
-        >
-          {importOutcome.status === 'loading' && (
-            <p role="status" className="muted-copy">
-              Importing {FORMAT_LABELS[importIde]}
-              {importSource ? ` from ${folderLabel(importSource)}` : ''}
-            </p>
-          )}
-          {importOutcome.status === 'success' && (
-            <p className="status-copy-success">
-              Imported {FORMAT_LABELS[importIde]}
-              {importSource ? ` from ${folderLabel(importSource)}` : ''}
-            </p>
-          )}
-          {importOutcome.status === 'error' && (
-            <p role="alert" className="muted-copy text-destructive">
-              Could not import {FORMAT_LABELS[importIde]}
-              {importSource ? ` from ${folderLabel(importSource)}` : ''}
-            </p>
-          )}
-        </StatusDialog>
-      )}
     </section>
   );
 }

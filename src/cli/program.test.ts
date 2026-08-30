@@ -53,23 +53,22 @@ describe('createProgram', () => {
 
     expect(program.name()).toBe('skil');
     expect(output).toContain('Usage: skil');
-    expect(output).toContain('inbox');
     expect(output).toContain('rules');
     expect(output).toContain('delete');
     expect(output).toContain('scan');
-    expect(output).toContain('copy');
+    expect(output).toContain('enable');
+    expect(output).toContain('disable');
     expect(program.commands.map((command) => command.name())).not.toEqual(
-      expect.arrayContaining(['convert', 'sync', 'run'])
+      expect.arrayContaining(['convert', 'sync', 'run', 'export', 'copy', 'inbox'])
     );
     expect(output).not.toMatch(/\s--ide\b/);
     expect(output.toLowerCase()).not.toContain('staging');
     expect(output.toLowerCase()).not.toContain('collection');
   });
 
-  it('create, list, and inbox file have no --ide', () => {
+  it('create and list have no --ide', () => {
     expect(helpFor(['create'])).not.toMatch(/\s--ide\b/);
     expect(helpFor(['list'])).not.toMatch(/\s--ide\b/);
-    expect(helpFor(['inbox', 'file'])).not.toMatch(/\s--ide\b/);
   });
 
   it('rejects an unknown --to on install before calling the engine', () => {

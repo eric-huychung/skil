@@ -48,26 +48,6 @@ describe('runCreate', () => {
     expect(engine.list().map((c) => c.name)).toEqual(['build']);
   });
 
-  it('rejects creating a command named inbox', () => {
-    const engine = buildEngine();
-
-    const outcome = runCreate(engine, 'inbox', []);
-
-    expect(outcome.isError).toBe(true);
-    expect(outcome.message.toLowerCase()).toMatch(/inbox/);
-    expect(outcome.message.toLowerCase()).not.toContain('collection');
-    expect(engine.list()).toEqual([]);
-  });
-
-  it('stores a command template when provided', () => {
-    const engine = buildEngine();
-
-    const outcome = runCreate(engine, 'frontend', [], 'npm run dev');
-
-    expect(outcome.isError).toBe(false);
-    expect(engine.list()[0]?.command).toBe('npm run dev');
-  });
-
   it('rejects a second create of the same name', () => {
     const engine = buildEngine();
     engine.create('build', ['tdd']);

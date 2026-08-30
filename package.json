@@ -1,6 +1,6 @@
 {
   "name": "skil",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "CLI-first AI skill collection manager for Cursor, Claude, and Windsurf",
   "type": "module",
   "bin": {
@@ -41,7 +41,6 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.17.9",
     "jsdom": "^26.1.0",
-    "memfs": "^4.14.0",
     "nock": "^13.5.6",
     "tsx": "^4.23.12",
     "typescript": "^5.7.2",

@@ -1,5 +1,5 @@
 import type { Result } from '../core/result.js';
-import type { BrowseView, IDE, Skill, UsageEvent } from '../types/index.js';
+import type { BrowseView, Skill, UsageEvent } from '../types/index.js';
 
 /**
  * Wraps project-local I/O: JSON state, SKILL.md discovery, and utf-8 files.
@@ -89,11 +89,13 @@ export interface ISkillsAdapter {
   browse(view: BrowseView): Promise<Result<Skill[]>>;
 
   /**
-   * Installs a skill by ID via `npx skills add`. The agent/IDE flag is
-   * chosen inside the adapter from `targetIDE` — callers do not pass flags.
+   * Installs a skill by ID via `npx skills add --agent universal --copy`,
+   * which writes `.agents/skills/<short-name>`. There is no dock argument:
+   * the live pair's other member (`.claude`) is a plain `copyDir` the
+   * engine does after npx returns, not a second network install.
    * `cwd` overrides the adapter's project root for this call only.
    */
-  install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }): Promise<Result<void>>;
+  install(skillId: string, opts?: { cwd?: string }): Promise<Result<void>>;
 
   /** Returns skills already installed, read from local tooling state. */
   getInstalled(): Skill[];

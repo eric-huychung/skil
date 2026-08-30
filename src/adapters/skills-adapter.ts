@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { execa } from 'execa';
 import type { ISkillsAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
-import type { BrowseView, IDE, Skill } from '../types/index.js';
+import type { BrowseView, Skill } from '../types/index.js';
 import { getApiBaseUrl } from '../config/website.js';
 import { toSkillsAddSource } from '../backend/skills-add-source.js';
 
@@ -22,18 +22,11 @@ interface SkillsListResponse {
 }
 
 /**
- * vercel-labs/skills `--agent` names. `claude` is `claude-code`.
- * `agents` has no vercel name; `universal` is the documented agent that
- * writes `.agents/skills/`.
+ * vercel-labs/skills' documented agent that writes `.agents/skills/` —
+ * the only agent name this adapter ever passes. The live pair's other
+ * member (`.claude`) is a `copyDir` the engine does after npx returns.
  */
-const SKILLS_ADD_AGENT: Record<IDE, string> = {
-  cursor: 'cursor',
-  claude: 'claude-code',
-  codex: 'codex',
-  copilot: 'github-copilot',
-  windsurf: 'windsurf',
-  agents: 'universal',
-};
+const SKILLS_ADD_AGENT = 'universal';
 
 function mapSkillsShHit(hit: SkillsShHit): Skill {
   return {
@@ -52,13 +45,12 @@ function mapSkillsShHit(hit: SkillsShHit): Skill {
  * Real implementation of ISkillsAdapter. `search` calls skil's own
  * backend (see `src/backend/skills-proxy.ts`), which authenticates to
  * skills.sh with a Vercel OIDC token — so no API key is ever needed here.
- * `install`/`convert` still shell out locally with `cwd` set to the
- * project root; skills.sh has no HTTP endpoint for either. `install`
- * picks the `--agent` flag from the target IDE and `--copy` so files
- * can be moved into this IDE's skills dir (Cursor's npx path is
- * `.agents/skills`, not `.cursor/skills`). Tests use
- * InMemorySkillsAdapter instead so CollectionEngine tests never hit the
- * network or spawn subprocesses.
+ * `install` still shells out locally with `cwd` set to the project
+ * root; skills.sh has no HTTP endpoint for it. `install` always passes
+ * `--agent universal --copy`, which writes `.agents/skills/` — the
+ * engine relocates and mirrors into the live pair afterwards, so no
+ * dock is ever picked here. Tests use InMemorySkillsAdapter instead so
+ * CollectionEngine tests never hit the network or spawn subprocesses.
  */
 export class SkillsAdapter implements ISkillsAdapter {
   constructor(
@@ -90,7 +82,7 @@ export class SkillsAdapter implements ISkillsAdapter {
     }
   }
 
-  async install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }): Promise<Result<void>> {
+  async install(skillId: string, opts?: { cwd?: string }): Promise<Result<void>> {
     try {
       await execa(
         'npx',
@@ -99,7 +91,7 @@ export class SkillsAdapter implements ISkillsAdapter {
           'add',
           toSkillsAddSource(skillId),
           '--agent',
-          SKILLS_ADD_AGENT[targetIDE],
+          SKILLS_ADD_AGENT,
           '--copy',
           '-y',
         ],

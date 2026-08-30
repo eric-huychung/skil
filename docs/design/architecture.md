@@ -2,26 +2,28 @@
 
 ## Overview
 
-**skil** (one L) is a map + inbox + skill deploy tool, plus command templates we generate. It also lists **rules** already on disk (Cursor `.mdc`, Claude, Copilot, `AGENTS.md`, …) and can copy them to a dest dock.
+**skil** (one L) scans the messy world of skill/command/rule folders and keeps exactly two **live trees** in sync: `.agents` and `.claude`. On or off is a path, not a flag. There is no dock picker and no Export step.
 
 It is a thin orchestration layer (CLI + GUI) over a **connected project folder**. No login. Work vs side project = two folders = two maps.
 
-- **Skills** = folders that contain `SKILL.md`. Disk is the source of truth for the body. One catalog (`skills[]`), many `paths` / `deployedTo`.
-- **Inbox** = one staging pool for this project. Not per dock.
-- **Commands** = named SDLC knobs (`/build`, `/tdd`). **One list per project.** Cursor `/build` and Claude `/build` are the same ids in the app. Skills sit under them **in the app**, not as a folder tree.
-- **Rules** = markdown/mdc files agents already load (`.cursor/rules`, `.claude/rules`, `.github/instructions`, root `CLAUDE.md` / `AGENTS.md` / `copilot-instructions.md`). Disk is SoT. We list every file we find, including other formats. We do **not** persist a rules map.
-- **Docks** = folders we scan and export/install into (Claude, Cursor, Codex, Copilot, agents). Not five command maps. Windsurf is still scanned; it is not a peer dock.
-- We **do not** scan or own the user's unstamped `commands/` files.
-- We **do not** model runtime overlap (Cursor may also load `.agents`). We write the dock they picked.
+- **Skills** = folders that contain `SKILL.md`. Disk is the source of truth for the body. One catalog (`skills[]`), many `paths`.
+- **Live trees** = `.agents/skills` + `.claude/skills` (and `.agents/commands`-equivalent, see Commands below). A constant, not a per-user picker. Toggle on writes both. Toggle off removes both.
+- **Parked** = off-but-yours. `.skil/parked/skills/<id>`, `.skil/parked/commands/<name>`, `.skil/parked/rules/<id>`. Toggling back on restores from here (or re-fetches if it's a market skill and parked is gone).
+- **Leftover** = every other skill root we still scan (`.cursor/skills`, `.codex/skills`, `.github/skills`, `.windsurf/skills`) plus stray always-on rule files. Catalogued, previewable, never written to. A leftover cleanup modal offers **adopt-and-deprecate**: copy into the live pair if missing, then move the old path to `.skil/deprecated/<original-path>`.
+- **Deprecated** = a leftover tree we already retired via that modal. Recoverable (it's just a moved folder), never scanned.
+- **Commands** = named SDLC knobs (`/build`, `/tdd`). **One list per project.** A live command is a human-only skill folder in both live trees (`disable-model-invocation: true`, plus `agents/openai.yaml`). Filing a skill onto a command edits that command skill's `## Skills` list — it does not install or enable the filed skill.
+- **Rules** = shared law lives in one place: `AGENTS.md`. Toggling a shared rule upserts or removes a section there. `CLAUDE.md` is `@AGENTS.md` plus real Claude-only notes. Path-scoped glob rules (`.cursor/rules/*.mdc`, `.claude/rules`) are left alone on disk — never copied into `AGENTS.md`, never toggled.
+- We **do not** scan or own the user's unstamped `commands/` files, and command markdown under a `commands/` tree is not a product path at all anymore (see Not Doing).
+- We **do not** model runtime overlap (Cursor may also load `.agents`). Writes only ever go to the two live trees.
 
-We are **not** SoT for skill file contents.  
-We **are** SoT for: which skills exist in this project, their hashes, where we deployed them, and which skills sit on which command (**one list**).
+We are **not** SoT for skill or rule file contents.
+We **are** SoT for: which skills/commands/rules exist in this project, their on/off state (inferred from path), and which skills sit on which command (**one list**).
 
-**Pull** = scan skill folders (union into the catalog). Stamped command files do not fork the map. **Push** = install a skill into a dock and/or write our command template to a dock.
+**Scan** unions every root — live, leftover, and parked — into one catalog. It never writes leftover homes and never restores/creates a live or parked copy on its own. **Toggle** is the only write: on → live pair; off → parked. Market `+` / install already means "on," so it writes the live pair directly, once.
 
 The class in the tree is still `CollectionEngine`. That is the deep module. This doc uses **Command** for the map grouping (today's `Collection`) and describes the implemented interface. Rename the class when it stops lying; do not split the module.
 
-One `.skil/state.json`. No extra state file per IDE.
+One `.skil/state.json`. No extra state file per tree.
 
 ## Technology Stack
 
@@ -55,7 +57,6 @@ Vercel skills CLI, skillsmith, and `npx skills add` are npm/TypeScript. Electron
   "devDependencies": {
     "typescript": "^5.7.2",
     "vitest": "^2.1.8",
-    "memfs": "^4.14.0",
     "nock": "^13.5.6"
   }
 }
@@ -65,9 +66,9 @@ Vercel skills CLI, skillsmith, and `npx skills add` are npm/TypeScript. Electron
 
 ### Deep Modules
 
-One deep module: the engine. Callers learn a small interface (scan, inbox, file, copy, install, export, usage, readSkillMd, rules, readRule, exportRules). The implementation hides catalog merge, hashing, gone-id cleanup, **one command list**, dock paths, deploy records, stamped command-file writes, **rule-file discovery**, and usage aggregation.
+One deep module: the engine. Callers learn a small interface (scan, file, `setSkillEnabled`, `setCommandEnabled`, `setSharedRuleEnabled`, `leftovers`, `adoptLeftovers`, usage, readSkillMd, rules, readRule). The implementation hides catalog merge, hashing, gone-id cleanup, **one command list**, live/parked/leftover/deprecated path classification, human-only-skill command writes, **rule-file discovery**, and usage aggregation.
 
-Callers do **not** pass a dock into `create` / `file` / `list`. Dock is only on push (`install` / `export` / `copyTo`). `list()` returns `{ name, skills }` for the project map.
+No caller ever passes a dock or a dest into any method — there is nowhere left to pick, since a write always means "the live pair" and toggling off always means "parked." `list()` returns `{ name, skills }` for the project map.
 
 **Deletion test:** delete the engine and that complexity reappears in CLI and GUI. Keep it in one place.
 
@@ -92,86 +93,77 @@ Accept dependencies, don't create them. Tests and callers cross the same seam.
 
 **Interface:**
 
-Map methods have no dock (a few — `create`, `list`, `file`, `addSkill`, `removeSkill`, `delete` — still accept an optional `ide`/`dock` param for v5 callers; it is ignored, one list). Push methods take a dock (default `'cursor'` until CLI drops the default).
+No method takes a dock or dest. On/off is inferred from **which path** a skill/command/rule lives at, not a flag or a picker argument.
 
 ```typescript
-type Dock = 'cursor' | 'claude' | 'codex' | 'copilot' | 'agents' | 'windsurf'
+type LeftoverKind = 'skill' | 'command' | 'rule'
 
 interface SkilEngine {
-  scan(): Result<ScanResult>                         // union catalog + inbox; stamps do not fork the map
-  skills(): SkillRecord[]
-  inbox(): string[]
-  addToInbox(skillId: string): Result<string[]>
-  removeFromInbox(skillId: string): Result<string[]>
-  create(name: string, skillIds: string[], command?: string): Result<Command>
-  delete(name: string): Result<void>                 // drops the command
-  list(): Command[]                                  // one skills[] each
-  file(skillId: string, commandName: string): Result<Command>
+  scan(): Result<ScanResult>                          // union live + leftover + parked into one catalog; never writes leftover homes
+  skills(): SkillRecord[]                              // enabled = live path present
+  create(name: string, skillIds?: string[]): Result<Command>
+  delete(name: string): Result<void>                   // drops the command row + live/parked copies
+  list(): Command[]                                    // one skills[] each
+  file(skillId: string, commandName: string): Result<Command>       // write-through on a live command skill's `## Skills` only
   addSkill(name: string, skillId: string): Result<Command>
   removeSkill(name: string, skillId: string): Result<Command>
-  deleteSkill(skillId: string): Result<void>          // drops from disk (all dock copies) + catalog + Inbox
-  readSkillMd(skillId: string): Result<string>        // first on-disk SKILL.md for that catalog id; missing → error
-  copyTo(name: string, fromDock: Dock, toDock: Dock, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>  // fromDock is accepted, unused (one list)
-  copyAll(fromDock: Dock, toDock: Dock, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>
-  importFrom(sourceRoot: string, dock: Dock, opts?: { replace?: boolean }): Promise<Result<ExportResult>>
-  install(skillId: string, dock: Dock, opts?: { dest?: string; replace?: boolean }): Promise<Result<SkillRecord>>
-  exportCommand(name: string, dock: Dock, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>
-  exportAll(dock: Dock, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>
-  usage(): Promise<Result<UsageRow[]>>          // Claude-first counts; missing logs → []
+  deleteSkill(skillId: string): Result<void>            // hard delete: live + parked copies of that id, not leftover/deprecated
+  readSkillMd(skillId: string): Result<string>          // first readable SKILL.md for that catalog id; missing → error
+  setSkillEnabled(skillId: string, enabled: boolean): Promise<Result<SkillRecord>>
+  setCommandEnabled(name: string, enabled: boolean): Promise<Result<Command>>
+  setSharedRuleEnabled(id: string, enabled: boolean): Result<RuleRecord>
+  leftovers(): Result<LeftoverRecord[]>                 // catalogued paths that are neither live nor parked nor deprecated
+  adoptLeftovers(ids?: string[]): Promise<Result<AdoptResult>>  // copy into the live pair if missing, then move old path to .skil/deprecated/
+  usage(): Promise<Result<UsageRow[]>>                  // Claude-first counts; missing logs → []
   lastWrittenPaths(): string[]
   originChecks(): Promise<Result<OriginCheck[]>>
-  updateFromMarket(skillId: string, opts?: { replaceEdited?: boolean; dest?: string }): Promise<Result<SkillRecord>>
+  updateFromMarket(skillId: string, opts?: { replaceEdited?: boolean }): Promise<Result<SkillRecord>>
   search(query: string): Promise<Result<Skill[]>>
   browse(view: BrowseView): Promise<Result<Skill[]>>
   rules(): RuleRecord[]
   readRule(id: string): Result<string>
-  setAlwaysApply(id: string, alwaysApply: boolean): Result<RuleRecord>
-  exportRules(dock: Dock, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>
 }
 ```
 
-`Command` is `{ name, skills, createdAt }`. Persist v6 uses `commands[].skills` (see Data Model). Type name `IDE` may stay in code until a rename task; product language is **dock**.
+`Command` is `{ name, skills, createdAt }`. Persist v7 uses `commands[].skills` (see Data Model). Type name `IDE` is gone from the product surface; the only tree distinction left is **live** (`.agents` / `.claude`, a pair, not a picker) vs **leftover** (`.cursor`, `.codex`, `.github`, `.windsurf` — read/catalog only).
 
 **Invariants**
 - A skill is a folder that contains `SKILL.md` (nested folders ok).
-- One Inbox. One `skills[]` catalog. **One command list** (not per dock). No `.cursor/.skil/state.json`.
-- Scan never creates commands from skill folders and never moves folders.
-- Scan walks six hardcoded skill roots (`.cursor/skills`, `.claude/skills`, `.codex/skills`, `.github/skills`, `.agents/skills`, `.windsurf/skills`). No per-project dock config.
-- **Rules** are a live disk walk (not `state.json`): `.cursor/rules/**/*.mdc`, `.claude/rules/**/*.md`, `.github/instructions/**`, `.windsurf/rules/**`, plus root `CLAUDE.md`, `AGENTS.md`, and `.github/copilot-instructions.md`. Same name across docks is one card (dock copies are deploys). Not Inbox. Not a skil-owned map.
-- `deleteSkill(id)` deletes every dock copy of that catalog id (`paths`). Nested skills stay. Discover-only ids leave Inbox only.
-- Inbox = staging pool (scanned locals + Discover adds). Filing onto a command does **not** drop the id from Inbox. "Not on any command" is a UI filter, not a second list. GUI Inbox groups by **on disk** (`paths.length > 0` → Project) vs not (Market wishlist). `source: 'skills.sh'` is origin, not the group key — an installed market skill is one Project row.
+- One `skills[]` catalog. **One command list** (not per tree). No Inbox — Market rows and Project rows are the same catalog, just on/off.
+- **On/off is a path, not a flag.** Live path (`.agents/…` + `.claude/…` both present) → on. Only `.skil/parked/…` → off. A leftover-only path (`.cursor/skills/<id>`, etc.) is catalogued but neither on nor off — it is not live, and toggling never touches it.
+- Scan never creates commands from skill folders, never moves folders, and never writes a leftover root. It also never restores parked → live or live → parked on its own; that is only `setSkillEnabled` / `setCommandEnabled` / `setSharedRuleEnabled`.
+- Scan roots = the live pair, every leftover skill root, and the parked skill/command roots. `.skil/deprecated/` is never scanned.
+- **Rules.** Shared law is one or more sections in `AGENTS.md` (`CLAUDE.md` is `@AGENTS.md` plus real Claude-only notes below that line). Path-scoped glob rules (`.cursor/rules/*.mdc`, `.claude/rules/**/*.md`) stay on disk exactly as found — never folded into `AGENTS.md`, never toggled by `setSharedRuleEnabled`. `rules()` lists both kinds; only shared-law rows are togglable.
+- `deleteSkill(id)` deletes the live pair and the parked copy of that catalog id, if either exists. Leftover and deprecated copies are untouched. Nested skills stay.
 - Scan does not mint a second catalog id for an npx leftover short folder (`.agents/skills/<slug>`) when a `source: 'skills.sh'` row already owns that slug. Attach the leftover path to the market id.
-- Scan puts new ids in Inbox if they are not already there. Discover Add does too.
-- Filing / unfiling / create / delete change the **project** list. Dock is not an argument.
+- Filing / unfiling / create / delete change the **project** command list. There is no per-tree argument because there is no per-tree list.
 - `create('build')` when `/build` already exists is "already exists".
-- `delete('build')` drops the command row (and our stamps on docks that already had one).
-- Filing (`file` / GUI `addSkill`) does not drop the id from Inbox. Inbox is the picker. "Not on any command" is a UI filter.
-- `removeSkill` updates the one list. Inbox keeps the id. Gone folders drop the id from catalog, commands, and Inbox.
-- `create('inbox')` is an error. Inbox is not a command. `create('/inbox')` is the same error.
-- Command names store without a leading slash. `create('/build', …)` and `file(..., '/build', ide)` normalize to `build`. UI may show `/build`.
-- Re-scan refreshes the catalog. Same hash at a new path is a rename (keep membership, update the id) — not gone + added. If a folder is gone, drop that id and report it.
-- We never read **unstamped** `commands/` trees to build the map.
-- **Stamped** command file `skills:` ≠ map → warn (`commandPulls`). Do **not** adopt into the map. No silent 3-way merge. No per-dock fork.
-- Write-through: file / unfile / create / delete rewrite **existing** stamps only (same list on every dock that already has our file). Do not create new stamps.
-- Copy (`copyTo` / `copyAll`) writes the **same** map to the dest dock (stamped file + missing skill folders). Same stamp / replace rules as export. `--from` is gone.
-- Import (`importFrom`) copies one dock's skill folders (and stamps if any) **and that dock's rule files** from another project folder into this one. New ids add on top. Different dest `SKILL.md`, an unstamped dest command file, or a dest rule with a different hash needs `replace: true`. Same-hash skills/rules are left alone. Unstamped source commands, other docks, and source Inbox / `state.json` are ignored. Does not bind the source folder.
-- Export writes **our** command file when that dock has a command path, then ensures filed skills exist in that dock's skills dir. Dest folders that already have `SKILL.md` are left alone. Local folders are copied; Discover-only ids go through `install`. If a command file exists and is not stamped by us, refuse unless `replace: true` — no skill deploy in that case.
-- **Rules export** (`exportRules`) copies scanned rules using `RULE_LAYOUT`. Folder docks get `dir/name.ext` with a `generated_by: skil` stamp. Codex also writes `.codex/rules` plus stamped sections in `AGENTS.md` (what Codex loads). Agents writes `.agents/rules` plus the same `AGENTS.md` sections. Root files stay at dest root when that dock uses that filename. Different dest needs `replace: true`. A dest that already matches still reports the path — empty `succeeded` is not success. `setAlwaysApply` writes every dock copy of that name.
-- Install writes a skill folder into that dock's skills dir and records the deploy. It does not write command files.
+- `delete('build')` drops the command row and, if the command was on, both its live command-skill folders and its parked copy.
+- Filing (`file` / GUI `addSkill`) edits the target command skill's `## Skills` section (and frontmatter `skills:`) if that command is currently live. Filing does **not** call `setSkillEnabled` — a filed skill is not thereby turned on, and an off skill can be filed.
+- `create('rules')` / any command named after a reserved word is not special-cased anymore — there is no Inbox to protect.
+- Command names store without a leading slash. `create('/build', …)` normalizes to `build`. UI may show `/build`.
+- Re-scan refreshes the catalog. Same hash at a new path is a rename (keep the id, update `paths`) — not gone + added. If every path for an id is gone, drop that id and report it.
+- We never read **unstamped** `commands/` trees, and command markdown under any `commands/` directory is not a thing we write anymore — see "Live command = human-only skill" below.
+- **Name collision is an error.** `setCommandEnabled('build', true)` refuses if a non-command skill already owns `.agents/skills/build` (or `.claude/skills/build`). No auto-prefix.
+
+**Live command = human-only skill.** A live command is a skill folder in **both** live trees: `.agents/skills/<name>/SKILL.md` + `.claude/skills/<name>/SKILL.md`, frontmatter `disable-model-invocation: true`, plus `agents/openai.yaml` (`allow_implicit_invocation: false`) next to each. Body keeps today's Goal / Sequence / Rules headings and a managed `## Skills` list. This is why a command needs the same on/off + parked machinery as a normal skill (`setCommandEnabled` mirrors `setSkillEnabled`, in its own `.skil/parked/commands/<name>` tree so `/build` toggling off can never collide with a parked skill literally named `build`).
 
 **Implementation responsibilities**
-- Persist the catalog, inbox, and **one** command list in `.skil/state.json`. Missing file → empty state. Leftover `.contextkit/state.json` with no `.skil/` file is an error (no fallback).
-- Walk hardcoded dock skill roots (`.cursor/skills`, `.claude/skills`, `.codex/skills`, `.github/skills`, `.agents/skills`, `.windsurf/skills`), hash `SKILL.md`, reconcile gone/changed/new/rename. A new short folder that matches `skillFolderName` of an existing `source: 'skills.sh'` row is attached to that row, not added. No per-project dock config.
-- Walk rule files on `rules()` / `exportRules` / `importFrom` (not persisted). Cursor `.mdc` `alwaysApply` is readable and writable (`setAlwaysApply`). Root always-on files (`CLAUDE.md`, `AGENTS.md`, `copilot-instructions.md`) show as on and cannot be toggled.
-- `readSkillMd(id)` returns the first readable `SKILL.md` on that catalog row's `paths` (scan order, `.cursor` first). Disk owns the body; this is display-only. Discover-only Inbox ids are not catalog rows — GUI preview falls through to `marketPreview` for those.
-- On scan, **do not** adopt stamped `skills:` into the map. Warn if a stamp disagrees.
-- Coordinate install into **that dock’s** skills dir (not vercel’s `.agents` dump for Cursor) and record `deployedTo`. First market install stamps `originHash`. `originChecks` / `updateFromMarket` compare that to disk and the live market SKILL.md; Update is explicit, never automatic.
-- Write stamped command markdown for docks that have a command path (cursor / claude / agents / windsurf / copilot). Codex: skill folders only — custom prompts were removed from Codex entirely (codex-cli 0.117.0) and even before that lived only in `~/.codex/prompts`, never git-shareable.
-- After a map mutation, rewrite **existing** stamps (write-through). `lastWrittenPaths()` is the mute list for DiskWatch. `writeThrough` / `writeThroughAfterScan` live on the class, not the public interface; `scan()` calls the latter. After-scan write-through skips a stamp whose `skills:` list already matches the map. Do not create new stamps.
+- Persist the catalog and **one** command list in `.skil/state.json`. Missing file → empty state. Leftover `.contextkit/state.json` with no `.skil/` file is an error (no fallback).
+- Walk the live pair, every leftover skill root (`.cursor/skills`, `.codex/skills`, `.github/skills`, `.windsurf/skills`), and parked skill/command roots; hash `SKILL.md`; reconcile gone/changed/new/rename. A new short folder that matches `skillFolderName` of an existing `source: 'skills.sh'` row is attached to that row, not added.
+- Walk rule files on `rules()` (not persisted): `AGENTS.md` sections (shared law) plus every leftover glob file (`.cursor/rules/**/*.mdc`, `.claude/rules/**/*.md`, `.github/instructions/**`, `.windsurf/rules/**`) and leftover always-on files (`copilot-instructions.md`, a `CLAUDE.md` that is not `@AGENTS.md`, invented `.codex/rules`). Cursor `.mdc` `alwaysApply` stays readable; glob rules are never rewritten by a toggle.
+- `readSkillMd(id)` returns the first readable `SKILL.md` on that catalog row's `paths` (live first, then leftover, then parked). Disk owns the body; this is display-only.
+- `setSkillEnabled(id, false)`: move the live folder(s) to `.skil/parked/skills/<id>`. `true`: copy parked back to both live trees; if parked is gone and `source` is `skills.sh`, re-fetch via `SkillsAdapter.install` into the pair instead of erroring; if parked is gone and `source` is `local`, error (nothing to restore from).
+- Market `+` / install: one `npx skills add` into `.agents`, then `copyDir` into `.claude`. Never writes a leftover root. Stamps `originHash`. `originChecks` / `updateFromMarket` compare that to disk and the live market SKILL.md; Update is explicit, never automatic.
+- `setCommandEnabled(name, false)`: move both `…/skills/<name>` folders to `.skil/parked/commands/<name>`. `true`: copy back, refusing on a name collision with a live non-command skill.
+- `file` / `removeSkill` rewrite `## Skills` (and frontmatter `skills:`) on the command's live skill folders only, when that command is on. A parked command is not rewritten until it is toggled back on — the next `setCommandEnabled(name, true)` copies the parked (possibly stale) body back as-is; filing while parked queues no write.
+- `setSharedRuleEnabled(id, true)` upserts one `AGENTS.md` section (stamped, matching today's `generated_by: skil` convention). `false` removes the section and parks the body under `.skil/parked/rules/<id>`.
+- `leftovers()` returns every catalogued skill/command/rule path that is not live and not parked (and not deprecated, which is never scanned). `adoptLeftovers(ids)` copies each into the live pair if that id is missing there, then moves the old leftover path to `.skil/deprecated/<original-path>` — recoverable, never scanned again.
+- `lastWrittenPaths()` is the mute list for DiskWatch after any write (`setSkillEnabled` / `setCommandEnabled` / `setSharedRuleEnabled` / `adoptLeftovers` / market install).
 
-**Why deep:** CLI, GUI, and tests all call the same methods. Membership, hash policy, gone-id cleanup, and stamp rules must not leak to the UI.
+**Why deep:** CLI, GUI, and tests all call the same six mutating methods (`setSkillEnabled`, `setCommandEnabled`, `setSharedRuleEnabled`, `file`/`addSkill`/`removeSkill`, `create`/`delete`, `adoptLeftovers`). Path classification (live / leftover / parked / deprecated), hash policy, and gone-id cleanup must not leak to the UI.
 
-**Leftover methods are gone.** CLI `convert` / `sync` / `run` and engine `sync`, `convert`, `getCommand`, skillsmith `export` were deleted. Product export is `exportCommand`. CLI and GUI call `exportCommand` / `copyTo`. Team YAML `ConfigAdapter` is gone.
+**Gone from the product surface.** `copyTo`, `copyAll`, `importFrom`, `install(skillId, dock)`, `exportCommand`, `exportAll`, `exportRules`, the `Dock`/`IDE` picker argument, `Inbox` (`inbox()` / `addToInbox` / `removeFromInbox`), and CLI `--to <dock>` / `copy` / `export`. There is one place a skill/command/rule can be: live, parked, leftover, or deprecated — not five dock copies to keep in sync by hand. Earlier leftover methods (`sync`, `convert`, `getCommand`, skillsmith `export`, Team YAML `ConfigAdapter`) were already gone before this pivot and stay gone.
 
 ### 2. FileSystemAdapter
 
@@ -198,7 +190,7 @@ interface FileSystemAdapter {
 
 `findSkillFolders('.cursor/skills')` returns paths relative to the adapter root, nested, files ignored. A parent is a skill only if it has its own `SKILL.md`.
 
-`writeFile` is for our command templates (and tests). `copyDir` copies a local skill folder to another IDE tree. `listFiles` is how scan finds stamped command files. `removeFile` deletes our stamp on per-IDE delete. Install of a remote id still goes through SkillsAdapter (`npx skills add`).
+`writeFile` is for the command skill's `SKILL.md` / `openai.yaml` (and tests). `copyDir` copies a skill folder — live↔parked, or `.agents` → `.claude` on market install. `listFiles` is how scan and `leftovers()` walk a directory. `removeFile` / `removeDir` back park/deprecate moves and `deleteSkill`. Install of a remote id still goes through SkillsAdapter (`npx skills add`).
 
 ### 3. SkillsAdapter
 
@@ -208,24 +200,13 @@ interface FileSystemAdapter {
 interface SkillsAdapter {
   search(query: string): Promise<Result<Skill[]>>
   browse(view: BrowseView): Promise<Result<Skill[]>>
-  install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }): Promise<Result<void>>
+  install(skillId: string, opts?: { cwd?: string }): Promise<Result<void>>  // always the universal agent, into .agents
   getInstalled(): Skill[]                                         // leftover; real adapter returns []
 }
 ```
 
 - `search` / `browse`: our Vercel backend + OIDC. No user API key. Browse is CDN-cached (`Cache-Control` on 200 only). Not a skil registry. Origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
-- `install`: `npx skills add <source> --agent <name> --copy -y` with `cwd` = project root, or `opts.cwd` for a one-shot dest. `--copy` so vercel's dump can be moved into that dock's own skills dir. 3-part skills.sh ids become `owner/repo@skill`. Agent/IDE flag stays **inside** the adapter.
-
-  | skil IDE | `--agent` (vercel-labs/skills) |
-  |----------|--------------------------------|
-  | cursor | `cursor` |
-  | claude | `claude-code` |
-  | codex | `codex` |
-  | copilot | `github-copilot` |
-  | windsurf | `windsurf` |
-  | agents | `universal` |
-
-  `agents` has no vercel name; `universal` is the documented agent that writes `.agents/skills/`. Vercel currently lists project paths for `cursor`, `codex`, and `github-copilot` as `.agents/skills/`, not the dock folders we scan. We still pass those `--agent` names. Scan walks `.cursor/skills/`, `.codex/skills/`, and `.github/skills/` (product contract). After `npx`, the engine copies the dump into that dock path and removes the stray `.agents` folder.
+- `install`: `npx skills add <source> --agent universal --copy -y` with `cwd` = project root. `universal` is vercel-labs/skills' documented agent that writes `.agents/skills/` — the only agent name this adapter ever passes, since the live pair's other member (`.claude`) is a plain `copyDir` the engine does after npx returns, not a second network install. 3-part skills.sh ids become `owner/repo@skill`. No `targetIDE` / dock argument — there is one live destination.
 - Listing fields (`name`, `repo`, `installs`, …) stay in-memory. Never persist them on catalog records.
 
 ### 4. CLI (Thin)
@@ -233,20 +214,20 @@ interface SkillsAdapter {
 Commander routes to the engine. No catalog logic here.
 
 Verbs:
-- `skil scan` — pull skills into the catalog (stamps do not fork the map)
-- `skil inbox` / `inbox add <skillId>` / `inbox file <skillId> <command>` / `inbox delete <skillId>` (delete from disk + Inbox; nested skills stay, Discover-only ids just leave Inbox)
-- `skil create <name> [--skills <ids>]` — empty or seeded command; `/build` stores `build`.
-- `skil delete <name>` — drop the command
+- `skil scan` — union live + leftover + parked into the catalog; never writes leftover homes
+- `skil create <name> [--skills <ids>]` — empty or seeded command; `/build` stores `build`
+- `skil delete <name>` — drop the command (and its live/parked folders)
 - `skil list` — the project map
-- `skil add <command> <skillId>` / `skil remove <command> <skillId>`
-- `skil copy <command> --to <dock> [--replace]` / `skil copy --all --to <dock>`
-- `skil install <skillId> --to <dock>` — push a skill into that dock’s folder (any dock, including `windsurf`)
-- `skil export [command] --to <dock> [--replace]` — a command name exports that one; omitted exports every command (same as GUI Export)
-- `skil usage` — Phase 5: print use counts (Claude first)
-- `skil rules` / `rules show <id>` / `rules always-apply <id> on|off` / `rules export --to <dock> [--replace]` — list on-disk rules, read body, toggle Cursor alwaysApply, copy to a dest dock
+- `skil add <command> <skillId>` / `skil remove <command> <skillId>` — write-through `## Skills` on a live command only
+- `skil enable <skillId>` / `skil disable <skillId>` — copy to the live pair, or park it
+- `skil enable --command <name>` / `skil disable --command <name>` — same, for a command's own skill folders
+- `skil rules` / `rules show <id>` / `rules enable <id>` / `rules disable <id>` — list on-disk rules (shared + glob), read a body, toggle a shared-law `AGENTS.md` section
+- `skil leftovers` / `skil adopt [ids...]` — list leftover paths, then copy-into-live + move-to-deprecated
+- `skil usage` — print use counts (Claude first)
 - `skil search [query] [--trending]` — unchanged discover
+- `skil install <skillId>` — market install straight to the live pair (no `--to`, there is nowhere else to put it)
 
-Push verbs take `--to` (default `cursor`). Unknown dock is rejected before the engine. Mutating map verbs have no `--ide`.
+No verb takes `--to <dock>`, `--from`, `copy`, or `export` — those are gone as a product surface (see Engine "Gone from the product surface").
 
 Bin is `skil`. `contextkit` is an alias of the same entry. Help and product-loop errors say **command**, not collection. Engine method is `file` (was `fileToCollection`). `Collection` remains a type alias. GUI chrome says Commands. Window/title says skil. Renderer bridge is `window.skil`.
 
@@ -254,32 +235,32 @@ Bin is `skil`. `contextkit` is an alias of the same entry. Help and product-loop
 
 Same engine. No business logic in React.
 
-**Connect:** folder picker on Sync (`pickProjectFolder` = dialog + bind). No login. Discover, Inbox, and Commands work with no folder. Scan needs a connected repo (or CLI cwd). Header shows the bound path and a Re-scan icon only after connect; with no folder the header is empty. Window title and brand say **skil**.
+**Connect:** folder picker on Sync (`pickProjectFolder` = dialog + bind). No login. Discover, Skills, and Commands work with no folder. Scan needs a connected repo (or CLI cwd). Header shows the bound path and a Re-scan icon only after connect; with no folder the header is empty. Window title and brand say **skil**.
 
-**Session bind (GUI main):** `projectRoot` is session-only. `pickProjectFolder` opens a dialog then `bindProjectFolder`. `bindProjectFolder(path)` is `createEngine(path)` + DiskWatch, no second dialog. `pickDestinationFolder` is dest-only and does not bind.
+**Session bind (GUI main):** `projectRoot` is session-only. `pickProjectFolder` opens a dialog then `bindProjectFolder`. `bindProjectFolder(path)` is `createEngine(path)` + DiskWatch, no second dialog.
 
 **Tabs:**
-- **Inbox** — one global staging pool (scan + Discover adds). File onto a command, or delete. Filing onto a command does not remove the id. Not per IDE. No Scan control; it listens to `onScan`.
-- **Commands** — one tab, **one list** (the project map). Create, file from Inbox, remove skill, delete command, **Export** (push everything to a chosen dock). Windsurf is not a peer chip. Do **not** add IDE workspace cards.
-- **Rules** — one tab. One card per rule name (dock copies are deploys). Card name + always-apply toggle (writes every copy; root always-on files are display-only). Click a card to preview the body. Same format picker + **Export** as Commands (`exportRules`). Does not create rules.
-- **Discover** — live Top / Trending plus market index role → category, search, preview. Add → Inbox (does not install). No project re-scan control.
-- **Sync** — pick / change folder, plus **Import** (another project, one dock). Not a live merge. No per-dock `state.json`. Re-scan is not on this card.
+- **Skills** (was Inbox) — the whole catalog, grouped **Market** / **Project** by origin (not by "has a path" — after `+` everything is on disk either way). Toggle per row calls `setSkillEnabled`. Delete is preview-only and hard-deletes live + parked. No Scan control; it listens to `onScan`.
+- **Commands** — one tab, **one list** (the project map). Create, file from Skills, remove skill, delete command, and a **toggle** per command (`setCommandEnabled`). No dock chips, no Export button, no per-dock command files.
+- **Rules** — one tab. Shared-law rows (one `AGENTS.md` section each) get a toggle. Glob rows (`.cursor/rules/*.mdc`, etc.) are listed read-only — no toggle, no Export. Click a row to preview the body.
+- **Discover** — live Top / Trending plus market index role → category, search, preview. `+` calls `bridge.install(skillId)` directly — it is already an on decision, so it writes the live pair immediately instead of landing in a wishlist first.
+- **Sync** — pick / change folder. A **Leftovers** card lists catalogued leftover paths (skill/command/rule) with one action, **Use ours and remove leftovers**, which calls `adoptLeftovers`. Re-scan is not on this card.
 
-After pick, the GUI calls `scan()` once. Inbox is a rail tab above Commands. Re-scan is the header icon next to the path (hidden until a folder is bound). Inbox still shows gone ids and stamp-vs-map warns from the last scan (`role="status"`). Do not auto-create commands from skill folders. Discover Add is unchanged (still no install).
+After pick, the GUI calls `scan()` once. Re-scan is the header icon next to the path (hidden until a folder is bound). Skills still shows gone ids and leftover-always-on-rule warns from the last scan (`role="status"`). Do not auto-create commands from skill folders.
 
-**The GUI has two push controls, both labeled Export.** Commands Export pushes the command map (`exportAll`). Rules Export copies rule files (`exportRules`). There is no separate per-skill Install or cross-dock Copy button in the renderer. `engine.install` / `copyTo` / `copyAll` / single-name `exportCommand` remain real engine methods (CLI still uses `install` and `copy`, and `exportCommand` backs CLI's `export <command>`), but the Electron bridge no longer exposes `install`, `copyTo`, `copyAll`, or `exportCommand` — only `exportAll` and `exportRules`. Removed 2026-08-27 (see Decision Log) after they were found wired end-to-end (bridge/preload/main) but never rendered — `InstallSkill.tsx` existed as a file but nothing mounted it.
+**There is no push control.** Toggling a row **is** the write — on copies to the live pair, off parks it. There is no separate Export / Install / Copy button anywhere in the renderer, and no dock picker. `engine.copyTo` / `copyAll` / `importFrom` / `install(skillId, dock)` / `exportCommand` / `exportAll` / `exportRules` are gone (see Engine section) — the Electron bridge exposes `setSkillEnabled`, `setCommandEnabled`, `setSharedRuleEnabled`, `leftovers`, `adoptLeftovers` instead.
 
-**Export (Commands):** push the **project map** to a chosen dock, button labeled **Export** in the Commands heading (not "Save"). Writes the command file (for docks that have one), then copies local filed skills the dest is missing (or `install` internally for Discover-only ids — an engine-level call, not the removed bridge method). Dest skill folders already present are left alone. Loading / success / failure is a modal; failure details stay collapsed. Unstamped existing command file shows a Replace confirm (`replace: true`). Dock picker stays enabled with no folder. First Export with no session: `pickDestinationFolder` → `exportAll({ dest })` on the current (userData) engine → `bindProjectFolder(dest)` → `scan()`. Header path + Re-scan and Sync then show that folder. Export **before** bind so sketched commands are not wiped by `createEngine`. Later Exports use the bound root (no second picker). Re-scan (header) is pull; Export is push. They are not the same control. Counts from `usage()` sit on filed skills (Claude reads). Empty or failed usage does not block export.
+**Toggle (Skills / Commands / Rules):** flips one row. Loading / success / failure is inline on the row, not a modal — there is nothing left to configure (no dest, no replace flag) before the write happens. A market skill whose parked copy is gone re-fetches automatically on toggle-on; a local skill in the same spot surfaces an error instead (nothing to restore from). A command name colliding with an existing non-command skill surfaces that error inline on the toggle.
 
-**Import (Sync):** purple **Import** on Sync, disabled until a folder is bound. Modal: dock chips (default Cursor), recent folders except current, or Choose folder (`pickDestinationFolder`, does not bind). Calls `importFrom(sourceRoot, dock)`. New skills add on top; command names union into the map; that dock's rule files copy in. Conflicts (different dest `SKILL.md`, unstamped dest file, different dest rule) show Replace, then `replace: true`. Does not switch the connected project. Does not copy market Inbox.
+**Leftovers (Sync):** after scan, a card lists every leftover path grouped by kind. **Use ours and remove leftovers** is the only action — no per-path picker, no merge UI. It copies any id missing from the live pair, then moves the old path under `.skil/deprecated/`. Parked items never appear here.
 
-**Watcher:** GUI main starts `DiskWatch` after folder pick (known `skills/` dirs plus command/workflow/prompt dirs, including `.github/prompts`, plus rule dirs `.cursor/rules`, `.claude/rules`, `.github/instructions`, `.windsurf/rules`). Also watches the project root (non-recursive) for `CLAUDE.md` / `AGENTS.md`, and `.github` for `copilot-instructions.md`. Debounce ~500ms, mute our writes ~1s, skip `.git`. Flush calls `scan()` (which write-throughs existing stamps) then mutes `lastWrittenPaths()`. Not a live 3-way merge. Not a CLI daemon.
+**Watcher:** GUI main starts `DiskWatch` after folder pick — the live pair, every leftover skill root, parked skill/command roots, glob rule dirs (`.cursor/rules`, `.claude/rules`, `.github/instructions`, `.windsurf/rules`), and the project root (non-recursive) for `AGENTS.md` / `CLAUDE.md` / leftover always-on files. Debounce ~500ms, mute our writes ~1s, skip `.git` and `.skil/deprecated`. Flush calls `scan()` then mutes `lastWrittenPaths()`. Not a live 3-way merge. Not a CLI daemon.
 
 ### 6. Market Index sync (Discover backend)
 
 **Status: Phases 1–4 shipped (sync core, persist + first fill, read API + UI, weekly cron).** Full spec: `tasks/plan.md`; task breakdown: `tasks/todo.md`.
 
-Discover today calls `SkillsAdapter.search` / `.browse` live against skills.sh. The **market index** is a separate, precomputed alternative: a curated Supabase copy of skills.sh (~20k rows), nested **role → category (field) → top 30 skills by installs**, refreshed on a schedule instead of hit live. It is not the engine catalog (`skills[]` in `.skil/state.json`) — always say **market index**, never "engine." Roles and fields are **data rows**, not a hardcoded list of 20. **List** (shelf/search) is rank/name/installs (rank on shelves only). **Preview** is live GitHub + SKILL.md + audit — bodies stay off the DB. **Landing copies** `npx skills add`; **GUI `+` is Inbox**, not install.
+Discover today calls `SkillsAdapter.search` / `.browse` live against skills.sh. The **market index** is a separate, precomputed alternative: a curated Supabase copy of skills.sh (~20k rows), nested **role → category (field) → top 30 skills by installs**, refreshed on a schedule instead of hit live. It is not the engine catalog (`skills[]` in `.skil/state.json`) — always say **market index**, never "engine." Roles and fields are **data rows**, not a hardcoded list of 20. **List** (shelf/search) is rank/name/installs (rank on shelves only). **Preview** is live GitHub + SKILL.md + audit — bodies stay off the DB. **Landing copies** `npx skills add`; **GUI `+` calls `engine.install(skillId)`** — live trees pivot, no Inbox step.
 
 **Module boundary (pure logic, store/client both injected — same DI pattern as the engine):**
 
@@ -315,7 +296,7 @@ class MarketSync {                // src/backend/market-sync.ts
 }
 ```
 
-`InMemoryMarketStore` backs tests (`src/backend/in-memory-market-store.ts`). `SupabaseMarketStore` (`src/backend/supabase-market-store.ts`, Task 7, shipped) implements the same interface against four Supabase tables — see `tasks/plan.md` "Data" and `supabase/migrations/0001_market_index.sql`. `src/backend/market-seed.ts` holds the seed: 6 roles / 21 fields (Agent/Workflow + Other/Integrations added for classify; Data/SQL removed). New rows in `market_roles` / `market_fields` are picked up by `listActiveFields` with no code change. `q` is unused for shelves. `src/backend/parse-skill-description.ts` trims a SKILL.md's YAML `description` to ≤500 chars for the search field. Weekly shelf refresh (`createMarketSync` → `refreshActiveFields`) classifies the top 1000 by installs via Vercel AI Gateway (`openai/gpt-4o-mini`) — laptop `scripts/sync-market.ts` and `api/cron/sync-market.ts` share that factory.
+`InMemoryMarketStore` backs tests (`src/backend/in-memory-market-store.ts`). `SupabaseMarketStore` (`src/backend/supabase-market-store.ts`, Task 7, shipped) implements the same interface against four Supabase tables — see `tasks/plan.md` "Data" and `supabase/migrations/0001_market_index.sql`. `src/backend/market-seed.ts` holds the seed: 6 roles / 21 fields (Agent/Workflow + Other/Integrations added for classify; Data/SQL removed). New rows in `market_roles` / `market_fields` are picked up by `listActiveFields` with no code change. `q` is unused for shelves. `src/backend/parse-skill-description.ts` trims a SKILL.md's YAML `description` to ≤500 chars for the search field. Weekly shelf refresh (`MarketSync.refreshActiveFields`) classifies the top 1000 by installs via Vercel AI Gateway (`openai/gpt-4o-mini`) — laptop `scripts/sync-market.ts` and `api/cron/sync-market.ts` each construct `MarketSync` directly (store + `RealMarketSkillsClient` + `LlmSkillClassifier`); the shared behavior is `MarketSync` itself, not a factory.
 
 `src/backend/market-skills-client.ts` (`RealMarketSkillsClient`, Task 8, shipped) is the real `MarketSkillsClient` against skills.sh's documented API (listing is page-based, not cursor-based — `listPage`'s cursor is the next page number as a string; `getSkill` parses `description` out of the returned `SKILL.md` file and falls back to hashing it locally when skills.sh's `hash` is `null`; `getAudit` reduces every partner's status to the worst of pass/warn/fail, or `none` on a 404 or empty list). Same OIDC-bearer-token pattern as `skills-proxy.ts`.
 
@@ -328,43 +309,42 @@ class MarketSync {                // src/backend/market-sync.ts
 - `handleMarketSearchRequest` — `store.searchListings(q, { limit })` across the **full** stored index (not just shelved skills), same query for Landing and GUI. Missing `q` → 400. `limit` clamps 1–50, default 25. Rows are `{ id, name, installs }` — no rank (search has no rank concept), no description/hash. Backed by a generated `tsvector` column + GIN index (`supabase/migrations/0003_market_search_index.sql`) — `ilike` can't use an index at ~20k rows (see `.agents/skills/supabase-postgres-best-practices/references/advanced-full-text-search.md`). `InMemoryMarketStore` mirrors the same "every word must match" semantics with a plain substring check, not real tsvector.
 - `handleMarketPreviewRequest` — combines stored listing fields (`store.getListing`: installs/url/installUrl) with two **live** skills.sh calls (`client.getSkillMd`, `client.getAudit`) — SKILL.md bodies and audit status are never persisted, so preview always re-fetches them. Unknown id → 404. A failed live fetch degrades to `skillMd: null` / `audit.status: 'none'` rather than failing the whole preview. `installCommand` reuses `toSkillsAddSource` (`src/backend/skills-add-source.ts`, extracted out of `SkillsAdapter.install` so both the real installer and this display-only string agree on the `owner/repo@skill` form for 3-part ids). CDN `s-maxage=300` — shorter than shelves since audits can change independently of the weekly sync.
 
-**Why separate from the engine:** the market index has its own store (Supabase, not `.skil/state.json`), its own sync loop (script + weekly cron, not scan), and no per-IDE membership concept. It only feeds Discover's read path; it does not touch `SkillsAdapter`, the catalog, or Inbox.
+**Why separate from the engine:** the market index has its own store (Supabase, not `.skil/state.json`), its own sync loop (script + weekly cron, not scan), and no per-tree membership concept. It only feeds Discover's read path; it does not touch `SkillsAdapter` or the catalog.
 
 **Landing (Task 12, shipped):** `web/lib/market-api.ts` (same-origin `fetch` for `/api/market/*` and live `/api/skills?view=` — `web/` is a static export on the same Vercel project as `api/`, no OIDC, no `src/` dependency) and `web/components/landing/discover.tsx` (Top / Trending, then role chips → category chips → 30-row list; a search box overrides the nest with the full-index search; row click opens a preview dialog with the live SKILL.md excerpt, audit badge, and a copy-to-clipboard `npx skills add` button). Empty or failed shelves keep the section and default to Top. Browse results are cached in-session (one fetch per view).
 
-**GUI Discover (Task 13, shipped):** Three bridge methods (`marketShelves` / `marketSearch` / `marketPreview`) proxy the same read API through the **main process** via `axios` — not `fetch` in the renderer, for the same CORS reason `SkillsAdapter.search`/`.browse` already go through IPC. `MarketDiscover.tsx` is the same nest as Landing (Top / Trending + role → category), with a **+** button per row that calls `addToInbox` (never installs). Empty or failed shelves stay on this nest and default to Top — there is no second Discover component. A market search or browse error surfaces inline (`role="alert"`). Browse results are cached in-session. Selecting Top / Trending swaps the row list to the live skills.sh result and hides the category row.
+**GUI Discover (Task 13, shipped; `+` behavior updated by the live-trees pivot):** Three bridge methods (`marketShelves` / `marketSearch` / `marketPreview`) proxy the same read API through the **main process** via `axios` — not `fetch` in the renderer, for the same CORS reason `SkillsAdapter.search`/`.browse` already go through IPC. `MarketDiscover.tsx` is the same nest as Landing (Top / Trending + role → category), with a **+** button per row that calls `bridge.install(skillId)` — on immediately, live pair written, no staging step. Empty or failed shelves stay on this nest and default to Top — there is no second Discover component. A market search or browse error surfaces inline (`role="alert"`). Browse results are cached in-session. Selecting Top / Trending swaps the row list to the live skills.sh result and hides the category row.
 
-**GUI Inbox preview:** Clicking a row opens the same `SkillPreviewDialog` Discover uses. Catalog rows (any `paths`) read `engine.readSkillMd` — first on-disk `SKILL.md`, plus the path list so every dock copy is visible. Discover-only ids (not in the catalog) call `marketPreview` (live SKILL.md + audit + copy `npx skills add`). Delete stays on the trash control (`stopPropagation`); `deleteSkill` still removes every dock copy of that **catalog id** (folder path under the skills root, e.g. `.cursor/skills/tdd` and `.claude/skills/tdd` are one id `tdd`), not every similarly named folder. Reset/Update confirm is portaled to `document.body` above the preview (`modal-backdrop` z-index 60, preview 50). Project rows with `source: 'skills.sh'` show a Synced / Edited / New copy badge (text + color, matching Discover audit colors). `updateFromMarket` downloads the market copy first, then swaps the dest folder, so a scan cannot treat the id as gone mid-reset; Inbox keeps the id.
+**GUI Skills-tab preview:** Clicking a row opens the same `SkillPreviewDialog` Discover uses. Catalog rows (any `paths`) read `engine.readSkillMd` — first readable `SKILL.md`, plus the path list so live/leftover/parked copies are all visible. Discover-only ids (not yet in the catalog) call `marketPreview` (live SKILL.md + audit + copy `npx skills add`). Delete stays on the trash control (`stopPropagation`), preview-only, and hard-deletes live + parked copies of that **catalog id** (folder path under the skills root, e.g. `.agents/skills/tdd` and `.claude/skills/tdd` are one id `tdd`), not every similarly named folder or any leftover copy. Reset/Update confirm is portaled to `document.body` above the preview (`modal-backdrop` z-index 60, preview 50). Project rows with a market origin show a Synced / Edited / New copy badge (text + color, matching Discover audit colors). `updateFromMarket` downloads the market copy first, then swaps both live folders, so a scan cannot treat the id as gone mid-reset.
 
 The migration is written but **a human still applies it** in the Supabase dashboard/CLI before the first `npm run sync-market` run — same as `tasks/plan.md` specifies for Task 7 (and 0003 for Task 10's search index). Until that first run, both Landing and GUI Discover show Top / Trending with no role tabs. After first fill, the weekly cron refreshes shelves and hydrates at most 40 details; it does not re-crawl the full listing.
 
 ## User Flow
 
-1. **Connect a repo (optional).** No login. Skip and still use Discover / Inbox / Commands; first Save can pick a folder and bind it. Work vs side project = another folder = another map.
-2. **Scan** dock skill dirs (`.cursor`, `.claude`, `.agents`, `.codex`, `.github`, leftover `.windsurf`) — **skills** into the catalog + Inbox. Stamps do not fork the map.
-3. **Inventory.** Scanned and Discover ids sit in one Inbox. They stay there after filing. Click a row to read `SKILL.md` (disk for catalog ids, market index for Discover-only). Inbox groups Market (not on disk) vs Project (on disk). Install/export moves a Discover id to Project.
-4. **Organize once.** Create `/build`, file `tdd` onto it. That is the project list.
-5. **Export / copy to a dock.** Writes that dock’s stamped file (if it has command markdown) and missing skill folders. Same list every time.
-6. **Discover → Inbox → file onto a command → install `--to` a dock** writes the skill into **that dock’s** skills dir.
-7. **Export** (explicit): write **our** command file where that dock has one, and deploy filed skills that dock is missing. Do not touch their old `/build.md` unless they opt in to replace. Do not overwrite dest skill folders.
-8. **Import** (Sync): copy one dock’s skill folders (and stamps if any) **and that dock’s rules** from another **project** into this folder. Add on top; warn then replace on conflict. Bound folder stays. Market inbox is not copied.
-9. **Re-scan / watcher** = refresh catalog. Map stays the SoT. Stamp ≠ map is a warn, not an adopt. Rules tab re-reads disk (rule dirs and root always-on files).
-10. **Usage (Phase 5):** `skil usage` / GUI counts from Claude logs (Cursor hook optional). Copilot = no counts.
-11. **Rules:** pick a folder (or Import) also surfaces rule files. Preview, toggle Cursor `alwaysApply`, Export to a dest dock.
+1. **Connect a repo (optional).** No login. Skip and still use Discover / Skills / Commands; first toggle can pick a folder and bind it. Work vs side project = another folder = another map.
+2. **Scan** unions the live pair, every leftover root (`.cursor`, `.codex`, `.github`, leftover `.windsurf`), and parked folders into one catalog. Never writes leftover homes.
+3. **Inventory.** Every row is on (live pair present) or off (parked) from the moment it exists. Skills tab groups Market (`source: 'skills.sh'`) vs Project (`source: 'local'`) — a display filter, not a queue. Click a row to read `SKILL.md`.
+4. **Organize once.** Create `/build`, file `tdd` onto it. That is the project list — `## Skills` on the live command skill, if `/build` is on.
+5. **Toggle on** a skill or command: writes both `.agents/…` and `.claude/…` right away. Same folders every time, no dest to pick.
+6. **Discover → `+`** turns a market skill on directly (one npx into `.agents`, then `copyDir` into `.claude`). No separate install step.
+7. **Toggle off**: moves both live folders to `.skil/parked/…`. Row stays, still visible, just off.
+8. **Leftover cleanup** (Sync): **Use ours and remove leftovers** copies any leftover id missing from the live pair, then moves the old leftover path to `.skil/deprecated/`. Parked items never show up here.
+9. **Re-scan / watcher** = refresh catalog only. The live pair is always the map; there is no separate stamp to warn about anymore. Rules tab re-reads disk (`AGENTS.md` sections plus leftover glob files).
+10. **Usage:** `skil usage` / GUI counts from Claude logs (Cursor hook optional). Copilot = no counts.
+11. **Rules:** shared law (`AGENTS.md` sections) toggles on/off like a skill. Glob rules (`.cursor/rules/*.mdc`, etc.) are listed, previewed, left alone on disk.
 
 ## Data Model
 
 ### Catalog and map (`state.json`)
 
-Schema **v6** (Phase 5). Load v5 `membership` as a union (cursor first, then other keys, unique). No rewrite until the next mutation.
+Schema **v7** (live-trees pivot). Load v6 `skills[]` as-is; a leftover `inbox` array on an old file is read and dropped on the next persist — not carried into `State`, never written back (no separate migration step). `installedSkills` stays on `State` for old files but is not the catalog; ignore it.
 
 ```typescript
 interface State {
-  version: string              // "6.0"
+  version: string              // "7.0"
   commands: CommandRecord[]    // one skills[] per command
   skills: SkillRecord[]        // one catalog — we are SoT
-  inbox: string[]              // one staging pool
-  installedSkills?: Skill[]    // leftover from the old convert-all loop; not read by the product loop
+  installedSkills: Skill[]     // leftover, not the catalog — kept only so old files don't break
 }
 
 interface CommandRecord {
@@ -387,55 +367,60 @@ interface UsageRow {
 
 /** View DTO from rules() — disk walk, not persisted. */
 interface RuleRecord {
-  id: string           // path relative to project root
-  name: string         // pair-programming/behavior, CLAUDE
-  path: string         // same as id
-  dock: Dock           // AGENTS.md is agents
-  alwaysApply: boolean
+  id: string                   // "pair-programming/behavior" for a shared section; a relative path for a glob file
+  name: string
+  kind: 'shared' | 'glob'      // shared → one AGENTS.md section, togglable. glob → left on disk, read-only
+  path: string                 // AGENTS.md for shared; the .mdc/.md path for glob
+  enabled?: boolean            // shared only
 }
 
 interface SkillRecord {
-  id: string                   // path relative to that IDE's skills root ("tdd", "ui/styling")
+  id: string                   // path relative to the skills root ("tdd", "ui/styling")
   hash: string                 // sha256 of SKILL.md (utf-8)
-  paths: string[]              // folders we have seen, relative to project root
-  deployedTo: Array<{ ide: IDE; path: string; installedAt: string }>
-  source: 'local' | 'skills.sh'  // origin: scan vs install. Inbox groups by paths, not this.
+  paths: string[]              // every folder currently seen for this id (live + leftover + parked)
+  source: 'local' | 'skills.sh'  // origin: scan vs install. Market/Project grouping in the UI is this field, not path count.
   originHash?: string            // SKILL.md hash at market copy-time. Scan does not overwrite.
+}
+
+interface LeftoverRecord {
+  kind: 'skill' | 'command' | 'rule'
+  id: string
+  path: string                 // relative to project root, e.g. ".cursor/skills/tdd"
+}
+
+interface AdoptResult {
+  adopted: string[]            // ids copied into the live pair because they were missing there
+  deprecated: string[]         // old leftover paths moved under .skil/deprecated/
 }
 
 interface ScanResult {
   added: string[]
   gone: string[]
   changed: string[]            // path still there, hash updated
-  commandPulls: Array<{ ide: IDE; name: string }>  // stamp ≠ map (warn only)
-}
-
-interface ExportResult {
-  succeeded: string[]
-  failures: string[]
+  alwaysOnWarnings: string[]   // leftover always-on rule files that fight AGENTS.md (warn only)
 }
 ```
 
-**Id rule:** id = path relative to the scanned skills root. Same id in two IDE trees is one catalog row with multiple `paths`. Nested `build/tdd/SKILL.md` → id `build/tdd`. If a slug exists only as a leaf, id is `tdd`.
+**Id rule:** id = path relative to the skills root. A live/leftover/parked copy of the same id is one catalog row with multiple `paths`. Nested `build/tdd/SKILL.md` → id `build/tdd`. If a slug exists only as a leaf, id is `tdd`.
 
-**Load:** v6 `skills[]` as-is. v5 `commands[].membership` → union (cursor, then remaining docks, unique). v4 `commands[].skills` → that array. v3 `collections` → `commands` first, then the same. Missing `skills` → `[]`. `inbox` missing → `[]`. v1 `activeCollection` still ignored.
+**On/off, computed, not stored:** a `SkillRecord`/`CommandRecord` is **on** when `.agents/skills/<id>` and `.claude/skills/<id>` both exist; **off** when only `.skil/parked/…/<id>` exists; **leftover** when it exists only under a leftover root. `enabled` is never persisted as its own field — the path list is the only source of truth, which is also why a stray manual edit to one tree and not the other is directly visible (both paths present but with different hashes) instead of hidden behind a boolean.
 
-**Hash:** `SKILL.md` only, not the whole folder. Disk stays SoT for the body; we store the hash so rescan can report `changed` and so export can stamp what we saw.
+**Load:** v7 as-is. v6 `skills[]` loads as-is; a leftover `inbox` array is read and dropped, not carried into `State`; `installedSkills` is read and persisted back (old files don't break) but is not the catalog. v5 `commands[].membership` → union (first key, then remaining, unique). v4 `commands[].skills` → that array. v3 `collections` → `commands` first, then the same. Missing `skills` → `[]`.
 
-### Command file we write (push)
+**Hash:** `SKILL.md` only, not the whole folder. Disk stays SoT for the body; we store the hash so rescan can report `changed` and so `originChecks` can compare against a market copy.
 
-Target path by dock:
+### Live command skill (write)
 
-| Dock | Skills (scan + install) | Our command file |
-|-----|-------------------------|------------------|
-| cursor | `.cursor/skills/` | `.cursor/commands/<name>.md` |
-| claude | `.claude/skills/` | `.claude/commands/<name>.md` |
-| agents | `.agents/skills/` | `.agents/commands/<name>.md` |
-| copilot | `.github/skills/` | `.github/prompts/<name>.prompt.md` (VS Code prompt file — read by classic Copilot Chat / extension host, not Copilot's Agent Host) |
-| codex | `.codex/skills/` | none (skills only — custom prompts removed in codex-cli 0.117.0; never had a project-file home even before that) |
-| windsurf | `.windsurf/skills/` | `.windsurf/workflows/<name>.md` (scan leftover, not a peer dock) |
+A command's on-disk form is two skill folders, same shape as any human-only skill, always the live pair — never a picker, never a per-dock filename table:
 
-We scan **skills** dirs always. We read **stamped** command files on pull. We write command dirs on Copy / Export / write-through.
+| Tree | Skill folder | Extra file |
+|------|--------------|------------|
+| `.agents` | `.agents/skills/<name>/SKILL.md` | `.agents/skills/<name>/agents/openai.yaml` |
+| `.claude` | `.claude/skills/<name>/SKILL.md` | `.claude/skills/<name>/agents/openai.yaml` |
+
+Off → both move to `.skil/parked/commands/<name>/`. There is no third location and no dock-specific extension (no `.prompt.md`, no `workflows/`) — a command is a skill, full stop.
+
+`SKILL.md`:
 
 ```markdown
 ---
@@ -443,6 +428,7 @@ name: /build
 skills:
   - tdd
   - design
+disable-model-invocation: true
 generated_by: skil
 generated_at: 2026-08-22T23:00:00.000Z
 ---
@@ -462,7 +448,13 @@ When they apply, read and follow:
 - `design`
 ```
 
-Stamp = `generated_by: skil` in frontmatter. If the target file exists and lacks that stamp, `exportCommand` / `copyTo` / write-through skip the file (map may still update) unless `replace: true`. If it is our file, we rewrite frontmatter `skills:` and `## Skills`. Goal / Sequence / Rules (everything above `## Skills`) stay unless `replace: true` or the body is still the old numbered stub / untouched starter.
+`agents/openai.yaml`:
+
+```yaml
+allow_implicit_invocation: false
+```
+
+`disable-model-invocation: true` + `allow_implicit_invocation: false` are what make this a **human-only** skill: an agent only runs it when the human types `/build`, never by its own judgment the way it would pick up a normal skill. Stamp = `generated_by: skil` in frontmatter — this is how `setCommandEnabled` recognizes its own folder on a name collision check. `file` / `removeSkill` rewrite frontmatter `skills:` and `## Skills` on the live pair only; a parked command is not rewritten until toggled back on. Goal / Sequence / Rules (everything above `## Skills`) stay as the user edited them.
 
 ### Listing `Skill` (Discover)
 
@@ -472,71 +464,59 @@ Unchanged: skills.sh listing DTO. In-memory only. Not a catalog row until they A
 
 ### Split SoT (catalog vs disk vs map)
 
-**Decision:** Disk owns skill bodies. skil owns the catalog, hashes, deploys, **and one command list per project**. Stamped command files are a projection we write on export. We do not adopt them into the map on pull.
+**Decision:** Disk owns skill bodies. skil owns the catalog, hashes, **one command list per project**, and which path each id currently lives at. There is no projection step (no stamped file to write on export) — the live copy is not a generated artifact of some other source of truth, it just *is* the on state.
 
-**Rationale:** Users already edit `SKILL.md` in the repo. The map is “what is on `/build` in this project.” Work vs personal is another folder. Cursor vs Claude is export, not a second map.
+**Rationale:** Users already edit `SKILL.md` in the repo. The map is "what is on `/build` in this project" and "what is currently on." Work vs personal is another folder.
 
-### Scan is pull, not import-as-command
+### Scan is pull; on/off is push, not a picker
 
-**Decision:** `scan()` never upserts a command named `cursor` or `claude` from skill folders. New skill ids go to Inbox. Stamped `/build.md` does **not** change `commands[].skills`.
+**Decision:** `scan()` never upserts a command from skill folders, never creates a live/parked copy, and never touches a leftover root. It only unions what is already there into one catalog. The only writes are `setSkillEnabled` / `setCommandEnabled` / `setSharedRuleEnabled` (single-target, no dest argument) and `adoptLeftovers`.
 
-**Rationale:** Commands are SDLC knobs the user creates. An IDE-named command would recreate the folder tree. Stamp-wins-per-dock was how we grew five maps.
+**Rationale:** Commands are SDLC knobs the user creates. A picker/dest argument on every write was how the old model grew five copies to keep in sync by hand; a fixed live pair removes the argument entirely.
 
-### One catalog, one command list (docks are not workspaces)
+### One catalog, one command list, two live trees (not five docks)
 
-**Decision:** `.skil/state.json` is the only map. Inbox + catalog + `commands[].skills` are project-global. Commands tab is **one list**. Docks are install/export targets. No `.cursor/.skil/state.json`. No IDE cards.
+**Decision:** `.skil/state.json` is the only map. Catalog + `commands[].skills` are project-global. Commands tab is **one list**. `.agents` and `.claude` are the only write targets, always together. No per-tree `state.json`. No IDE cards, no dock chips.
 
-**Rejected:** per-dock membership (v5). **Rejected:** four IDE tabs. **Rejected:** per-dock Inbox. **Rejected:** treating `.agents` as a fourth product with its own `/build`.
+**Rejected:** per-dock membership (v5, Phase 13). **Rejected:** four IDE tabs. **Rejected:** a dock picker on install/export (v6, Phase 5). **Rejected:** treating `.agents` as a fourth product with its own `/build`.
 
-**If Cursor `/test.md` and Claude `/test.md` disagree on disk:** the map wins. Warn. User exports to refresh a stamp, or deletes the extra folder. Runtime “Cursor also reads `.agents`” is out of scope.
+**If `.agents/skills/build` and `.claude/skills/build` disagree on disk** (a manual edit to one, not the other): both still show as "on" (paths present), but the hash mismatch is visible on the row. The next `setCommandEnabled(name, true)` — or any `file`/`removeSkill` write-through — re-syncs both from the map. There is no separate "warn, do not touch" state for this case the way stamp-vs-map used to work, because there is no longer a second party's file to defer to; both trees are ours.
 
-**Rationale:** Filing once per project matches how people work (same skills on every agent in this repo). v5 per-IDE lists matched messy disk and made Copy a matrix. This **reverses** the 2026-08-24 per-IDE membership decision (Phase 13).
+**Rationale:** Filing once per project matches how people work (same skills on every agent in this repo). This **reverses** both the 2026-08-24 per-IDE membership decision (Phase 13) and the 2026-08-27 dock-picker-on-push decision (Phase 5) — the second reversal in a year is the signal that "which dock(s)" should never have been a per-call argument at all; it is now a constant.
 
-### Write-through refreshes existing stamps only
+### Toggle is the write; no separate write-through step to defer
 
-**Decision:** Create / file / unfile / delete rewrite stamped command files that **already exist** (same `skills:` everywhere). Do not create a stamp in a dock that never got export.
+**Decision:** `setSkillEnabled` / `setCommandEnabled` / `setSharedRuleEnabled` are the only writes to a live tree, and they happen the moment the user flips the toggle — not on a later explicit push. `file` / `removeSkill` still write-through a live command's `## Skills`, but only because that command is already on; they never turn a command on by themselves.
 
-**Rationale:** First landing on a dock is explicit export. Later map edits should not surprise a dock that was never pushed.
+**Rationale:** The old model needed "write-through refreshes existing stamps only, first landing on a dock is explicit export" because export was a separate, deferrable step from filing. With no dock picker and no projection, there is nothing left to defer — on means live, right now.
 
-### Inbox is a staging pool (still one)
+### There is no Inbox; Market vs Project is a filter, not a queue
 
-**Decision:** Filing onto a command does not remove the id from Inbox. Gone folders still drop the id from Inbox and commands. Inbox is not per dock. GUI groups Market (not on disk) vs Project (catalog `paths` non-empty). A Discover id **moves** to Project after install/export; it does not stay under Market. `source` stays `'skills.sh'` on install — that is origin, not the Inbox group. Scan attaches an npx leftover short folder to that market id instead of adding a second local row.
+**Decision:** Every catalog row is either on or off from the moment it exists — a Discover `+` writes the live pair immediately (`engine.install(skillId)`), it does not sit in a wishlist first. The Skills tab still splits **Market** (`source: 'skills.sh'`) vs **Project** (`source: 'local'`) so people can tell "something I added" from "something already in the repo," but that is a display filter over one catalog, not a second list, and it is not affected by on/off.
 
-**Rationale:** Inbox is the picker. "Unfiled" is a filter. `file()` and GUI `addSkill` both keep the id. Grouping by `source === 'local'` left installed market skills in Market and let scan mint `react-patterns` next to `obra/react-patterns`. On-disk vs not is one skill, two states. `originHash` plus a manual Update/Reset is how we notice a market change without auto-overwriting disk.
+**Rationale:** The old Inbox existed to let a Discover add sit un-filed and un-installed. Since `+` now means "on" directly, there is nothing left to stage. `originHash` plus a manual Update (unedited) / Reset (edited) is still how a later market change is noticed without auto-overwriting disk — that part is unchanged.
 
-### We do not scan unstamped `commands/` (or Windsurf `workflows/`)
+### We do not touch leftover trees except through `adoptLeftovers`
 
-**Decision:** Their unstamped `/planning.md` / `/build.md` are not ours. We do not parse, index, or overwrite them unless export/copy `--replace` (or the file is stamped by us).
+**Decision:** Leftover command/prompt files (`.cursor/commands/*.md`, `.windsurf/workflows/*.md`, any other dock's unstamped `commands/`) and leftover skill folders are catalogued and previewable, never parsed as input to the map, and never overwritten. The only thing that ever moves a leftover path is the user clicking **Use ours and remove leftovers**, which calls `adoptLeftovers`.
 
-**Rationale:** Those files are their workflow text. Owning them makes skil a competing command manager.
+**Rationale:** Those files are the user's workflow text or a stray tool's skill dump. Owning them by default makes skil a competing command manager; a one-button, explicit, always-reversible (`.skil/deprecated/`) cleanup is the middle ground.
 
-### Copy is the same list to another dock
+### Market install is one write, straight to the pair
 
-**Decision:** `copyTo` / `copyAll` write the project map to the dest dock (stamped file if that dock has command markdown, plus missing skill folders). Same skip / copy / install / replace rules as `exportCommand`. No `--from`.
+**Decision:** `SkillsAdapter.install` always installs to `.agents` (the `universal` vercel agent) via one `npx`, then the engine `copyDir`s into `.claude`. No dock argument anywhere in that path — a market skill lands in exactly the two places any skill lives.
 
-**Rationale:** Copy is export with a dest chip. There is no second list to copy from.
-
-### Import is cross-project, one dock
-
-**Decision:** `importFrom(sourceRoot, dock, { replace? })` reads that dock’s skill tree (and stamps if any) from another folder and writes them into this project. New ids add to Inbox; command names union into **the** map. Dest `SKILL.md` with a different hash or an unstamped dest command file requires `replace: true`. Same-hash skills are skipped. Source Inbox / `state.json` / unstamped commands / other docks are ignored. GUI Sync Import does not bind the source.
-
-**Rationale:** Copying `.cursor` between repos is common. Path ids stay. Market inbox is app-global — do not copy it.
-
-### Install is push-to-a-dock
-
-**Decision:** `install(skillId, dock)` writes the folder into **that dock’s** skills dir and appends `deployedTo`. Cursor → `.cursor/skills`, not vercel’s project `.agents/skills`. Filing can happen before or after; file then install is still the happy path.
-
-**Rationale:** The catalog is dock-agnostic. Disk layout is not. One skill can be deployed to more than one dock.
+**Rationale:** The catalog was already dock-agnostic; the old code still made every install call thread a dock through three layers (CLI/GUI → engine → adapter) for a decision ("which dock") that no longer exists. `deployedTo` is gone — `paths` already says where a skill physically is.
 
 ### Watcher is scan, not live merge
 
-**Decision:** Watch skill dirs, command/workflow dirs, rule dirs, and root always-on rule files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`). Debounce ~500ms. Mute paths we just wrote for ~1s. Skip `.git`. Then scan + write-through **existing** stamps. Skip rewrite when the stamp already matches the map. Gone-id cleanup that changed the list still rewrites. After a successful scan, GUI main notifies the window so lists refresh. Explicit Re-scan remains in the header.
+**Decision:** Watch the live pair, every leftover skill root, parked skill/command roots, glob rule dirs, and root always-on rule files (`AGENTS.md`, `CLAUDE.md`, leftover `copilot-instructions.md`). Debounce ~500ms. Mute paths we just wrote for ~1s. Skip `.git` and `.skil/deprecated`. Then `scan()` (catalog refresh only — it does not write-through anything, because there is no stamp left to refresh outside of a toggle). After a successful scan, GUI main notifies the window so lists refresh. Explicit Re-scan remains in the header.
 
-**Rationale:** Explicit Re-scan is too easy to skip. A 3-way merge of map + disk + body edits is still out. The map wins; we tell them if a stamp disagrees.
+**Rationale:** Explicit Re-scan is too easy to skip. A 3-way merge of map + disk + body edits is still out.
 
-### Thin usage eval (Phase 5, no SQLite)
+### Thin usage eval (no SQLite)
 
-**Decision:** `UsageCollector` seam. `engine.usage()` returns counts. Claude session logs first. Cursor hook only if small. Copilot/Codex counts later. No “used properly” judge.
+**Decision:** `UsageCollector` seam. `engine.usage()` returns counts. Claude session logs first. Cursor hook only if small. Copilot/Codex counts later. No "used properly" judge.
 
 **Rationale:** Unused vs used is the product question. Skillsight/SkillKit already do dashboards; we show counts on the map we already have.
 
@@ -544,26 +524,28 @@ Unchanged: skills.sh listing DTO. In-memory only. Not a catalog row until they A
 
 **Decision:** One connected folder (CLI = cwd, GUI = picker + `createEngine(root)`). No account. No last-folder file this phase.
 
-### Leftovers stay leftover
+### Cross-project import is dropped, not redesigned
 
-CLI `convert` / `sync` / `run` and engine leftover methods (`sync`, `convert`, `getCommand`, skillsmith `export`) are gone. Do not build Phase 8 import that upserts a command named `cursor` / `claude`. Cross-project `importFrom` on Sync is in. Do not build Phase 9 "export = fetch then convert."
+Sync's old cross-project **Import** (`importFrom(sourceRoot, dock)`) depended on picking a dest dock, which no longer exists as a concept. It is removed rather than reshaped into "import into the live pair" — nobody asked for that narrower version, and reintroducing a folder-to-folder copy is a new feature, not a doc fix. Revisit only if a real request shows up; until then, copying a folder by hand covers it.
+
+Earlier leftover methods (CLI `convert` / `sync` / `run`; engine `sync`, `convert`, `getCommand`, skillsmith `export`; Team YAML `ConfigAdapter`) were already gone before this pivot and stay gone.
 
 ## Test Strategy
 
-**Unit (70%)** — engine: scan reconcile, one-list file/create/delete, copyTo writes same list, importFrom add/replace, gone ids, export stamp/replace, install dock path, scan does not adopt stamps, usage counts. Adapters mocked.
+**Unit (70%)** — engine: scan unions live/leftover/parked without writing leftover, one-list file/create/delete, `setSkillEnabled` off→park→on→restore and market re-fetch, `setCommandEnabled` off→park→on→restore and name-collision error, `setSharedRuleEnabled` upsert/remove on `AGENTS.md`, `leftovers`/`adoptLeftovers` (adopt missing + move to deprecated, parked never touched), gone ids, usage counts. Adapters mocked.
 
-**Integration (20%)** — CLI with in-memory engine; temp-dir FS for walk + hash; DiskWatch debounce/mute with fake clock.
+**Integration (20%)** — CLI with in-memory engine; temp-dir FS for walk + hash + park/deprecate moves; DiskWatch debounce/mute with fake clock.
 
-**E2E (10%)** — GUI with real engine, fake adapters: connect → scan → one command list → export to Claude → Cursor folder unchanged until export.
+**E2E (10%)** — GUI with real engine, fake adapters: connect → scan → toggle a skill on → both live folders exist → toggle off → parked, row stays → adopt a leftover → old path gone, new path under `.skil/deprecated/`.
 
 **Agreed seams**
-1. Engine: `scan`, `list()`, `file` / `create` / `delete`, `deleteSkill`, `readSkillMd`, `copyTo` / `copyAll`, `importFrom`, `install`, `exportCommand`, inbox, `usage`, `originChecks`, `updateFromMarket`, `rules`, `readRule`, `setAlwaysApply`, `exportRules`
-2. `IFileSystemAdapter.findSkillFolders` / `readFile` / `writeFile`
-3. `ISkillsAdapter.install(skillId, dock)` / `skillHash(id)`
+1. Engine: `scan`, `list()`, `file` / `create` / `delete`, `deleteSkill`, `readSkillMd`, `setSkillEnabled`, `setCommandEnabled`, `setSharedRuleEnabled`, `leftovers`, `adoptLeftovers`, `usage`, `originChecks`, `updateFromMarket`, `rules`, `readRule`
+2. `IFileSystemAdapter.findSkillFolders` / `readFile` / `writeFile` / `copyDir` / `removeDir`
+3. `ISkillsAdapter.install(skillId)` (no dock arg) / `skillHash(id)`
 4. `UsageCollector.collect`
-5. CLI `scan` / `list` / `copy --to` / `install` / `export` / `usage` / `rules`
-6. GUI via the bridge (one Commands list, dock picker on push, counts)
-7. DiskWatch: debounce, mute, skip `.git`
+5. CLI `scan` / `list` / `enable` / `disable` / `leftovers` / `adopt` / `usage` / `rules`
+6. GUI via the bridge (one Skills list, one Commands list, toggle per row, counts)
+7. DiskWatch: debounce, mute, skip `.git` and `.skil/deprecated`
 
 **Not seams:** concatenating `.cursor/skills` in a standalone test if `findSkillFolders` already takes that root; `createEngine` wiring; JSONL field names inside the Claude parser.
 
@@ -590,22 +572,26 @@ Production wiring: `createEngine(projectRoot = process.cwd())` wires a real `Cla
 
 ### Errors
 
-`Result<T>` for expected failure. Persist failure rolls back in-memory state. Conflict failures also carry `code` + `labels` (unstamped command, import, rule export) so GUI does not parse `Error.message`.
+`Result<T>` for expected failure. Persist failure rolls back in-memory state. Conflict failures also carry `code` + `labels` (name collision on `setCommandEnabled`, market re-fetch failure on `setSkillEnabled`) so GUI does not parse `Error.message`.
 
 ### State
 
-Atomic JSON write. Schema version on every persist. v5 → v6 on load (membership union), no rewrite until the next mutation.
+Atomic JSON write. Schema version on every persist. Inbox (`inbox()` / `addToInbox` / `removeFromInbox`, and the `inbox` field on `State`) is gone — see Decision Log 2026-08-29, "Inbox removed for real." No separate migration step; an old file's `inbox` array is simply not read or written back on the next persist.
 
 ## Open Questions
 
-1. One skill on many commands **on the same IDE** — the map allows it (`addSkill` / a second file). GUI this phase files from Inbox only.
+1. One skill on many commands — the map allows it (`addSkill` / a second file). GUI files from the Skills tab only.
 2. npm package name is `skil`. Bins are `skil` and `contextkit` (alias). Publish to npm as `skil` when ready.
-3. After we rewrite a stamped file, do we preserve a user-edited body? v1 no. Revisit if people use export as a round-trip editor.
+3. After a command is re-enabled from parked, do we preserve edits made to the live copy right before it was toggled off? v1: no extra diff, parked is just the last live snapshot at toggle-off time, so nothing is lost — but there is no merge if the parked copy itself goes stale relative to the map while off. Revisit if that turns out to matter in practice.
 4. Team YAML sync — deleted with leftover `sync` / `ConfigAdapter`. Do not design `.skil.yml` this phase.
-5. `--to` default `cursor` vs required flag. Keep default `cursor` on push. Mutate verbs have no dock flag (Phase 5).
+5. Cross-project import (see "Cross-project import is dropped, not redesigned") — revisit only on a real request.
+6. ~~Inbox stays~~ — resolved 2026-08-29. See Decision Log "Inbox removed for real": Inbox is gone; the GUI's "From Skills" picker now reads the full `skills()` catalog.
 
 ## Decision Log
 
+- **Post-pivot cleanup: dead dock-picker leftovers, one MarketSync construction, no raw sync errors over HTTP (2026-08-29):** Ran an architecture review against the shipped live-trees pivot (Decision Log entry below) to catch what the pivot should have deleted but didn't. Deleted `gui/.../components/format-context.ts` (`FORMAT_LABELS`/`IDE_OPTIONS`/`folderName` — served the dock picker's Import format select, which no longer exists) and `StatusDialog.tsx` (superseded by `shared/status/StatusNotice.tsx`, zero callers left). Inlined `create-market-sync.ts`'s factory: `scripts/sync-market.ts` and `api/cron/sync-market.ts` now each construct `new MarketSync({ store, client, classifier })` directly — the factory was a 15-line pass-through with exactly two call sites, so the indirection cost more to read than it saved. `handleCronSyncRequest` no longer relays `result.error.message` (which could carry raw Supabase/network error text) into the cron's 500 response body; it returns a fixed `SYNC_FAILED` string instead, matching the pattern `market-read.ts` already used for its own store errors. Removed the unused `memfs` devDependency (real in-memory FS testing already uses the hand-rolled adapters in `src/adapters/`). Left `engine.search`/`browse` alone — they're already just the internal live-skills.sh adapter behind `src/backend/discover.ts`'s one Discover seam, not a second product path; and left CLI commands' local `result.error.message` output alone — those are local disk-path errors surfaced to the same user on their own machine, not a cross-boundary leak.
+- **Live trees: on/off is a path, not a dock picker (2026-08-29, pivot, see `tasks/plan.md`):** Replaced the dock-picker + Export model with two constant live trees (`.agents`, `.claude`) and on/off inferred from where a skill/command/rule folder physically sits — live pair, `.skil/parked/…` (off), a leftover root (catalogued, untouched), or `.skil/deprecated/…` (retired leftover, unscanned). New engine surface: `setSkillEnabled`, `setCommandEnabled`, `setSharedRuleEnabled`, `leftovers`, `adoptLeftovers`. Removed: `copyTo`, `copyAll`, `importFrom`, `install(skillId, dock)`, `exportCommand`, `exportAll`, `exportRules`, the `Dock`/`IDE` argument on every mutating call, and Inbox (`inbox()` / `addToInbox` / `removeFromInbox`) — a catalog row is on or off from the moment it exists, so there is nothing left to stage. A command becomes a human-only skill folder in both live trees (`disable-model-invocation: true` + `agents/openai.yaml`) instead of a stamped dock-specific markdown file, with its own parked tree (`.skil/parked/commands/`) so `/build` can never collide with a parked skill literally named `build`. Shared rules collapse into `AGENTS.md` sections (toggle = upsert/remove); path-scoped glob rules (`.cursor/rules/*.mdc`, etc.) are left on disk, read-only, never folded in. This was Phase 1 (docs) of `tasks/plan.md`; Phases 2–3 (`tasks/todo.md` Tasks 3–14) shipped the implementation — the dock-picker surface described in earlier Decision Log entries below is gone from the code, kept only as history.
+- **Inbox removed for real (2026-08-29):** Superseded the 2026-08-29 "Inbox stays" correction (Open Question 6) above. Confirmed with the user and removed the legacy staging list entirely: `inbox()` / `addToInbox` / `removeFromInbox` off `ICollectionEngine`, the `inbox` field off `State`, the `skil inbox` / `skil inbox add` / `skil inbox file` CLI commands, and the `listInbox` / `addToInbox` IPC channels + bridge methods. This is a different thing from `.skil/parked/…` (the toggle-off folder, which stays named "parked," not renamed to "inbox" — the two were never the same concept, and conflating them is why the earlier correction happened). Downstream of removal: Discover's `+` calls `bridge.install(skillId)` directly (writes both live trees immediately, no staging); `InboxPanel.tsx` (Skills tab) and `CollectionList.tsx`'s "From Skills" picker both source ids from the full `skills()` catalog instead of a separate inbox list; `.skil/state.json` simply stops writing `inbox` on the next persist (old files' `inbox` array is read-and-ignored, not migrated). Also deleted the dead `collection-engine.test.ts` blocks for `exportCommand` / `exportAll` / `copyTo` / `importFrom` / dock-export rules (methods that no longer exist on the engine, per the live-trees pivot above), and added missing coverage for `setSharedRuleEnabled`, `leftovers`, and `adoptLeftovers`. Rewrote `RulesPanel.test.tsx`, `App.test.tsx`, and `e2e.test.tsx` for the shipped toggle UI (drop Export/dock-picker/Import flows; add Leftovers-adopt coverage). Found and fixed a real bug while writing that coverage: `adoptLeftovers` moved a leftover skill's old path to `.skil/deprecated/…` on disk but never dropped that path from the catalog row's `paths[]`, so `leftovers()` kept reporting it as a leftover forever — `adoptLeftovers` now filters the adopted path out of `paths[]` before persisting.
 - **Discover is one nest on Landing and GUI (2026-08-29):** Deleted `SkillSearch.tsx` (the empty-index live-browse fallback). Landing and GUI both show live Top / Trending plus role → category shelves. Empty or failed shelves stay on that nest and default to Top. Browse results cache in-session (one fetch per view). `SkillsAdapter.browse` no longer sends a dummy `limit` query param. Historical entries below still mention `SkillSearch` as what shipped then.
 - **Watcher covers root always-on rule files (2026-08-28):** Rule dirs were already in `WATCH_ROOTS`. `CLAUDE.md` / `AGENTS.md` live at the project root, and `copilot-instructions.md` lives in `.github/`, so folder watches missed them. GUI main now watches those parent dirs non-recursive (filter by filename) using `ROOT_RULE_FILES` — same list `rules()` walks. Creating or editing a root file refreshes the Rules tab without a header Re-scan. Still not a live 3-way merge.
 - **Rules tab is a disk listing, not a second map (2026-08-28):** Commands are skil-owned (`commands[].skills`). Rules already live on disk in each dock's format. `rules()` walks known paths and collapses same-name dock copies into one card. Not persisted. Not Inbox. Always-apply writes every copy. Export uses `RULE_LAYOUT`: folder docks get stamped files; Codex/agents get stamped sections in `AGENTS.md`. Root files are not flattened into another dock's folder. `importFrom` copies that dock's rules with the same replace/conflict rule as skills. Watcher covers the rule dirs and those root files.
@@ -661,28 +647,32 @@ Atomic JSON write. Schema version on every persist. v5 → v6 on load (membershi
 
 ## Success Criteria
 
-1. Scan a repo with nested `SKILL.md` folders and see them in Inbox without creating commands from those folders.
-2. File onto `/build`; Inbox still has the id; folders do not move. There is no second Claude `/build` in the app.
-3. Export / copy `/build` to Claude writes Claude’s stamped file and missing skill folders; Cursor’s file is not created until they export Cursor.
-4. Delete a skill folder, re-scan, that id is gone from catalog, commands, and Inbox, and the user is told.
-5. Stamped Claude `/build.md` with a different `skills:` list does **not** change the map; user is warned.
-6. Install writes into the target **dock** skills dir and records `deployedTo` (Cursor → `.cursor/skills`).
-7. Export / write-through will not clobber an unstamped `/build.md` without `--replace` or overwrite an existing dest skill folder. Write-through does not create new stamps.
-8. CLI and GUI share the engine. Zero catalog logic in React. One Commands list, not IDE cards.
-9. DiskWatch: two events inside 500ms become one scan; muted paths are ignored; `.git` is skipped.
-10. Import from another project on Sync adds missing skills **and rules**; conflicts warn then replace; bound folder stays.
+1. Scan a repo with nested `SKILL.md` folders and see them in the catalog without creating commands from those folders. A leftover-only folder is catalogued but not copied to `.agents` / `.claude`.
+2. Market `+` on a skill writes both live folders immediately; the row shows under Market. Toggle it off → parked, row stays. Toggle on → both live folders are back (re-fetched if parked is gone).
+3. File `tdd` onto `/build`; `## Skills` on the live command skill lists it; `.agents/skills/tdd` / `.claude/skills/tdd` are unchanged by filing alone.
+4. Delete a skill, re-scan: that id is gone from the catalog and from any command that had it, and the user is told.
+5. `/build` toggled on writes `build/SKILL.md` + `agents/openai.yaml` in **both** live trees. Toggled off, `build/` is gone from both and present under `.skil/parked/commands/`.
+6. Turning `/build` on when a non-command skill already owns `.agents/skills/build` is a clear, refused error — no auto-prefix.
+7. Filing `tdd` onto `/build` updates `## Skills` only; it does not enable/install `tdd` itself.
+8. CLI and GUI share the engine. Zero catalog logic in React. One Skills list, one Commands list — no dock chips, no Export button, no dock picker anywhere.
+9. DiskWatch: two events inside 500ms become one scan; muted paths (and `.skil/deprecated`) are ignored; `.git` is skipped.
+10. Leftover cleanup (**Use ours and remove leftovers**) copies any missing id into the live pair, then moves the old leftover path under `.skil/deprecated/`; it never touches a parked path.
 11. `usage()` counts Claude skill reads from fixtures; missing logs → empty, not a crash.
-12. Rules tab lists every on-disk rule (including other formats), previews the body, toggles Cursor `alwaysApply`, and exports to a dest dock.
+12. Rules tab lists every shared-law `AGENTS.md` section (togglable) and every glob rule file (read-only, left on disk); `.cursor/rules/*.mdc` files are never copied into `AGENTS.md`.
 
 ## Not this phase
 
 - SQLite
-- “Used properly” / LLM-judge eval
-- Copilot or Codex usage parsers (dock yes; counts later)
-- Stamps on `SKILL.md`
+- "Used properly" / LLM-judge eval
+- Copilot or Codex usage parsers (leftover scan yes; counts later)
+- Stamps on `SKILL.md` itself (frontmatter stamps stay on command/rule files we generate, not on ordinary skills)
 - Live 3-way merge of map + disk + body
-- Per-dock Inbox or per-dock command lists
-- Four IDE tabs or per-dock `state.json`
+- A dock picker or five-way export, in any form
+- Command markdown under a `commands/` tree, for any dock
+- Cross-project import (dropped this pivot, see Decision Log)
+- Symlink parking (copy + remove is enough)
+- Auto-copying leftovers into the live pair on scan (only `adoptLeftovers`, explicit, does that)
+- A wishlist Inbox that is not on disk — market `+` is live immediately
 - Global (`~/`) skill library as SoT
 - Modeling runtime overlap (`.cursor` + `.agents` both loaded)
 
@@ -692,5 +682,5 @@ Atomic JSON write. Schema version on every persist. v5 → v6 on load (membershi
 - TDD: `.cursor/skills/philosophy/tdd/SKILL.md`
 - PRD: `docs/requirements/prd.md`
 - User-facing loop: `README.md`
-- Phase 5 (one map + docks + eval): `tasks/plan.md`, `tasks/todo.md` Tasks 16–30
+- Live-trees pivot (on/off by path, live pair, parked, leftover, deprecated): `tasks/plan.md`, `tasks/todo.md` Tasks 1–14
 - Market index (Discover backend) plan + tasks: `tasks/plan.md`, `tasks/todo.md`

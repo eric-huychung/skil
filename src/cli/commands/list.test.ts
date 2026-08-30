@@ -41,12 +41,12 @@ describe('runList', () => {
     expect(outcome.message).toContain('—');
   });
 
-  it("shows a collection's command template", () => {
+  it('shows on/off for each command', () => {
     const engine = buildEngine();
-    engine.create('frontend', [], 'npm run dev');
+    engine.create('frontend', []);
 
     const outcome = runList(engine);
 
-    expect(outcome.message).toContain('npm run dev');
+    expect(outcome.message).toContain('no');
   });
 });

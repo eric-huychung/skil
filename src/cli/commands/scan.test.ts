@@ -63,7 +63,6 @@ describe('registerScanCommand', () => {
     program.exitOverride();
 
     expect(() => program.parse(['scan', '--import-from-ide'], { from: 'user' })).toThrow();
-    expect(engine.inbox()).toEqual([]);
     expect(engine.skills()).toEqual([]);
   });
 

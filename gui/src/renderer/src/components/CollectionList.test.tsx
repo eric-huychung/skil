@@ -2,29 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CollectionList from './CollectionList';
-import {
-  createInMemoryEngine,
-  createInMemoryWorkspace,
-  createTestBridge,
-  DEFAULT_TEST_PROJECT_ROOT,
-  renderWithProviders,
-} from '../test-utils';
+import { createInMemoryEngine, createInMemoryWorkspace, createTestBridge, renderWithProviders } from '../test-utils';
 import { InMemoryUsageCollector } from '../../../../../src/adapters/in-memory-usage.js';
-import { err, isOk, ok, type Result } from '../../../../../src/core/result.js';
-import type { ExportResult } from '../../../../../src/types/index.js';
-
-function createDeferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
-}
-
-async function selectDock(label: string) {
-  await userEvent.click(screen.getByRole('button', { name: /^Pick format:/ }));
-  await userEvent.click(screen.getByRole('menuitemradio', { name: label }));
-}
+import { isOk } from '../../../../../src/core/result.js';
 
 describe('CollectionList', () => {
   it('shows one command list with no IDE workspace cards', async () => {
@@ -39,8 +19,8 @@ describe('CollectionList', () => {
     expect(screen.getByRole('listitem', { name: 'Command review' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Open Cursor workspace' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Back to IDEs' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: /^Pick format:/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Pick format:/ })).not.toBeInTheDocument();
   });
 
   it('shows filed skill counts on the command list, not on-disk catalog', async () => {
@@ -61,7 +41,7 @@ describe('CollectionList', () => {
   it('updates the command skill count after filing and removing a skill', async () => {
     const engine = createInMemoryEngine();
     engine.create('build', []);
-    engine.addToInbox('tdd');
+    await engine.install('tdd');
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
@@ -77,27 +57,10 @@ describe('CollectionList', () => {
     await waitFor(() => expect(screen.getByRole('listitem', { name: 'Command build' })).toHaveTextContent('0 skills'));
   });
 
-  it('copies the map to the selected dock without asking which IDE to file onto', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
-    engine.scan();
-    engine.create('frontend', ['tdd']);
-    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await selectDock('Claude Code');
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-
-    expect(await screen.findByRole('dialog', { name: 'Exported' })).toBeInTheDocument();
-    expect(isOk(fs.readFile('.claude/commands/frontend.md'))).toBe(true);
-    expect(fs.readFile('.claude/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
-  });
-
-  it('files from Inbox onto the one list without asking which IDE', async () => {
+  it('files from Skills onto the one list without asking which IDE', async () => {
     const engine = createInMemoryEngine();
     engine.create('build', ['tdd']);
-    engine.addToInbox('design');
+    await engine.install('design');
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
@@ -116,8 +79,7 @@ describe('CollectionList', () => {
 
     renderWithProviders(<CollectionList />, { bridge });
     await waitFor(() => expect(screen.getByText('No commands yet')).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /^Pick format:/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Format')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Skills' })).not.toBeInTheDocument();
   });
@@ -141,10 +103,10 @@ describe('CollectionList', () => {
     expect(within(backendDetail).queryByText('obra/react-patterns')).not.toBeInTheDocument();
   });
 
-  it('keeps Inbox inventory off the Commands list and files from the picker', async () => {
+  it('keeps Skills inventory off the Commands list and files from the picker', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', []);
-    engine.addToInbox('obra/react-patterns');
+    await engine.install('obra/react-patterns');
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
@@ -159,11 +121,11 @@ describe('CollectionList', () => {
     expect(within(detail).getByRole('button', { name: 'From Skills, 1 skill' })).toBeInTheDocument();
   });
 
-  it('adds an Inbox ID to the selected collection without removing it from Inbox', async () => {
+  it('adds a Skills catalog id to the selected collection without removing it from the catalog', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', []);
     engine.create('backend', []);
-    engine.addToInbox('obra/react-patterns');
+    await engine.install('obra/react-patterns');
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
@@ -177,7 +139,7 @@ describe('CollectionList', () => {
         'obra/react-patterns',
       ])
     );
-    expect(engine.inbox()).toEqual(['obra/react-patterns']);
+    expect(engine.skills().map((skill) => skill.id)).toEqual(['obra/react-patterns']);
     expect(engine.list().find((collection) => collection.name === 'frontend')?.skills).toEqual([]);
     expect(within(detail).getByRole('button', { name: 'Added obra/react-patterns' })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' })).toBeInTheDocument();
@@ -191,13 +153,13 @@ describe('CollectionList', () => {
         'obra/react-patterns',
       ])
     );
-    expect(engine.inbox()).toEqual(['obra/react-patterns']);
+    expect(engine.skills().map((skill) => skill.id)).toEqual(['obra/react-patterns']);
   });
 
-  it('collapses the Inbox picker on a collection', async () => {
+  it('collapses the From Skills picker on a collection', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', []);
-    engine.addToInbox('obra/react-patterns');
+    await engine.install('obra/react-patterns');
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
@@ -233,243 +195,11 @@ describe('CollectionList', () => {
     expect(engine.list()[0].skills).toEqual([]);
   });
 
-  it('copies every command file and local skills to the selected dock', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
-    engine.scan();
-    engine.create('frontend', ['tdd']);
-    engine.create('backend', []);
-    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
-
-    renderWithProviders(<CollectionList />, { bridge });
-    const workspace = await screen.findByRole('heading', { name: 'Commands' });
-    expect(workspace).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Export frontend' })).not.toBeInTheDocument();
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await selectDock('Claude Code');
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-
-    const dialog = await screen.findByRole('dialog', { name: 'Exported' });
-    expect(dialog).toHaveTextContent('Exported all commands to Claude Code in test-project');
-    expect(dialog).toHaveTextContent('.claude/commands/frontend.md');
-    expect(dialog).toHaveClass('status-success');
-    const written = fs.readFile('.claude/commands/frontend.md');
-    expect(isOk(written)).toBe(true);
-    if (isOk(written)) {
-      expect(written.value).toContain('generated_by: skil');
-      expect(written.value).toContain('- tdd');
-    }
-    expect(isOk(fs.readFile('.claude/commands/backend.md'))).toBe(true);
-    expect(fs.readFile('.claude/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
-    expect(fs.readFile('.cursor/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# tdd\n' });
-  });
-
-  it('shows an unstamped conflict and replaces only after confirm', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    engine.create('frontend', ['obra/react-patterns']);
-    fs.writeFile('.cursor/commands/frontend.md', '# their old /frontend\n');
-    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-
-    expect(await screen.findByRole('dialog', { name: 'Replace existing commands?' })).toBeInTheDocument();
-    expect(within(screen.getByRole('dialog', { name: 'Replace existing commands?' })).getByText('/frontend')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Export failed' })).not.toBeInTheDocument();
-    expect(fs.readFile('.cursor/commands/frontend.md')).toEqual({
-      ok: true,
-      value: '# their old /frontend\n',
-    });
-
-    await userEvent.click(screen.getByRole('button', { name: 'Replace' }));
-
-    expect(await screen.findByRole('dialog', { name: 'Exported' })).toHaveTextContent(
-      'Exported all commands to Cursor in test-project'
-    );
-    const written = fs.readFile('.cursor/commands/frontend.md');
-    expect(isOk(written)).toBe(true);
-    if (isOk(written)) {
-      expect(written.value).toContain('generated_by: skil');
-      expect(written.value).not.toContain('their old /frontend');
-    }
-  });
-
-  it('leaves an unstamped file alone when replace is canceled', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    engine.create('frontend', ['obra/react-patterns']);
-    fs.writeFile('.cursor/commands/frontend.md', '# their old /frontend\n');
-    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
-
-    expect(fs.readFile('.cursor/commands/frontend.md')).toEqual({
-      ok: true,
-      value: '# their old /frontend\n',
-    });
-    expect(screen.queryByRole('dialog', { name: 'Exported' })).not.toBeInTheDocument();
-  });
-
-  it('copies to a picked destination when no folder is connected', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    engine.create('frontend', ['obra/react-patterns']);
-    const bridge = createTestBridge(engine, { nextDestination: '/tmp/other-project' });
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await selectDock('Claude Code');
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-
-    const destDialog = await screen.findByRole('dialog', { name: 'Exported' });
-    expect(destDialog).toHaveTextContent('Exported all commands to Claude Code in other-project');
-    expect(destDialog).toHaveTextContent('/tmp/other-project/.claude/commands/frontend.md');
-    const written = fs.readFile('/tmp/other-project/.claude/commands/frontend.md');
-    expect(isOk(written)).toBe(true);
-    if (isOk(written)) {
-      expect(written.value).toContain('generated_by: skil');
-    }
-    expect(isOk(fs.readFile('.claude/commands/frontend.md'))).toBe(false);
-    expect(await bridge.getProjectRoot()).toBe('/tmp/other-project');
-  });
-
-  it('binds the picked folder after export so later saves skip the picker', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    engine.create('frontend', ['obra/react-patterns']);
-    const destinations = ['/tmp/first-dest', '/tmp/second-dest'];
-    let pickCount = 0;
-    const exportedDests: Array<string | undefined> = [];
-    const base = createTestBridge(engine);
-    const bridge = {
-      ...base,
-      pickDestinationFolder: async () => destinations[pickCount++] ?? null,
-      exportAll: async (...args: Parameters<typeof base.exportAll>) => {
-        exportedDests.push(args[1]?.dest);
-        return base.exportAll(...args);
-      },
-    };
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    expect(await bridge.getProjectRoot()).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-    expect(await screen.findByRole('dialog', { name: 'Exported' })).toHaveTextContent(
-      'Exported all commands to Cursor in first-dest'
-    );
-    expect(await bridge.getProjectRoot()).toBe('/tmp/first-dest');
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
-
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-    const secondDialog = await screen.findByRole('dialog', { name: 'Exported' });
-    expect(secondDialog).toHaveTextContent('Exported all commands to Cursor in first-dest');
-    expect(secondDialog).toHaveTextContent('.cursor/commands/frontend.md');
-    expect(pickCount).toBe(1);
-    expect(exportedDests).toEqual(['/tmp/first-dest', undefined]);
-    expect(isOk(fs.readFile('/tmp/first-dest/.cursor/commands/frontend.md'))).toBe(true);
-    expect(await bridge.getProjectRoot()).toBe('/tmp/first-dest');
-  });
-
-  it('reuses the picked dest when replacing an unstamped file with no folder connected', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    engine.create('frontend', ['obra/react-patterns']);
-    fs.writeFile('/tmp/first-dest/.cursor/commands/frontend.md', '# their old /frontend\n');
-    let pickCount = 0;
-    const base = createTestBridge(engine);
-    const bridge = {
-      ...base,
-      pickDestinationFolder: async () => {
-        pickCount += 1;
-        return '/tmp/first-dest';
-      },
-    };
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-    expect(await screen.findByRole('dialog', { name: 'Replace existing commands?' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Replace' }));
-
-    expect(await screen.findByRole('dialog', { name: 'Exported' })).toHaveTextContent(
-      'Exported all commands to Cursor in first-dest'
-    );
-    expect(pickCount).toBe(1);
-    const written = fs.readFile('/tmp/first-dest/.cursor/commands/frontend.md');
-    expect(isOk(written)).toBe(true);
-    if (isOk(written)) {
-      expect(written.value).toContain('generated_by: skil');
-    }
-  });
-
-  it('does not export when destination pick is canceled', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    engine.create('frontend', ['obra/react-patterns']);
-    const bridge = createTestBridge(engine, { nextDestination: null });
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-
-    expect(screen.queryByRole('dialog', { name: 'Exported' })).not.toBeInTheDocument();
-    expect(isOk(fs.readFile('.cursor/commands/frontend.md'))).toBe(false);
-    expect(isOk(fs.readFile('/tmp/other-project/.cursor/commands/frontend.md'))).toBe(false);
-  });
-
-  it('shows a loading dialog while export is pending', async () => {
-    const engine = createInMemoryEngine();
-    engine.create('frontend', ['obra/react-patterns']);
-    const deferred = createDeferred<Result<ExportResult>>();
-    const bridge = {
-      ...createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT }),
-      exportAll: () => deferred.promise,
-    };
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-
-    expect(screen.getByRole('dialog', { name: 'Exporting…' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
-
-    deferred.resolve(ok({ succeeded: ['.cursor/commands/frontend.md'], failures: [] }));
-    expect(await screen.findByRole('dialog', { name: 'Exported' })).toBeInTheDocument();
-  });
-
-  it('shows an export error modal with collapsed details', async () => {
-    const engine = createInMemoryEngine();
-    engine.create('frontend', ['obra/react-patterns']);
-    const bridge = {
-      ...createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT }),
-      exportAll: async () => err(new Error('network down\nstderr: boom')),
-    };
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-
-    const dialog = await screen.findByRole('dialog', { name: 'Export failed' });
-    expect(within(dialog).getByRole('alert')).toHaveTextContent(
-      'Could not export commands to Cursor in test-project'
-    );
-    expect(dialog).toHaveClass('status-error');
-    const details = within(dialog).getByText('Details').closest('details');
-    expect(details).not.toHaveAttribute('open');
-    expect(within(dialog).queryByText(/stderr: boom/)).toBeNull();
-    expect(within(dialog).getByText(/Couldn't export/)).not.toBeVisible();
-
-    await userEvent.click(within(dialog).getByText('Details'));
-    expect(details).toHaveAttribute('open');
-    expect(within(dialog).getByText(/Couldn't export/)).toBeVisible();
-    expect(within(dialog).queryByText(/stderr: boom/)).toBeNull();
-  });
-
   it('filters the From Skills picker as you type', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', []);
-    engine.addToInbox('obra/react-patterns');
-    engine.addToInbox('addyosmani/api-design');
+    await engine.install('obra/react-patterns');
+    await engine.install('addyosmani/api-design');
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
@@ -487,7 +217,7 @@ describe('CollectionList', () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', []);
     for (let index = 0; index < 11; index += 1) {
-      engine.addToInbox(`skill/${index}`);
+      await engine.install(`skill/${index}`);
     }
     const bridge = createTestBridge(engine);
 
@@ -503,26 +233,6 @@ describe('CollectionList', () => {
 
     expect(within(detail).getByText('skill/10')).toBeInTheDocument();
     expect(within(detail).queryByText('skill/0')).not.toBeInTheDocument();
-  });
-
-  it('places Export on the workspace, then Included skills, then From Skills on the command', async () => {
-    const engine = createInMemoryEngine();
-    engine.create('frontend', ['addyosmani/api-design']);
-    engine.addToInbox('obra/react-patterns');
-    const bridge = createTestBridge(engine);
-
-    renderWithProviders(<CollectionList />, { bridge });
-    const heading = await screen.findByRole('heading', { name: 'Commands' });
-    const workspace = heading.closest('section');
-    if (!workspace) throw new Error('expected commands panel');
-    const detail = screen.getByRole('region', { name: 'Command frontend details' });
-
-    const exportButton = within(workspace as HTMLElement).getByRole('button', { name: 'Export' });
-    expect(within(detail).queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
-    const included = within(detail).getByText('Included skills');
-    const inboxToggle = within(detail).getByRole('button', { name: 'From Skills, 1 skill' });
-    expect(exportButton.compareDocumentPosition(included) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(included.compareDocumentPosition(inboxToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('groups planning, build, and testing under SDLC headings', async () => {
@@ -559,7 +269,7 @@ describe('CollectionList', () => {
   it('does not show Install on filed skills', async () => {
     const engine = createInMemoryEngine();
     engine.create('frontend', ['obra/react-patterns']);
-    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+    const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
     const detail = await screen.findByRole('region', { name: 'Command frontend details' });
@@ -587,113 +297,6 @@ describe('CollectionList', () => {
     expect(screen.getByRole('listitem', { name: 'Command frontend' })).toBeInTheDocument();
   });
 
-  it('picks a dest format from a dropdown and exports with one button', async () => {
-    const engine = createInMemoryEngine();
-    engine.create('build', ['tdd']);
-    const bridge = createTestBridge(engine);
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('listitem', { name: 'Command build' })).toBeInTheDocument());
-
-    expect(screen.getByRole('button', { name: 'Pick format: Cursor' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Pick format: Cursor' }));
-    const menu = screen.getByRole('menu', { name: 'Pick format' });
-    expect(within(menu).getByRole('menuitemradio', { name: 'Cursor' })).toHaveAttribute('aria-checked', 'true');
-    expect(within(menu).getByRole('menuitemradio', { name: 'Claude Code' })).toBeInTheDocument();
-    expect(within(menu).getByRole('menuitemradio', { name: 'Codex' })).toBeInTheDocument();
-    expect(within(menu).getByRole('menuitemradio', { name: 'Copilot' })).toBeInTheDocument();
-    expect(within(menu).getByRole('menuitemradio', { name: 'Agents' })).toBeInTheDocument();
-    expect(within(menu).queryByRole('menuitemradio', { name: 'Windsurf' })).not.toBeInTheDocument();
-
-    await userEvent.click(within(menu).getByRole('menuitemradio', { name: 'Claude Code' }));
-    expect(screen.getByRole('button', { name: 'Pick format: Claude Code' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled();
-    expect(screen.queryByRole('button', { name: 'Import' })).not.toBeInTheDocument();
-  });
-
-  it('copies every command to the selected dock', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    engine.create('build', ['tdd']);
-    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await selectDock('Claude Code');
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-
-    expect(await screen.findByRole('dialog', { name: 'Exported' })).toBeInTheDocument();
-    expect(engine.list()[0]?.skills).toEqual(['tdd']);
-    expect(isOk(fs.readFile('.claude/commands/build.md'))).toBe(true);
-  });
-
-  it('lists every unstamped command before save', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    engine.create('frontend', []);
-    engine.create('backend', []);
-    fs.writeFile('.cursor/commands/frontend.md', '# their old /frontend\n');
-    fs.writeFile('.cursor/commands/backend.md', '# their old /backend\n');
-    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-
-    const dialog = await screen.findByRole('dialog', { name: 'Replace existing commands?' });
-    expect(within(dialog).getByText('/frontend')).toBeInTheDocument();
-    expect(within(dialog).getByText('/backend')).toBeInTheDocument();
-    expect(fs.readFile('.cursor/commands/frontend.md')).toEqual({
-      ok: true,
-      value: '# their old /frontend\n',
-    });
-  });
-
-  it('copies all to Claude without rewriting the Cursor stamp', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
-    engine.scan();
-    engine.create('build', ['tdd']);
-    const cursorStamp = fs.readFile('.cursor/commands/build.md');
-    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await selectDock('Claude Code');
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-
-    expect(await screen.findByRole('dialog', { name: 'Exported' })).toBeInTheDocument();
-    expect(engine.list()[0]?.skills).toEqual(['tdd']);
-    expect(fs.readFile('.cursor/commands/build.md')).toEqual(cursorStamp);
-    const claudeFile = fs.readFile('.claude/commands/build.md');
-    expect(isOk(claudeFile)).toBe(true);
-    if (isOk(claudeFile)) {
-      expect(claudeFile.value).toContain('generated_by: skil');
-    }
-  });
-
-  it('asks to replace an unstamped dest file on copy', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    engine.create('build', ['tdd']);
-    fs.writeFile('.claude/commands/build.md', '# leftover\n');
-    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
-
-    renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await selectDock('Claude Code');
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-
-    const dialog = await screen.findByRole('dialog', { name: 'Replace existing commands?' });
-    expect(within(dialog).getByText('/build')).toBeInTheDocument();
-    expect(fs.readFile('.claude/commands/build.md')).toEqual({ ok: true, value: '# leftover\n' });
-    await userEvent.click(screen.getByRole('button', { name: 'Replace' }));
-
-    expect(await screen.findByRole('dialog', { name: 'Exported' })).toBeInTheDocument();
-    const written = fs.readFile('.claude/commands/build.md');
-    expect(isOk(written)).toBe(true);
-    if (isOk(written)) {
-      expect(written.value).toContain('generated_by: skil');
-    }
-  });
-
   it('shows a usage count on a filed skill', async () => {
     const usage = new InMemoryUsageCollector();
     usage.seed([
@@ -712,21 +315,50 @@ describe('CollectionList', () => {
     expect(await within(detail).findByText('2 reads')).toBeInTheDocument();
   });
 
-  it('still exports when usage fails', async () => {
-    const usage = new InMemoryUsageCollector();
-    usage.setCollectError(new Error('log unreadable'));
-    const { engine, fs } = createInMemoryWorkspace(usage);
-    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
-    engine.scan();
+  it('toggles a command on from the list, writing the human-only skill in both live trees', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
     engine.create('build', ['tdd']);
-    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+    const bridge = createTestBridge(engine);
 
     renderWithProviders(<CollectionList />, { bridge });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    const row = await screen.findByRole('listitem', { name: 'Command build' });
+    const toggle = within(row).getByRole('button', { name: 'Turn on build' });
 
-    expect(await screen.findByRole('dialog', { name: 'Exported' })).toBeInTheDocument();
-    expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await userEvent.click(toggle);
+
+    await waitFor(() => expect(isOk(fs.readFile('.agents/skills/build/SKILL.md'))).toBe(true));
+    expect(isOk(fs.readFile('.claude/skills/build/SKILL.md'))).toBe(true);
+    expect(within(row).getByRole('button', { name: 'Turn off build' })).toBeInTheDocument();
+  });
+
+  it('toggles a command off from the detail panel, parking the live pair', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    engine.create('build', ['tdd']);
+    await engine.setCommandEnabled('build', true);
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CollectionList />, { bridge });
+    const detail = await screen.findByRole('region', { name: 'Command build details' });
+    const toggle = within(detail).getByRole('button', { name: 'Turn off build' });
+
+    await userEvent.click(toggle);
+
+    await waitFor(() => expect(isOk(fs.readFile('.agents/skills/build/SKILL.md'))).toBe(false));
+    expect(isOk(fs.readFile('.skil/parked/commands/build/SKILL.md'))).toBe(true);
+    expect(within(screen.getByRole('region', { name: 'Command build details' })).getByRole('button', { name: 'Turn on build' })).toBeInTheDocument();
+  });
+
+  it('shows a name-collision error and does not toggle on when a non-command skill already owns that live path', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    fs.writeFile('.agents/skills/build/SKILL.md', '# not ours\n');
+    engine.create('build', ['tdd']);
+    const bridge = createTestBridge(engine);
+
+    renderWithProviders(<CollectionList />, { bridge });
+    const detail = await screen.findByRole('region', { name: 'Command build details' });
+    await userEvent.click(within(detail).getByRole('button', { name: 'Turn on build' }));
+
+    expect(await within(detail).findByRole('alert')).toHaveTextContent(/build/);
+    expect(within(detail).getByRole('button', { name: 'Turn on build' })).toBeInTheDocument();
   });
 });

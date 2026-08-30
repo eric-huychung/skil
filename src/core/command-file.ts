@@ -24,6 +24,24 @@ export function isSkilStamped(contents: string): boolean {
   return stampYaml(contents) !== null;
 }
 
+const DISABLE_MODEL_INVOCATION_LINE = /^disable-model-invocation:\s*true\s*$/m;
+
+/**
+ * True for our own live command skill (not any other skil-stamped file).
+ * This is what `setCommandEnabled` checks before writing over an existing
+ * `.agents/skills/<name>` / `.claude/skills/<name>` folder — a plain skill
+ * with the same name fails this check and the write is refused.
+ */
+export function isCommandSkillStamp(contents: string): boolean {
+  const yaml = stampYaml(contents);
+  return yaml !== null && DISABLE_MODEL_INVOCATION_LINE.test(yaml);
+}
+
+/** `agents/openai.yaml` next to a command's `SKILL.md`, in both live trees. */
+export function writeOpenAiYaml(): string {
+  return 'allow_implicit_invocation: false\n';
+}
+
 /** True only when the stamp is closed YAML (`---` … `generated_by: skil` … `---`). */
 export function isClosedSkilStamp(contents: string): boolean {
   const fenced = contents.match(FENCED_YAML);
@@ -81,6 +99,7 @@ function renderFrontmatter(name: string, skills: string[]): string {
   return `---
 name: /${name}
 ${skillLines}
+disable-model-invocation: true
 ${SKIL_STAMP}
 generated_at: ${new Date().toISOString()}
 ---

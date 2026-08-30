@@ -3,7 +3,7 @@ import { groupCommandsByStage } from './sdlc';
 import type { Collection } from '../../../shared/ipc';
 
 function command(name: string, skills: string[] = []): Collection {
-  return { name, skills, createdAt: '2026-01-01T00:00:00.000Z' };
+  return { name, skills, createdAt: '2026-01-01T00:00:00.000Z', enabled: false };
 }
 
 describe('groupCommandsByStage', () => {

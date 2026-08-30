@@ -1,6 +1,6 @@
 import type { ISkillsAdapter } from '../interfaces/adapters.js';
 import { err, ok, type Result } from '../core/result.js';
-import type { BrowseView, IDE, Skill } from '../types/index.js';
+import type { BrowseView, Skill } from '../types/index.js';
 
 const HARDCODED_SEARCH_RESULTS: Skill[] = [
   { id: 'obra/react-patterns', source: 'skills.sh', installedAt: '' },
@@ -23,7 +23,7 @@ const HARDCODED_TRENDING: Skill[] = [
  */
 export class InMemorySkillsAdapter implements ISkillsAdapter {
   private installed: Skill[] = [];
-  private installs: Array<{ skillId: string; ide: IDE; cwd?: string }> = [];
+  private installs: Array<{ skillId: string; cwd?: string }> = [];
   private installError: Error | null = null;
   private searchError: Error | null = null;
   private browseError: Error | null = null;
@@ -43,11 +43,11 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     return ok(view === 'trending' ? HARDCODED_TRENDING : HARDCODED_ALL_TIME);
   }
 
-  async install(skillId: string, targetIDE: IDE, opts?: { cwd?: string }): Promise<Result<void>> {
+  async install(skillId: string, opts?: { cwd?: string }): Promise<Result<void>> {
     if (this.installError) {
       return err(this.installError);
     }
-    this.installs.push({ skillId, ide: targetIDE, ...(opts?.cwd ? { cwd: opts.cwd } : {}) });
+    this.installs.push({ skillId, ...(opts?.cwd ? { cwd: opts.cwd } : {}) });
     this.installed.push({ id: skillId, source: 'skills.sh', installedAt: new Date().toISOString() });
     return ok(undefined);
   }
@@ -65,8 +65,8 @@ export class InMemorySkillsAdapter implements ISkillsAdapter {
     this.hashes.set(skillId, hash);
   }
 
-  /** Test helper: (skillId, ide) pairs passed to install(). */
-  getInstalls(): Array<{ skillId: string; ide: IDE; cwd?: string }> {
+  /** Test helper: skillIds (and cwd, if any) passed to install(). */
+  getInstalls(): Array<{ skillId: string; cwd?: string }> {
     return [...this.installs];
   }
 

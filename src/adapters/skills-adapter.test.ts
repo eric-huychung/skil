@@ -66,16 +66,16 @@ describe('SkillsAdapter', () => {
   });
 
   describe('install', () => {
-    it('installs a skill for cursor with cwd = project root and the cursor agent flag', async () => {
+    it('installs with cwd = project root and always the universal agent flag', async () => {
       vi.mocked(execa).mockResolvedValue({} as never);
 
       const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
-      const result = await adapter.install('obra/x', 'cursor');
+      const result = await adapter.install('obra/x');
 
       expect(isOk(result)).toBe(true);
       expect(execa).toHaveBeenCalledWith(
         'npx',
-        ['skills', 'add', 'obra/x', '--agent', 'cursor', '--copy', '-y'],
+        ['skills', 'add', 'obra/x', '--agent', 'universal', '--copy', '-y'],
         {
           cwd: '/tmp/proj',
         }
@@ -86,12 +86,12 @@ describe('SkillsAdapter', () => {
       vi.mocked(execa).mockResolvedValue({} as never);
 
       const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
-      const result = await adapter.install('anthropics/skills/frontend-design', 'claude');
+      const result = await adapter.install('anthropics/skills/frontend-design');
 
       expect(isOk(result)).toBe(true);
       expect(execa).toHaveBeenCalledWith(
         'npx',
-        ['skills', 'add', 'anthropics/skills@frontend-design', '--agent', 'claude-code', '--copy', '-y'],
+        ['skills', 'add', 'anthropics/skills@frontend-design', '--agent', 'universal', '--copy', '-y'],
         { cwd: '/tmp/proj' }
       );
     });
@@ -100,41 +100,32 @@ describe('SkillsAdapter', () => {
       vi.mocked(execa).mockResolvedValue({} as never);
 
       const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
-      const result = await adapter.install('obra/x', 'cursor', { cwd: '/tmp/other-project' });
+      const result = await adapter.install('obra/x', { cwd: '/tmp/other-project' });
 
       expect(isOk(result)).toBe(true);
       expect(execa).toHaveBeenCalledWith(
         'npx',
-        ['skills', 'add', 'obra/x', '--agent', 'cursor', '--copy', '-y'],
+        ['skills', 'add', 'obra/x', '--agent', 'universal', '--copy', '-y'],
         {
           cwd: '/tmp/other-project',
         }
       );
     });
 
-    it.each([
-      ['claude', 'claude-code'],
-      ['codex', 'codex'],
-      ['copilot', 'github-copilot'],
-      ['windsurf', 'windsurf'],
-      ['agents', 'universal'],
-    ] as const)('installs for %s with --agent %s', async (ide, agent) => {
+    it('runs npx once per install', async () => {
       vi.mocked(execa).mockResolvedValue({} as never);
 
-      const adapter = new SkillsAdapter();
-      const result = await adapter.install('obra/x', ide);
+      const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
+      await adapter.install('obra/x');
 
-      expect(isOk(result)).toBe(true);
-      expect(execa).toHaveBeenCalledWith('npx', ['skills', 'add', 'obra/x', '--agent', agent, '--copy', '-y'], {
-        cwd: process.cwd(),
-      });
+      expect(execa).toHaveBeenCalledTimes(1);
     });
 
     it('returns an error when the subprocess fails', async () => {
       vi.mocked(execa).mockRejectedValue(new Error('npx: command failed with exit code 1'));
 
       const adapter = new SkillsAdapter();
-      const result = await adapter.install('obra/react-patterns', 'cursor');
+      const result = await adapter.install('obra/react-patterns');
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {

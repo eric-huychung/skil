@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, CaretLeft, CaretRight, MagnifyingGlass, Trash, ArrowClockwise, CircleNotch } from '@phosphor-icons/react';
+import {
+  ArrowRight,
+  CaretLeft,
+  CaretRight,
+  MagnifyingGlass,
+  ArrowClockwise,
+  CircleNotch,
+  ToggleLeft,
+  ToggleRight,
+} from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
-import { groupInboxSkills } from '../lib/skill-sources';
+import { groupInboxSkills, skillPathState } from '../lib/skill-sources';
 import type { OriginCheck, OriginStatus, ScanResult, SkillRecord } from '../../../shared/ipc';
 import { StatusNotice, StatusSkeleton } from '../../../../../shared/status';
 import SkillPreviewDialog from './SkillPreviewDialog';
@@ -12,10 +21,6 @@ const PAGE_SIZE = 25;
 
 function goneMessage(ids: string[]): string {
   return `Gone: ${ids.join(', ')}`;
-}
-
-function pullMessage(pulls: Array<{ ide: string; name: string }>): string {
-  return `Pulled: ${pulls.map((pull) => `${pull.ide}/${pull.name}`).join(', ')}`;
 }
 
 function matchesQuery(skillId: string, query: string): boolean {
@@ -29,10 +34,48 @@ const ORIGIN_BADGE: Record<OriginStatus, { label: string; className: string }> =
   edited: { label: 'Edited', className: 'origin-badge bg-amber-500/15 text-amber-500' },
 };
 
+/**
+ * On/off is a path, not a flag — read straight off `record.paths` via
+ * `skillPathState`. Toggling is the write; there is nothing else to
+ * confirm first. Hidden for a wishlist id with no catalog row yet.
+ */
+function SkillToggle({
+  record,
+  busy,
+  onToggle,
+}: {
+  record: SkillRecord | undefined;
+  busy: boolean;
+  onToggle: () => void;
+}) {
+  if (!record) return null;
+  const on = skillPathState(record.paths) === 'on';
+  return (
+    <button
+      type="button"
+      className={`always-on-toggle ${on ? 'on' : 'off'} ${FOCUS_RING}`}
+      aria-pressed={on}
+      aria-busy={busy || undefined}
+      disabled={busy}
+      aria-label={on ? `Turn off ${record.id}` : `Turn on ${record.id}`}
+      onClick={(event: MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+    >
+      {on ? (
+        <ToggleRight size={18} weight="fill" aria-hidden="true" />
+      ) : (
+        <ToggleLeft size={18} weight="regular" aria-hidden="true" />
+      )}
+      {on ? 'On' : 'Off'}
+    </button>
+  );
+}
+
 export default function InboxPanel() {
   const bridge = useBridge();
-  const [inbox, setInbox] = useState<string[] | null>(null);
-  const [catalog, setCatalog] = useState<SkillRecord[]>([]);
+  const [catalog, setCatalog] = useState<SkillRecord[] | null>(null);
   const [originById, setOriginById] = useState<Record<string, OriginStatus>>({});
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
@@ -44,14 +87,11 @@ export default function InboxPanel() {
   const [updateError, setUpdateError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [toggleErrorId, setToggleErrorId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [nextInbox, nextCatalog, nextChecks] = await Promise.all([
-      bridge.listInbox(),
-      bridge.listSkills(),
-      bridge.originChecks(),
-    ]);
-    setInbox(nextInbox);
+    const [nextCatalog, nextChecks] = await Promise.all([bridge.listSkills(), bridge.originChecks()]);
     setCatalog(nextCatalog);
     const checks: OriginCheck[] = nextChecks.ok ? nextChecks.value : [];
     setOriginById(Object.fromEntries(checks.map((check) => [check.skillId, check.status])));
@@ -78,11 +118,9 @@ export default function InboxPanel() {
     };
   }, [bridge]);
 
-  const matches = useMemo(
-    () => (inbox ?? []).filter((skillId) => matchesQuery(skillId, query)),
-    [inbox, query]
-  );
-  const groups = useMemo(() => groupInboxSkills(matches, catalog), [matches, catalog]);
+  const ids = useMemo(() => (catalog ?? []).map((skill) => skill.id), [catalog]);
+  const matches = useMemo(() => ids.filter((skillId) => matchesQuery(skillId, query)), [ids, query]);
+  const groups = useMemo(() => groupInboxSkills(matches, catalog ?? []), [matches, catalog]);
   const ordered = useMemo(() => groups.flatMap((group) => group.skills), [groups]);
   const pageCount = ordered.length > 0 ? Math.ceil(ordered.length / PAGE_SIZE) : 0;
   const safePage = pageCount === 0 ? 0 : Math.min(page, pageCount - 1);
@@ -93,12 +131,12 @@ export default function InboxPanel() {
     .map((group) => ({ ...group, skills: group.skills.filter((id) => visibleSet.has(id)) }))
     .filter((group) => group.skills.length > 0);
 
-  const pendingRecord = pendingDelete ? catalog.find((skill) => skill.id === pendingDelete) : undefined;
+  const pendingRecord = pendingDelete ? (catalog ?? []).find((skill) => skill.id === pendingDelete) : undefined;
   const pendingPaths = pendingRecord?.paths ?? [];
   const pendingNested = pendingDelete
-    ? catalog.filter((skill) => skill.id.startsWith(`${pendingDelete}/`)).map((skill) => skill.id)
+    ? (catalog ?? []).filter((skill) => skill.id.startsWith(`${pendingDelete}/`)).map((skill) => skill.id)
     : [];
-  const selectedRecord = selectedId ? catalog.find((skill) => skill.id === selectedId) : undefined;
+  const selectedRecord = selectedId ? (catalog ?? []).find((skill) => skill.id === selectedId) : undefined;
   const previewSource = selectedRecord && selectedRecord.paths.length > 0 ? 'local' : 'market';
 
   useEffect(() => {
@@ -162,6 +200,19 @@ export default function InboxPanel() {
       return;
     }
     setPendingDelete(null);
+    setSelectedId(null);
+    await refresh();
+  }
+
+  async function handleToggle(skillId: string, enabled: boolean) {
+    setToggleErrorId(null);
+    setTogglingId(skillId);
+    const result = await bridge.setSkillEnabled(skillId, enabled);
+    setTogglingId(null);
+    if (!result.ok) {
+      setToggleErrorId(skillId);
+      return;
+    }
     await refresh();
   }
 
@@ -172,11 +223,12 @@ export default function InboxPanel() {
           <p className="eyebrow">Skills</p>
           <h1>Skills</h1>
           <p className="workspace-lede">
-            Discover adds sit under Market until they are on disk. Then they move to Project. Filing onto a command does not remove them.
+            Market is anything added from Discover; Project is what this repo already had. Toggle a row on or
+            off — that is the write. Filing onto a command does not remove them.
           </p>
         </div>
         <div className="library-heading-actions">
-          {inbox !== null && <span className="library-count">{inbox.length} skills</span>}
+          {catalog !== null && <span className="library-count">{catalog.length} skills</span>}
         </div>
       </div>
 
@@ -201,15 +253,15 @@ export default function InboxPanel() {
           {goneMessage(lastScan.gone)}
         </p>
       )}
-      {lastScan && lastScan.commandPulls.length > 0 && (
+      {lastScan && lastScan.alwaysOnWarnings.length > 0 && (
         <p role="status" aria-atomic="true" className="scan-gone">
-          {pullMessage(lastScan.commandPulls)}
+          {lastScan.alwaysOnWarnings.join(' ')}
         </p>
       )}
 
-      {inbox === null ? (
+      {catalog === null ? (
         <StatusSkeleton />
-      ) : inbox.length === 0 ? (
+      ) : catalog.length === 0 ? (
         <p className="muted-copy">
           {canScan
             ? 'No unfiled skills'
@@ -226,7 +278,7 @@ export default function InboxPanel() {
                 <ul className="skill-list">
                   {group.skills.map((skillId) => {
                     const rank = visibleStart + visibleIds.indexOf(skillId) + 1;
-                    const record = catalog.find((skill) => skill.id === skillId);
+                    const record = (catalog ?? []).find((skill) => skill.id === skillId);
                     const originStatus = originById[skillId];
                     const originBadge =
                       record?.source === 'skills.sh' && record.paths.length > 0 && originStatus
@@ -267,18 +319,14 @@ export default function InboxPanel() {
                             Update
                           </button>
                         )}
-                        <button
-                          type="button"
-                          aria-label={`Delete ${skillId}`}
-                          className={`delete-card ${FOCUS_RING}`}
-                          onClick={(event: MouseEvent<HTMLButtonElement>) => {
-                            event.stopPropagation();
-                            setDeleteError(false);
-                            setPendingDelete(skillId);
-                          }}
-                        >
-                          <Trash size={16} weight="regular" aria-hidden="true" />
-                        </button>
+                        {toggleErrorId === skillId && <StatusNotice kind="enable" layout="inline" />}
+                        <SkillToggle
+                          record={record}
+                          busy={togglingId === skillId}
+                          onToggle={() =>
+                            void handleToggle(skillId, skillPathState(record?.paths ?? []) !== 'on')
+                          }
+                        />
                       </li>
                     );
                   })}
@@ -320,7 +368,7 @@ export default function InboxPanel() {
           source={previewSource}
           paths={selectedRecord?.paths}
           originStatus={originById[selectedId]}
-          lockDismiss={pendingUpdate !== null}
+          lockDismiss={pendingUpdate !== null || pendingDelete !== null}
           onReset={
             originById[selectedId] === 'edited'
               ? () => {
@@ -329,6 +377,10 @@ export default function InboxPanel() {
                 }
               : undefined
           }
+          onDelete={() => {
+            setDeleteError(false);
+            setPendingDelete(selectedId);
+          }}
           onClose={() => setSelectedId(null)}
         />
       )}

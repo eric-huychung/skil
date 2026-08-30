@@ -4,6 +4,30 @@ All notable changes to skil are documented here. Versions follow [Semantic Versi
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-29
+
+Product is **live trees**. On/off is a path (park / restore), not “export to a dock.” skil writes only the `.agents` + `.claude` live pair.
+
+### Added
+- Live pair: market install and command enable write both `.agents/skills/<id>` and `.claude/skills/<id>` in one step. No dock picker.
+- Park / restore: toggle off moves a skill or command under `.skil/parked/…`; toggle on copies it back. Create starts commands off (no folder until enable).
+- Leftovers: scan catalogs paths outside the live pair and parked root. Adopt folds them into the live pair and moves the old path to `.skil/deprecated/` (recoverable, never scanned again).
+- `skil enable` / `skil disable` for commands. Shared-law `skil rules enable` / `disable` upsert or remove an `AGENTS.md` section (glob `.mdc` rules stay read-only).
+- Discover **Add** installs straight into the live pair — no staging step.
+- GUI Skills tab is the full catalog (Market / Project by origin) with per-row On/Off; Commands file from “From Skills,” not Inbox.
+
+### Changed
+- GUI rail is Sync / Skills / Discover / Commands / Rules. Commands are one list with On/Off; no Export, no dock chips.
+- `skil install <skillId>` has no `--to`. Scan unions live + parked + leftovers and never writes on its own.
+- `CLAUDE.md` is expected to `@AGENTS.md`; shared law is toggled in `AGENTS.md` only.
+
+### Removed
+- Inbox staging (`skil inbox`, market inbox, Add → Inbox).
+- `skil copy` / `skil export`, GUI Export / Import-from-dock, and engine `copyTo` / `exportCommand` / `exportAll` / `importFrom` paths.
+
+### Security
+- Status-copy still hides raw `Error.message` from GUI/CLI failures. Env files (`.env`, `.env.local`) stay gitignored; no secrets in this release.
+
 ## [0.3.0] - 2026-08-29
 
 Product is **v6 + Rules**. One command list per project. Docks are export/install targets, not five maps. Rules are a live disk listing, not a skil-owned map.

@@ -94,7 +94,7 @@ describe('MarketDiscover', () => {
     expect(screen.queryByText('vercel-labs/security-review')).not.toBeInTheDocument();
   });
 
-  it('adds a skill to Inbox without installing', async () => {
+  it('adds a skill by installing it into both live trees', async () => {
     const engine = createInMemoryEngine();
     const bridge = { ...createTestBridge(engine), marketShelves: async (): Promise<Result<ShelfRole[]>> => ok(SHELVES) };
 
@@ -106,8 +106,8 @@ describe('MarketDiscover', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Added obra/react-patterns' })).toBeInTheDocument()
     );
-    expect(engine.inbox()).toEqual(['obra/react-patterns']);
-    expect(engine.skills()).toEqual([]);
+    expect(engine.skills().map((skill) => skill.id)).toEqual(['obra/react-patterns']);
+    expect(engine.skills()[0]?.paths).toEqual(['.agents/skills/obra/react-patterns', '.claude/skills/obra/react-patterns']);
   });
 
   it('searches the full market index and falls back to skills.sh on error', async () => {
