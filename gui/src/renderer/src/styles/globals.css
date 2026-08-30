@@ -1941,6 +1941,12 @@ button.recent-card:hover {
   border: 0;
 }
 
+.skill-preview-delete {
+  position: absolute;
+  top: 16px;
+  right: 48px;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;

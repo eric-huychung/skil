@@ -15,11 +15,12 @@ import {
   SKILL_SOURCE_BY_IDE,
   watchRoots,
 } from './dock-layout.js';
-import { RULE_DIR_BY_IDE } from './project-rules.js';
+import { GLOB_RULE_DIRS } from './project-rules.js';
 
 describe('watchRoots', () => {
   it('covers every skill root and command dir the engine uses', () => {
-    const roots = watchRoots(Object.values(RULE_DIR_BY_IDE));
+    const globRuleDirs = Object.keys(GLOB_RULE_DIRS);
+    const roots = watchRoots(globRuleDirs);
 
     for (const root of SKILL_ROOTS) {
       expect(roots).toContain(root);
@@ -27,7 +28,7 @@ describe('watchRoots', () => {
     for (const dir of Object.values(COMMAND_DIR_BY_IDE)) {
       expect(roots).toContain(dir);
     }
-    for (const dir of Object.values(RULE_DIR_BY_IDE)) {
+    for (const dir of globRuleDirs) {
       expect(roots).toContain(dir);
     }
   });

@@ -98,7 +98,7 @@ Discover's browse/search today hits skills.sh live via `SkillsAdapter`. The **ma
 
 **List vs preview:** shelf and search rows are id, name, installs (rank on shelves only). Click-through preview is live SKILL.md + audit — bodies are never stored.
 
-**Same nest, different action:** Landing copies `npx skills add`. GUI `+` calls `setSkillEnabled(id, true)` — on immediately, no separate install step.
+**Same nest, different action:** Landing copies `npx skills add`. GUI `+` calls `bridge.install(skillId)` — on immediately, no separate install step.
 
 **Shipped:** sync core, Supabase persistence + first-fill script (`npm run sync-market`), read API (`GET /api/market/shelves|search|preview`), Landing + GUI Discover, and the weekly Cron (`GET /api/cron/sync-market`, `CRON_SECRET` or 401, `sync({ maxDetail: 40 })` — shelves + 40 hydrates, not the 20k listing). Empty or failed shelves keep the same Discover nest and default to live Top. A human still applies the migration, then runs first fill, before the index has data; after that the cron keeps shelves fresh. `+`'s new toggle-on behavior is the only change this pivot makes to Discover.
 
@@ -114,11 +114,11 @@ commands:
 
 State lives in `.skil/state.json`. Missing file → empty. Leftover `.contextkit/state.json` with no `.skil/` file is an error (move it). Project-local. CLI = cwd. GUI = picked folder. No `inbox` field — every row is on or off from the moment it exists.
 
-v6 `skills[]` loads as-is (`inbox` / `installedSkills` read but not written back). v5 `membership` loads as a union (first key, then remaining). v4 `commands[].skills` loads as that array.
+v6 `skills[]` loads as-is; a leftover `inbox` array on disk is ignored, not migrated. v5 `membership` loads as a union (first key, then remaining). v4 `commands[].skills` loads as that array.
 
 ### Key Product Decisions
 
-- **There is no Inbox.** Reserved-name protection (`create inbox` errors) is gone with it — there's no staging list left to collide with.
+- **There is no Inbox.** `engine.inbox()` / `addToInbox` / `removeFromInbox` and the `inbox` field on `State` are removed (2026-08-29, see `docs/design/architecture.md` Decision Log "Inbox removed for real"). The "From Skills" picker on a command reads the full `skills()` catalog instead.
 - **Command names have no leading slash.** `create /build` stores `build`. UI may still show `/build`.
 - **CLI help/errors and GUI chrome say command, not collection.**
 - **Connect scans once.** Pick folder (Sync) refreshes the catalog. Header shows the path and Re-scan only after a folder is bound. No folder → no header path, no Re-scan; Discover / Skills / Commands still work.
@@ -162,13 +162,13 @@ API origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
 - Skills tab (was Inbox): the whole catalog, 25 per page, search, click a row to preview `SKILL.md` (disk body + every path — live/leftover/parked — for catalog ids; market preview for Discover-only ids), toggle per row (`setSkillEnabled`). Groups **Market** (`source: 'skills.sh'`) vs **Project** (`source: 'local'`) — a filter, not two states a skill gets stuck between. Delete is preview-only and hard-deletes live + parked copies (confirm lists the paths). Project rows with a market origin show a **Synced** / **Edited** / **New copy** badge (color + label). **Update** only when the disk copy still matches `originHash` and the live market SKILL.md moved. Edited copies get **Reset to market** (purple) in preview; the confirm stacks above the preview. No auto-sync. No Scan icon; refreshes from `onScan`.
 - Commands tab: **one list**. Create, file from Skills, remove skill, delete command, and a **toggle** per row (`setCommandEnabled`). No dock chips, no Export button, no IDE cards, no per-dock command files — toggling on writes the human-only skill folder into both live trees directly. Filed skills show Claude read counts from `usage()`.
 - Rules tab: shared-law rows (one `AGENTS.md` section each) get a toggle (`setSharedRuleEnabled`). Glob rows (`.cursor/rules/*.mdc`, etc.) are listed read-only — no toggle, no export. Click a row to preview the body. Does not create rules.
-- Discover: one nest on Landing and GUI — live Top / Trending, then market index role → category, plus search + preview (`MarketDiscover.tsx` / `discover.tsx`). Empty or failed shelves stay on that nest and default to Top. GUI `+` calls `setSkillEnabled(id, true)` directly. No project re-scan control.
+- Discover: one nest on Landing and GUI — live Top / Trending, then market index role → category, plus search + preview (`MarketDiscover.tsx` / `discover.tsx`). Empty or failed shelves stay on that nest and default to Top. GUI `+` calls `bridge.install(skillId)` directly. No project re-scan control.
 - Discover / Skills / Commands / Rules do not require a folder. Scan needs a connected repo (header Re-scan, Sync pick, or CLI cwd).
 - Pick folder on Sync scans once and binds. Header Re-scan is the explicit pull after that. Watcher also scans after debounce. There is no Scan-without-folder modal.
-- **There is no push control.** No Export / Install / Copy button, no dock picker, anywhere in the renderer — a toggle **is** the write. `bridge.setSkillEnabled` / `setCommandEnabled` / `setSharedRuleEnabled` / `leftovers` / `adoptLeftovers` are the only mutating bridge calls; `install` / `copyTo` / `copyAll` / `exportCommand` / `exportAll` / `exportRules` are not exposed over the Electron bridge (`engine.install` / etc. may still exist for a transition window backing old CLI verbs — see `docs/design/architecture.md` Decision Log — but the GUI never calls them).
+- **There is no push control.** No Export / Copy button, no dock picker, anywhere in the renderer — a toggle (or Discover's `+`) **is** the write. `bridge.install` (Discover `+` only) and `setSkillEnabled` / `setCommandEnabled` / `setSharedRuleEnabled` / `leftovers` / `adoptLeftovers` are the only mutating bridge calls; `copyTo` / `copyAll` / `exportCommand` / `exportAll` / `exportRules` / `importFrom` don't exist on the engine at all anymore — removed outright by the live-trees pivot, not just hidden from the bridge (see `docs/design/architecture.md` Decision Log).
 - Toggle (any tab): loading / success / failure is inline on the row, not a modal — there is no dest or replace flag left to configure before the write happens. A market skill whose parked copy is gone re-fetches automatically on toggle-on; a local skill in the same spot surfaces an inline error. A command-name collision surfaces inline on the toggle.
 - Sync tab: folder connect, plus a **Leftovers** card listing catalogued leftover skill/command/rule paths with one action, **Use ours and remove leftovers** (`adoptLeftovers`). No per-path picker.
-- Discover Add still does not run `npx` directly in the renderer — it goes through the engine's `setSkillEnabled`, same as a Skills-tab toggle
+- Discover Add still does not run `npx` directly in the renderer — it goes through the engine's `install`, same as `skil install` on the CLI
 - Gone ids and leftover always-on warnings from the last scan show as a status banner
 - No typed skill-id fields in the GUI (CLI can still take ids)
 

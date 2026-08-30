@@ -8,7 +8,6 @@ import type { ICollectionEngine } from '../../../../src/interfaces/engine.js';
 import { isOk, ok, type Result } from '../../../../src/core/result.js';
 import type { MarketPreviewData, MarketSearchRow, ShelfRole, SkilBridge, ScanResult } from '../../shared/ipc.js';
 import { forgetFolder, rememberFolder } from '../../shared/recent-folders.js';
-import { marketInboxIds, mergeMarketInbox, rememberMarketSkill } from '../../shared/market-inbox.js';
 import { ThemeProvider } from './theme';
 import { BridgeProvider } from './bridge-context';
 
@@ -93,8 +92,8 @@ export type TestBridgeOptions = {
   recentFolders?: string[];
   /**
    * If set, bind/pick swaps to that engine for the path — same as GUI main
-   * calling `createEngine(path)`. Market inbox ids are copied onto the new
-   * engine. Omitted → keep the original engine (most tests).
+   * calling `createEngine(path)`. Omitted → keep the original engine (most
+   * tests).
    */
   enginesByPath?: Record<string, ICollectionEngine>;
 };
@@ -104,7 +103,7 @@ export type TestBridge = SkilBridge & {
   emitScan: (result?: ScanResult) => void;
 };
 
-const EMPTY_SCAN: ScanResult = { added: [], gone: [], changed: [], commandPulls: [] };
+const EMPTY_SCAN: ScanResult = { added: [], gone: [], changed: [], alwaysOnWarnings: [] };
 
 /**
  * Wraps an engine as the `window.skil` bridge shape components call.
@@ -118,7 +117,6 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
   let projectRoot: string | null = options.projectRoot ?? null;
   let recentFolders = options.recentFolders ?? [];
   if (projectRoot) recentFolders = rememberFolder(projectRoot, recentFolders);
-  let marketInbox = mergeMarketInbox([], marketInboxIds(activeEngine.inbox(), activeEngine.skills()));
   const scanListeners = new Set<(result: ScanResult) => void>();
 
   function notifyScan(result: ScanResult): void {
@@ -128,35 +126,31 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
   }
 
   function bind(path: string): string {
-    marketInbox = mergeMarketInbox(marketInbox, marketInboxIds(activeEngine.inbox(), activeEngine.skills()));
     const next = options.enginesByPath?.[path];
     if (next) activeEngine = next;
-    for (const id of marketInbox) activeEngine.addToInbox(id);
     projectRoot = path;
     recentFolders = rememberFolder(path, recentFolders);
     return projectRoot;
   }
 
   return {
-    listCollections: async (ide) => activeEngine.list(ide),
-    createCollection: async (name, skillIds, ide) => activeEngine.create(name, skillIds, undefined, ide),
-    removeSkillFromCollection: async (name, skillId, ide) => activeEngine.removeSkill(name, skillId, ide),
-    exportAll: async (targetIDE, opts) => activeEngine.exportAll(targetIDE, opts),
-    importFrom: async (sourceRoot, ide, opts) => {
-      const result = await activeEngine.importFrom(sourceRoot, ide, opts);
+    listCollections: async () => activeEngine.list(),
+    createCollection: async (name, skillIds) => activeEngine.create(name, skillIds),
+    removeSkillFromCollection: async (name, skillId) => activeEngine.removeSkill(name, skillId),
+    setCommandEnabled: async (name, enabled) => {
+      const result = await activeEngine.setCommandEnabled(name, enabled);
       if (result.ok) notifyScan(EMPTY_SCAN);
       return result;
     },
     browseSkills: async (view) => activeEngine.browse(view),
-    listInbox: async () => activeEngine.inbox(),
     listSkills: async () => activeEngine.skills(),
-    addToInbox: async (skillId) => {
-      const result = activeEngine.addToInbox(skillId);
-      if (result.ok) marketInbox = rememberMarketSkill(skillId, marketInbox);
+    install: async (skillId) => {
+      const result = await activeEngine.install(skillId);
+      if (result.ok) notifyScan(EMPTY_SCAN);
       return result;
     },
-    addSkill: async (name, skillId, ide) => activeEngine.addSkill(name, skillId, ide),
-    deleteCollection: async (name, ide) => activeEngine.delete(name, ide),
+    addSkill: async (name, skillId) => activeEngine.addSkill(name, skillId),
+    deleteCollection: async (name) => activeEngine.delete(name),
     getProjectRoot: async () => projectRoot,
     pickProjectFolder: async () => {
       if (options.nextPick === null) return null;
@@ -210,15 +204,17 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
     readSkillMd: async (skillId: string) => activeEngine.readSkillMd(skillId),
     originChecks: async () => activeEngine.originChecks(),
     updateFromMarket: async (skillId, opts) => activeEngine.updateFromMarket(skillId, opts),
+    setSkillEnabled: async (skillId, enabled) => activeEngine.setSkillEnabled(skillId, enabled),
     listRules: async () => activeEngine.rules(),
     readRule: async (id) => activeEngine.readRule(id),
-    setAlwaysApply: async (id, alwaysApply) => {
-      const result = activeEngine.setAlwaysApply(id, alwaysApply);
+    setSharedRuleEnabled: async (id, enabled) => {
+      const result = activeEngine.setSharedRuleEnabled(id, enabled);
       if (result.ok) notifyScan(EMPTY_SCAN);
       return result;
     },
-    exportRules: async (targetIDE, opts) => {
-      const result = await activeEngine.exportRules(targetIDE, opts);
+    listLeftovers: async () => activeEngine.leftovers(),
+    adoptLeftovers: async (ids) => {
+      const result = await activeEngine.adoptLeftovers(ids);
       if (result.ok) notifyScan(EMPTY_SCAN);
       return result;
     },

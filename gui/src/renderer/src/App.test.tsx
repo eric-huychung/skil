@@ -10,6 +10,7 @@ import {
   installTestBridge,
   renderWithProviders,
 } from './test-utils';
+import { err, isOk } from '../../../../src/core/result.js';
 
 async function openSync() {
   await userEvent.click(screen.getByRole('tab', { name: 'Sync' }));
@@ -64,7 +65,7 @@ describe('App', () => {
   it('puts Skills on the rail above Commands and names each tab for hover', async () => {
     const engine = installTestBridge(createInMemoryEngine());
     engine.create('frontend', []);
-    engine.addToInbox('obra/react-patterns');
+    await engine.install('obra/react-patterns');
 
     renderWithProviders(<App />);
 
@@ -210,7 +211,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Change folder' })).toBeInTheDocument();
   });
 
-  it('scans the picked folder and lists unfiled skills in Inbox without creating commands', async () => {
+  it('scans the picked folder and lists unfiled skills in Skills without creating commands', async () => {
     const { engine, fs } = createInMemoryWorkspace();
     fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
     fs.writeFile('.cursor/skills/ui/styling/SKILL.md', '# styling\n');
@@ -227,7 +228,7 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument();
     expect(screen.getByText('tdd')).toBeInTheDocument();
     expect(screen.getByText('ui/styling')).toBeInTheDocument();
-    expect(engine.inbox()).toEqual(['tdd', 'ui/styling']);
+    expect(engine.skills().map((skill) => skill.id)).toEqual(['tdd', 'ui/styling']);
     expect(engine.list()).toEqual([]);
     expect(screen.queryByRole('button', { name: 'Scan' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Re-scan' })).toBeEnabled();
@@ -257,29 +258,7 @@ describe('App', () => {
     expect(screen.getByRole('dialog', { name: 'How can we help?' })).toBeInTheDocument();
   });
 
-  it('binds a download destination so the header and Sync show that folder', async () => {
-    const engine = createInMemoryEngine();
-    engine.create('frontend', ['obra/react-patterns']);
-    installTestBridge(engine, { nextDestination: '/tmp/other-project' });
-
-    renderWithProviders(<App />);
-    expect(screen.queryByTitle('/tmp/other-project')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Re-scan' })).not.toBeInTheDocument();
-
-    await openCommandsWorkspace();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
-
-    expect(await screen.findByRole('dialog', { name: 'Exported' })).toBeInTheDocument();
-    expect(screen.getByTitle('/tmp/other-project')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Re-scan' })).toBeEnabled();
-
-    await userEvent.click(screen.getByRole('tab', { name: 'Sync' }));
-    expect(screen.getByRole('button', { name: 'Change folder' })).toBeInTheDocument();
-    expect(screen.getAllByText('/tmp/other-project').length).toBeGreaterThan(1);
-  });
-
-  it('updates Commands skill counts after deleting a filed skill from Inbox', async () => {
+  it('updates Commands skill counts after deleting a filed skill', async () => {
     const { engine, fs } = createInMemoryWorkspace();
     fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
     fs.writeFile('.cursor/skills/ui/SKILL.md', '# ui\n');
@@ -293,9 +272,10 @@ describe('App', () => {
     });
 
     await userEvent.click(screen.getByRole('tab', { name: 'Skills' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Details for tdd' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Delete tdd' }));
     await userEvent.click(screen.getByRole('button', { name: 'Delete skill' }));
-    await waitFor(() => expect(engine.inbox()).toEqual(['ui']));
+    await waitFor(() => expect(engine.skills().map((skill) => skill.id)).toEqual(['ui']));
 
     await userEvent.click(screen.getByRole('tab', { name: 'Commands' }));
 
@@ -434,122 +414,38 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Switch to /tmp/beta' })).toBeInTheDocument();
   });
 
-  it('keeps Discover inbox skills after switching folders', async () => {
-    const alpha = createInMemoryEngine();
-    alpha.addToInbox('obra/react-patterns');
-    const beta = createInMemoryEngine();
-    installTestBridge(alpha, {
-      projectRoot: '/tmp/alpha',
-      recentFolders: ['/tmp/alpha', '/tmp/beta'],
-      enginesByPath: { '/tmp/beta': beta },
-    });
-
-    renderWithProviders(<App />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Skills' }));
-    expect(await screen.findByText('obra/react-patterns')).toBeInTheDocument();
-
-    await openSync();
-    await userEvent.click(screen.getByRole('button', { name: 'Switch to /tmp/beta' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Switch folder' }));
-
-    await userEvent.click(screen.getByRole('tab', { name: 'Skills' }));
-    expect(await screen.findByText('obra/react-patterns')).toBeInTheDocument();
-    expect(beta.inbox()).toEqual(['obra/react-patterns']);
-  });
-
-  it('disables Import on Sync until a folder is connected', async () => {
-    installTestBridge(createInMemoryEngine());
-
-    renderWithProviders(<App />);
-    await openSync();
-
-    expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled();
-  });
-
-  it('imports skills from a recent folder without switching the bound project', async () => {
+  it('shows leftovers on Sync and adopts them into both live trees', async () => {
     const { engine, fs } = createInMemoryWorkspace();
-    fs.writeFile('/tmp/other-project/.cursor/skills/tdd/SKILL.md', '# tdd\n');
-    fs.writeFile(
-      '/tmp/other-project/.cursor/commands/build.md',
-      `---
-name: /build
-skills:
-  - tdd
-generated_by: skil
-generated_at: 2026-08-24T00:00:00.000Z
----
-
-## Goal
-from the other project
-`
-    );
-    installTestBridge(engine, {
-      projectRoot: DEFAULT_TEST_PROJECT_ROOT,
-      recentFolders: [DEFAULT_TEST_PROJECT_ROOT, '/tmp/other-project'],
-    });
-
-    renderWithProviders(<App />);
-    await openSync();
-    await userEvent.click(screen.getByRole('button', { name: 'Import' }));
-
-    const dialog = screen.getByRole('dialog', { name: 'Import' });
-    expect(within(dialog).getByRole('radio', { name: 'Cursor' })).toHaveAttribute('aria-checked', 'true');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Import from /tmp/other-project' }));
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Import' }));
-
-    expect(await screen.findByRole('dialog', { name: 'Imported' })).toBeInTheDocument();
-    expect(engine.inbox()).toEqual(['tdd']);
-    expect(engine.list('cursor').find((command) => command.name === 'build')?.skills).toEqual(['tdd']);
-    expect(screen.getAllByTitle(DEFAULT_TEST_PROJECT_ROOT).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: 'Switch to /tmp/other-project' })).toBeInTheDocument();
-  });
-
-  it('asks to replace when the import would overwrite a dest skill', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# dest tdd\n');
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
     engine.scan();
-    fs.writeFile('/tmp/other-project/.cursor/skills/tdd/SKILL.md', '# source tdd\n');
-    installTestBridge(engine, {
-      projectRoot: DEFAULT_TEST_PROJECT_ROOT,
-      recentFolders: [DEFAULT_TEST_PROJECT_ROOT, '/tmp/other-project'],
-    });
+    installTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
 
     renderWithProviders(<App />);
     await openSync();
-    await userEvent.click(screen.getByRole('button', { name: 'Import' }));
-    const dialog = screen.getByRole('dialog', { name: 'Import' });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Import from /tmp/other-project' }));
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Import' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Replace existing files?' })).toBeInTheDocument();
-    expect(fs.readFile('.cursor/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# dest tdd\n' });
+    expect(await screen.findByRole('heading', { name: 'Leftovers' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Leftover paths' })).toHaveTextContent('.cursor/skills/tdd');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Replace' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Use ours and remove leftovers' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Imported' })).toBeInTheDocument();
-    expect(fs.readFile('.cursor/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# source tdd\n' });
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Leftovers' })).not.toBeInTheDocument());
+    expect(isOk(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true);
+    expect(isOk(fs.readFile('.claude/skills/tdd/SKILL.md'))).toBe(true);
+    expect(isOk(fs.readFile('.skil/deprecated/.cursor/skills/tdd/SKILL.md'))).toBe(true);
   });
 
-  it('picks another folder to import without binding it', async () => {
+  it('shows a friendly error when adopting leftovers fails, without dropping the list', async () => {
     const { engine, fs } = createInMemoryWorkspace();
-    fs.writeFile('/tmp/picked-source/.cursor/skills/design/SKILL.md', '# design\n');
-    installTestBridge(engine, {
-      projectRoot: DEFAULT_TEST_PROJECT_ROOT,
-      recentFolders: [DEFAULT_TEST_PROJECT_ROOT],
-      nextDestination: '/tmp/picked-source',
-    });
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    engine.scan();
+    const real = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+    const bridge = { ...real, adoptLeftovers: async () => err(new Error('EACCES: permission denied')) };
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App />, { bridge });
     await openSync();
-    await userEvent.click(screen.getByRole('button', { name: 'Import' }));
-    const dialog = screen.getByRole('dialog', { name: 'Import' });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Choose folder' }));
-    expect(within(dialog).getByText('/tmp/picked-source')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Import' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Use ours and remove leftovers' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Imported' })).toBeInTheDocument();
-    expect(engine.inbox()).toEqual(['design']);
-    expect(screen.getAllByTitle(DEFAULT_TEST_PROJECT_ROOT).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: 'Switch to /tmp/picked-source' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't adopt those leftovers");
+    expect(screen.getByRole('heading', { name: 'Leftovers' })).toBeInTheDocument();
   });
 });

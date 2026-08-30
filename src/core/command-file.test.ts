@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isCommandSkillStamp,
   isSkilStamped,
   parseStampedSkills,
   writeCommandFile,
+  writeOpenAiYaml,
 } from './command-file.js';
 
 function stamp(body: string, skills: string[] = ['tdd']): string {
@@ -39,6 +41,11 @@ describe('writeCommandFile', () => {
     expect(written).toContain('- `tdd`');
     expect(written).toContain('- `design`');
     expect(written).not.toContain('1. Use the skills listed in frontmatter when they apply.');
+  });
+
+  it('marks the file human-only with disable-model-invocation: true', () => {
+    const written = writeCommandFile('build', ['tdd']);
+    expect(written).toMatch(/^disable-model-invocation: true\s*$/m);
   });
 
   it('keeps a Skills section when nothing is filed', () => {
@@ -186,5 +193,25 @@ describe('parseStampedSkills', () => {
       'design/codebase-design',
       'design/to-tasks',
     ]);
+  });
+});
+
+describe('isCommandSkillStamp', () => {
+  it('is true for a written command skill', () => {
+    expect(isCommandSkillStamp(writeCommandFile('build', ['tdd']))).toBe(true);
+  });
+
+  it('is false for a skil-stamped file that is not a command (no disable-model-invocation)', () => {
+    expect(isCommandSkillStamp(stamp('## Goal\n'))).toBe(false);
+  });
+
+  it('is false for a plain, unstamped skill', () => {
+    expect(isCommandSkillStamp('---\nname: some-skill\n---\n\nBody.\n')).toBe(false);
+  });
+});
+
+describe('writeOpenAiYaml', () => {
+  it('marks the command human-only for implicit invocation', () => {
+    expect(writeOpenAiYaml()).toBe('allow_implicit_invocation: false\n');
   });
 });

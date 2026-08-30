@@ -4,12 +4,16 @@ import { InMemoryFileSystemAdapter } from '../../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../../adapters/in-memory-skills.js';
 import { isOk } from '../../core/result.js';
 import { createProgram } from '../program.js';
-import { runRulesAlwaysApply, runRulesExport, runRulesList, runRulesShow } from './rules.js';
+import { runRulesList, runRulesSetEnabled, runRulesShow } from './rules.js';
 
 function buildEngine(): { engine: CollectionEngine; fs: InMemoryFileSystemAdapter } {
   const fs = new InMemoryFileSystemAdapter();
   const engine = new CollectionEngine(fs, new InMemorySkillsAdapter());
   return { engine, fs };
+}
+
+function sharedRuleSection(id: string, body: string): string {
+  return `<!-- skil:rule ${id} -->\n${body}\n<!-- /skil:rule ${id} -->\n`;
 }
 
 describe('runRulesList', () => {
@@ -22,93 +26,81 @@ describe('runRulesList', () => {
     expect(outcome.message).toMatch(/no rules/i);
   });
 
-  it('lists rule name, dock, always-apply, and path', () => {
+  it('lists a shared AGENTS.md section as enabled', () => {
     const { engine, fs } = buildEngine();
-    fs.writeFile('.cursor/rules/behavior.mdc', '---\nalwaysApply: true\n---\n# body\n');
-    fs.writeFile('CLAUDE.md', '# claude\n');
+    fs.writeFile('AGENTS.md', sharedRuleSection('behavior', 'Be kind.'));
 
     const outcome = runRulesList(engine);
 
     expect(outcome.isError).toBe(false);
     expect(outcome.message).toContain('behavior');
-    expect(outcome.message).toContain('cursor');
-    expect(outcome.message).toContain('yes');
-    expect(outcome.message).toContain('.cursor/rules/behavior.mdc');
-    expect(outcome.message).toContain('CLAUDE');
-    expect(outcome.message).toContain('claude');
+    expect(outcome.message).toContain('shared');
+    expect(outcome.message).toContain('AGENTS.md');
+  });
+
+  it('lists a glob rule file as read-only (no enabled column value)', () => {
+    const { engine, fs } = buildEngine();
+    fs.writeFile('.cursor/rules/pair-programming/behavior.mdc', '---\nalwaysApply: true\n---\n# body\n');
+
+    const outcome = runRulesList(engine);
+
+    expect(outcome.isError).toBe(false);
+    expect(outcome.message).toContain('glob');
+    expect(outcome.message).toContain('.cursor/rules/pair-programming/behavior.mdc');
   });
 });
 
 describe('runRulesShow', () => {
-  it('prints the rule body', () => {
+  it('prints a shared rule section body', () => {
     const { engine, fs } = buildEngine();
-    fs.writeFile('.cursor/rules/behavior.mdc', '---\nalwaysApply: true\n---\n# hello\n');
+    fs.writeFile('AGENTS.md', sharedRuleSection('behavior', 'Be kind.'));
 
-    const outcome = runRulesShow(engine, '.cursor/rules/behavior.mdc');
+    const outcome = runRulesShow(engine, 'behavior');
 
     expect(outcome.isError).toBe(false);
-    expect(outcome.message).toContain('# hello');
+    expect(outcome.message).toContain('Be kind.');
   });
 
   it('reports a missing rule', () => {
     const { engine } = buildEngine();
 
-    const outcome = runRulesShow(engine, '.cursor/rules/gone.mdc');
+    const outcome = runRulesShow(engine, 'nope');
 
     expect(outcome.isError).toBe(true);
     expect(outcome.message).toMatch(/not found/i);
   });
 });
 
-describe('runRulesAlwaysApply', () => {
-  it('writes alwaysApply on a cursor rule', () => {
+describe('runRulesSetEnabled', () => {
+  it('turns off a shared rule: section leaves AGENTS.md and parks the body', () => {
     const { engine, fs } = buildEngine();
-    fs.writeFile('.cursor/rules/behavior.mdc', '---\nalwaysApply: true\n---\n# body\n');
+    fs.writeFile('AGENTS.md', sharedRuleSection('behavior', 'Be kind.'));
 
-    const outcome = runRulesAlwaysApply(engine, '.cursor/rules/behavior.mdc', false);
+    const outcome = runRulesSetEnabled(engine, 'behavior', false);
 
     expect(outcome.isError).toBe(false);
     expect(outcome.message).toMatch(/off/i);
-    const written = fs.readFile('.cursor/rules/behavior.mdc');
-    expect(isOk(written)).toBe(true);
-    if (isOk(written)) {
-      expect(written.value).toContain('alwaysApply: false');
-    }
+    const agents = fs.readFile('AGENTS.md');
+    expect(isOk(agents) && agents.value.includes('skil:rule behavior')).toBe(false);
+    const parked = fs.readFile('.skil/parked/rules/behavior');
+    expect(isOk(parked)).toBe(true);
   });
 
-  it('refuses root always-on files', () => {
+  it('refuses to toggle a glob rule file', () => {
     const { engine, fs } = buildEngine();
-    fs.writeFile('CLAUDE.md', '# claude\n');
+    fs.writeFile('.cursor/rules/behavior.mdc', '---\nalwaysApply: true\n---\n# body\n');
 
-    const outcome = runRulesAlwaysApply(engine, 'CLAUDE.md', false);
+    const outcome = runRulesSetEnabled(engine, '.cursor/rules/behavior.mdc', false);
 
     expect(outcome.isError).toBe(true);
-    expect(outcome.message).toMatch(/cannot toggle/i);
-  });
-});
-
-describe('runRulesExport', () => {
-  it('copies rules into the dest dock', async () => {
-    const { engine, fs } = buildEngine();
-    fs.writeFile('.cursor/rules/behavior.mdc', '# behavior\n');
-
-    const outcome = await runRulesExport(engine, 'claude');
-
-    expect(outcome.isError).toBe(false);
-    expect(outcome.message).toContain('claude');
-    const dest = fs.readFile('.claude/rules/behavior.md');
-    expect(isOk(dest)).toBe(true);
-    if (isOk(dest)) {
-      expect(dest.value).toContain('generated_by: skil');
-      expect(dest.value).toContain('# behavior');
-    }
+    expect(outcome.message).toMatch(/path-scoped/i);
   });
 });
 
 describe('registerRulesCommand', () => {
   it('lists rules from the CLI entrypoint', async () => {
     const { engine, fs } = buildEngine();
-    fs.writeFile('.cursor/rules/behavior.mdc', '# behavior\n');
+    fs.writeFile('AGENTS.md', sharedRuleSection('behavior', 'Be kind.'));
     const program = createProgram(engine);
     program.exitOverride();
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -119,20 +111,20 @@ describe('registerRulesCommand', () => {
     log.mockRestore();
   });
 
-  it('exports rules with --to and --replace', async () => {
+  it('enables and disables a shared rule from the CLI entrypoint', async () => {
     const { engine, fs } = buildEngine();
-    fs.writeFile('.cursor/rules/behavior.mdc', '# new\n');
-    fs.writeFile('.claude/rules/behavior.md', '# old\n');
+    fs.writeFile('AGENTS.md', sharedRuleSection('behavior', 'Be kind.'));
     const program = createProgram(engine);
     program.exitOverride();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    await program.parseAsync(['rules', 'export', '--to', 'claude', '--replace'], { from: 'user' });
+    await program.parseAsync(['rules', 'disable', 'behavior'], { from: 'user' });
+    expect(isOk(fs.readFile('.skil/parked/rules/behavior'))).toBe(true);
 
-    const dest = fs.readFile('.claude/rules/behavior.md');
-    expect(isOk(dest)).toBe(true);
-    if (isOk(dest)) {
-      expect(dest.value).toContain('generated_by: skil');
-      expect(dest.value).toContain('# new');
-    }
+    await program.parseAsync(['rules', 'enable', 'behavior'], { from: 'user' });
+    const agents = fs.readFile('AGENTS.md');
+    expect(isOk(agents) && agents.value.includes('skil:rule behavior')).toBe(true);
+
+    log.mockRestore();
   });
 });

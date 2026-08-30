@@ -4,6 +4,9 @@ import { MarketSync } from './market-sync.js';
 /** Weekly cron hydrates at most this many SKILL.md details per invocation. */
 export const CRON_MAX_DETAIL = 40;
 
+/** Never relay `result.error.message` here — it can carry raw Supabase/network error text. */
+const SYNC_FAILED = 'Market index sync failed.';
+
 export interface CronSyncDeps {
   cronSecret: string | undefined;
   /** Missing when Supabase env is not configured. Auth still 401s first. */
@@ -20,10 +23,10 @@ function unauthorized(): Response {
 /**
  * Vercel Cron handler for the weekly market-index refresh. Auth is
  * `Authorization: Bearer $CRON_SECRET` (Vercel sets this automatically
- * when `CRON_SECRET` is in the project env). Same `MarketSync` as
- * `scripts/sync-market.ts` (`createMarketSync` → `refreshActiveFields`),
- * but only classify + `CRON_MAX_DETAIL` hydrates — not the 20k listing
- * crawl, which times out on Vercel.
+ * when `CRON_SECRET` is in the project env). Same `MarketSync` class as
+ * `scripts/sync-market.ts` (`refreshActiveFields`), but only classify +
+ * `CRON_MAX_DETAIL` hydrates — not the 20k listing crawl, which times out
+ * on Vercel.
  */
 export async function handleCronSyncRequest(request: Request, deps: CronSyncDeps): Promise<Response> {
   const { cronSecret, sync } = deps;
@@ -41,7 +44,7 @@ export async function handleCronSyncRequest(request: Request, deps: CronSyncDeps
 
   const result = await sync.sync({ maxDetail: CRON_MAX_DETAIL });
   if (!isOk(result)) {
-    return Response.json({ error: 'sync_error', message: result.error.message }, { status: 500 });
+    return Response.json({ error: 'sync_error', message: SYNC_FAILED }, { status: 500 });
   }
 
   return Response.json({

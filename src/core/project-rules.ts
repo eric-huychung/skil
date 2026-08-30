@@ -1,210 +1,41 @@
-import { load as loadYaml } from 'js-yaml';
 import type { IFileSystemAdapter } from '../interfaces/adapters.js';
-import type { IDE, RuleRecord } from '../types/index.js';
+import type { RuleRecord } from '../types/index.js';
+import { PARKED_RULES_ROOT } from './dock-layout.js';
 import { err, isOk, ok, type Result } from './result.js';
 
-/** How each dock actually loads rules. Dest paths come from this, not ad-hoc ifs. */
-export type DockRuleLayout = {
-  folder?: { dir: string; ext: string };
-  root?: string;
-  /** Folder copies also land in `root` (Codex/agents load AGENTS.md). */
-  mergeFolderRulesIntoRoot?: boolean;
-};
-
-export const RULE_LAYOUT: Record<IDE, DockRuleLayout> = {
-  cursor: { folder: { dir: '.cursor/rules', ext: '.mdc' }, root: 'AGENTS.md' },
-  claude: { folder: { dir: '.claude/rules', ext: '.md' }, root: 'CLAUDE.md' },
-  copilot: {
-    folder: { dir: '.github/instructions', ext: '.instructions.md' },
-    root: '.github/copilot-instructions.md',
-  },
-  windsurf: { folder: { dir: '.windsurf/rules', ext: '.md' } },
-  codex: { folder: { dir: '.codex/rules', ext: '.md' }, root: 'AGENTS.md', mergeFolderRulesIntoRoot: true },
-  agents: { folder: { dir: '.agents/rules', ext: '.md' }, root: 'AGENTS.md', mergeFolderRulesIntoRoot: true },
-};
-
-export const RULE_DIR_BY_IDE: Partial<Record<IDE, string>> = Object.fromEntries(
-  (Object.entries(RULE_LAYOUT) as Array<[IDE, DockRuleLayout]>)
-    .filter(([, layout]) => layout.folder)
-    .map(([dock, layout]) => [dock, layout.folder!.dir])
-);
-
-/** Unique root files we walk. Dock is the product owner of that filename. */
-export const ROOT_RULE_FILES: Array<{ path: string; dock: IDE }> = [
-  { path: 'CLAUDE.md', dock: 'claude' },
-  { path: 'AGENTS.md', dock: 'agents' },
-  { path: '.github/copilot-instructions.md', dock: 'copilot' },
-];
-
-const ALWAYS_ON_ROOTS = new Set(ROOT_RULE_FILES.map((file) => file.path));
-
-const FENCED_YAML = /^---\r?\n([\s\S]*?)\r?\n---/;
-
-export type RuleDest = { mode: 'file'; path: string } | { mode: 'section'; path: string };
-
-export function ruleExtension(ide: IDE): string {
-  return RULE_LAYOUT[ide].folder?.ext ?? '.md';
-}
-
-export function collectRules(fs: IFileSystemAdapter, sourceRoot = ''): Result<RuleRecord[]> {
-  const prefix = normalizeRoot(sourceRoot);
-  const found: RuleRecord[] = [];
-
-  for (const [dock, dir] of Object.entries(RULE_DIR_BY_IDE) as Array<[IDE, string]>) {
-    const listed = fs.listAllFiles(underRoot(prefix, dir));
-    if (!isOk(listed)) {
-      return err(listed.error);
-    }
-    for (const readPath of listed.value) {
-      const relative = stripPrefix(readPath, prefix);
-      if (!isRuleFile(relative, dock)) {
-        continue;
-      }
-      const contents = fs.readFile(readPath);
-      if (!isOk(contents)) {
-        return err(contents.error);
-      }
-      found.push(toRecord(relative, dock, contents.value));
-    }
-  }
-
-  for (const rootFile of ROOT_RULE_FILES) {
-    const readPath = underRoot(prefix, rootFile.path);
-    const contents = fs.readFile(readPath);
-    if (!isOk(contents)) {
-      continue;
-    }
-    const sections = parseRuleSections(contents.value);
-    for (const section of sections) {
-      found.push(
-        toRecord(rootFile.path, rootFile.dock, section.body, {
-          id: `${rootFile.path}#${section.id}`,
-          name: section.id,
-        })
-      );
-    }
-    if (sections.length === 0 || leftoverRootBody(contents.value).trim() !== '') {
-      found.push(toRecord(rootFile.path, rootFile.dock, contents.value));
-    }
-  }
-
-  found.sort((a, b) => a.id.localeCompare(b.id));
-  return ok(found);
-}
-
-export function parseAlwaysApply(path: string, contents: string, id = path): boolean {
-  if (ALWAYS_ON_ROOTS.has(path) && !id.includes('#')) {
-    return true;
-  }
-
-  const yaml = extractFrontmatter(contents);
-  if (yaml === null) {
-    return path.startsWith('.claude/rules/');
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = loadYaml(yaml);
-  } catch {
-    return false;
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return false;
-  }
-
-  const rec = parsed as Record<string, unknown>;
-  if (rec.alwaysApply === true) return true;
-  if (rec.alwaysApply === false) return false;
-  if (typeof rec.applyTo === 'string' && (rec.applyTo === '**' || rec.applyTo === '*')) return true;
-  if (Array.isArray(rec.paths) && rec.paths.length > 0) return false;
-  return path.startsWith('.claude/rules/');
-}
-
-/** Root always-on files cannot toggle. Folder copies and AGENTS.md sections can. */
-export function canToggleAlwaysApply(id: string): boolean {
-  const path = rulePathFromId(id);
-  if (ALWAYS_ON_ROOTS.has(path) && !id.includes('#')) {
-    return false;
-  }
-  return true;
-}
-
-export function withAlwaysApply(contents: string, alwaysApply: boolean): string {
-  return withFrontmatterKey(contents, 'alwaysApply', String(alwaysApply));
-}
-
-/** Stamp a dest copy. Same `generated_by: skil` key as command files. No clock. */
-export function stampRule(contents: string, id: string, alwaysApply: boolean): string {
-  return withFrontmatterKey(
-    withFrontmatterKey(withAlwaysApply(contents, alwaysApply), 'id', id),
-    'generated_by',
-    'skil'
-  );
-}
-
-export function destRuleTargets(source: RuleRecord, destDock: IDE): RuleDest[] {
-  const layout = RULE_LAYOUT[destDock];
-  if (ALWAYS_ON_ROOTS.has(rulePathFromId(source.id)) && !source.id.includes('#')) {
-    return layout.root && layout.root === source.path ? [{ mode: 'file', path: layout.root }] : [];
-  }
-  const dests: RuleDest[] = [];
-  if (layout.folder) {
-    dests.push({ mode: 'file', path: `${layout.folder.dir}/${source.name}${layout.folder.ext}` });
-  }
-  if (layout.root && (layout.mergeFolderRulesIntoRoot || !layout.folder)) {
-    dests.push({ mode: 'section', path: layout.root });
-  }
-  return dests;
-}
+/**
+ * Shared law lives in one place: `AGENTS.md`. `setSharedRuleEnabled`
+ * upserts or removes one of these sections. `CLAUDE.md` is expected to
+ * be `@AGENTS.md` plus real Claude-only notes below that line — see
+ * `leftoverAlwaysOnWarnings`.
+ */
+export const AGENTS_MD = 'AGENTS.md';
+export const CLAUDE_MD = 'CLAUDE.md';
+export const COPILOT_INSTRUCTIONS_MD = '.github/copilot-instructions.md';
 
 /**
- * One card per rule name. Export already keys dest path off `name`, so
- * dock copies are deploys of the same rule, not new rules. Prefer a
- * Cursor `.mdc` so Always on still writes the native file.
+ * Path-scoped glob rule dirs a real dock actually loads by file glob —
+ * left on disk exactly as found, read-only, never folded into
+ * `AGENTS.md`, never toggled. `.codex/rules` and `.agents/rules` are
+ * deliberately absent: Codex and the `agents` dock only read
+ * `AGENTS.md`, so files under those dirs are leftover, not a real glob
+ * rule root (see `leftoverAlwaysOnWarnings`).
  */
-export function collapseRules(rules: RuleRecord[]): RuleRecord[] {
-  const groups = new Map<string, RuleRecord[]>();
-  for (const rule of rules) {
-    const group = groups.get(rule.name) ?? [];
-    group.push(rule);
-    groups.set(rule.name, group);
-  }
+export const GLOB_RULE_DIRS: Record<string, { ext: string }> = {
+  '.cursor/rules': { ext: '.mdc' },
+  '.claude/rules': { ext: '.md' },
+  '.github/instructions': { ext: '.instructions.md' },
+  '.windsurf/rules': { ext: '.md' },
+};
 
-  return [...groups.values()]
-    .map((group) => group.find((rule) => rule.path.endsWith('.mdc')) ?? group[0]!)
-    .sort((a, b) => a.path.localeCompare(b.path));
-}
+/** Root always-on files the watcher must cover (parent dir, non-recursive, filtered by filename). */
+export const ROOT_RULE_FILES: string[] = [AGENTS_MD, CLAUDE_MD, COPILOT_INSTRUCTIONS_MD];
 
-/** Rule files that belong to `dock` for import (same-dock copy). One row per path. */
-export function importRulePathsForDock(dock: IDE, rules: RuleRecord[]): RuleRecord[] {
-  const dir = RULE_DIR_BY_IDE[dock];
-  const matched = rules.filter((rule) => {
-    if (dir && (rule.path === dir || rule.path.startsWith(`${dir}/`))) {
-      return true;
-    }
-    if (rule.path === 'AGENTS.md' && (dock === 'cursor' || dock === 'agents' || dock === 'codex')) {
-      return true;
-    }
-    if (rule.path === 'CLAUDE.md' && dock === 'claude') {
-      return true;
-    }
-    if (rule.path === '.github/copilot-instructions.md' && dock === 'copilot') {
-      return true;
-    }
-    return false;
-  });
-
-  const seen = new Set<string>();
-  return matched.filter((rule) => {
-    if (seen.has(rule.path)) return false;
-    seen.add(rule.path);
-    return true;
-  });
-}
+const SECTION_RE = /<!-- skil:rule ([^\s]+) -->\r?\n?([\s\S]*?)\r?\n?<!-- \/skil:rule \1 -->/g;
 
 export function parseRuleSections(contents: string): Array<{ id: string; body: string }> {
   const found: Array<{ id: string; body: string }> = [];
-  const re = /<!-- skil:rule ([^\s]+) -->\r?\n?([\s\S]*?)\r?\n?<!-- \/skil:rule \1 -->/g;
+  const re = new RegExp(SECTION_RE);
   let match: RegExpExecArray | null;
   while ((match = re.exec(contents)) !== null) {
     const id = match[1];
@@ -234,89 +65,127 @@ export function upsertRuleSection(contents: string, id: string, body: string): s
   return trimmed === '' ? `${block}\n` : `${trimmed}\n\n${block}\n`;
 }
 
-function leftoverRootBody(contents: string): string {
-  return contents.replace(
-    /<!-- skil:rule [^\s]+ -->\r?\n?[\s\S]*?\r?\n?<!-- \/skil:rule [^\s]+ -->\n*/g,
-    ''
+/** Removes one section, cleaning up the blank lines it leaves behind. */
+export function removeRuleSection(contents: string, id: string): string {
+  const re = new RegExp(
+    `\\n*<!-- skil:rule ${escapeRegExp(id)} -->\\r?\\n?[\\s\\S]*?\\r?\\n?<!-- /skil:rule ${escapeRegExp(id)} -->\\n*`
   );
+  return contents.replace(re, '\n\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '');
 }
 
-function toRecord(
-  path: string,
-  dock: IDE,
-  contents: string,
-  override?: { id: string; name: string }
-): RuleRecord {
-  const id = override?.id ?? path;
-  return {
-    id,
-    name: override?.name ?? ruleDisplayName(path, dock),
-    path,
-    dock,
-    alwaysApply: parseAlwaysApply(path, contents, id),
-    canToggle: canToggleAlwaysApply(id),
-  };
+function parkedSharedRuleId(path: string): string {
+  const prefix = `${PARKED_RULES_ROOT}/`;
+  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
-function ruleDisplayName(path: string, dock: IDE): string {
-  const dir = RULE_DIR_BY_IDE[dock];
-  if (dir && path.startsWith(`${dir}/`)) {
-    return stripKnownExt(path.slice(dir.length + 1));
+/**
+ * Shared-law rows: one per `AGENTS.md` section (`enabled: true`), plus
+ * one per parked rule id with no live section (`enabled: false`) so an
+ * off row still shows up. A parked id whose section is also live (a
+ * stale park after a manual re-add) is deduped to the live row.
+ */
+export function collectSharedRules(fs: IFileSystemAdapter): Result<RuleRecord[]> {
+  const rows: RuleRecord[] = [];
+  const seen = new Set<string>();
+
+  const agents = fs.readFile(AGENTS_MD);
+  if (isOk(agents)) {
+    for (const section of parseRuleSections(agents.value)) {
+      rows.push({ id: section.id, name: section.id, kind: 'shared', path: AGENTS_MD, enabled: true });
+      seen.add(section.id);
+    }
   }
-  const base = path.slice(path.lastIndexOf('/') + 1);
-  return stripKnownExt(base);
-}
 
-function stripKnownExt(name: string): string {
-  return name.replace(/\.instructions\.md$/i, '').replace(/\.mdc$/i, '').replace(/\.md$/i, '');
-}
-
-function isRuleFile(path: string, dock: IDE): boolean {
-  const name = path.slice(path.lastIndexOf('/') + 1);
-  if (name.startsWith('.')) return false;
-  if (dock === 'cursor') return name.endsWith('.mdc') || name.endsWith('.md');
-  if (dock === 'copilot') {
-    return name.endsWith('.instructions.md') || (name.endsWith('.md') && !name.endsWith('.prompt.md'));
+  const parked = fs.listAllFiles(PARKED_RULES_ROOT);
+  if (!isOk(parked)) {
+    return err(parked.error);
   }
-  return name.endsWith('.md');
-}
-
-function extractFrontmatter(contents: string): string | null {
-  return contents.match(FENCED_YAML)?.[1] ?? null;
-}
-
-function withFrontmatterKey(contents: string, key: string, value: string): string {
-  const match = contents.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n)?/);
-  if (!match) {
-    return `---\n${key}: ${value}\n---\n\n${contents}`;
+  for (const path of parked.value) {
+    const id = parkedSharedRuleId(path);
+    if (seen.has(id)) {
+      continue;
+    }
+    rows.push({ id, name: id, kind: 'shared', path: AGENTS_MD, enabled: false });
+    seen.add(id);
   }
-  const yaml = match[1] ?? '';
-  const rest = contents.slice(match[0].length);
-  const line = new RegExp(`^${escapeRegExp(key)}:\\s*.*$`, 'm');
-  const nextYaml = line.test(yaml) ? yaml.replace(line, `${key}: ${value}`) : `${yaml}\n${key}: ${value}`;
-  return `---\n${nextYaml}\n---\n${rest}`;
+
+  return ok(rows);
 }
 
-function rulePathFromId(id: string): string {
-  const hash = id.indexOf('#');
-  return hash === -1 ? id : id.slice(0, hash);
+function globRuleName(dir: string, path: string, ext: string): string {
+  const relative = path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path;
+  return relative.endsWith(ext) ? relative.slice(0, -ext.length) : relative;
+}
+
+/** Path-scoped rule files, read-only. One row per file found under `GLOB_RULE_DIRS`. */
+export function collectGlobRules(fs: IFileSystemAdapter): Result<RuleRecord[]> {
+  const rows: RuleRecord[] = [];
+  for (const [dir, { ext }] of Object.entries(GLOB_RULE_DIRS)) {
+    const listed = fs.listAllFiles(dir);
+    if (!isOk(listed)) {
+      return err(listed.error);
+    }
+    for (const path of listed.value) {
+      const base = path.slice(path.lastIndexOf('/') + 1);
+      if (base.startsWith('.') || !base.endsWith(ext.endsWith('.md') ? '.md' : ext)) {
+        continue;
+      }
+      rows.push({ id: path, name: globRuleName(dir, path, ext), kind: 'glob', path });
+    }
+  }
+  return ok(rows);
+}
+
+/** Every rule row: shared law first, then glob files, both sorted by id. */
+export function collectRules(fs: IFileSystemAdapter): Result<RuleRecord[]> {
+  const shared = collectSharedRules(fs);
+  if (!isOk(shared)) {
+    return shared;
+  }
+  const glob = collectGlobRules(fs);
+  if (!isOk(glob)) {
+    return glob;
+  }
+  return ok([
+    ...shared.value.sort((a, b) => a.id.localeCompare(b.id)),
+    ...glob.value.sort((a, b) => a.id.localeCompare(b.id)),
+  ]);
+}
+
+/**
+ * Leftover always-on files that fight the shared-law pair. Warn only —
+ * never rewritten, never folded into `AGENTS.md`. A path-scoped glob
+ * rule (`.cursor/rules/*.mdc`, etc.) is never flagged here.
+ */
+export function leftoverAlwaysOnWarnings(fs: IFileSystemAdapter): string[] {
+  const warnings: string[] = [];
+
+  if (isOk(fs.readFile(COPILOT_INSTRUCTIONS_MD))) {
+    warnings.push(`${COPILOT_INSTRUCTIONS_MD} is a leftover always-on file; shared law lives in ${AGENTS_MD}.`);
+  }
+
+  const claude = fs.readFile(CLAUDE_MD);
+  if (isOk(claude) && !claude.value.trimStart().startsWith('@AGENTS.md')) {
+    warnings.push(`${CLAUDE_MD} does not start with @AGENTS.md; it duplicates shared law instead of deferring to it.`);
+  }
+
+  const codexRules = fs.listAllFiles('.codex/rules');
+  if (isOk(codexRules) && codexRules.value.length > 0) {
+    warnings.push(`.codex/rules is not a real dock (Codex only reads ${AGENTS_MD}); those files are leftover.`);
+  }
+
+  const agents = fs.readFile(AGENTS_MD);
+  if (isOk(agents) && isOk(claude)) {
+    for (const section of parseRuleSections(agents.value)) {
+      if (ruleBodiesEqual(section.body, claude.value)) {
+        warnings.push(`${CLAUDE_MD} duplicates the "${section.id}" section already in ${AGENTS_MD}.`);
+      }
+    }
+  }
+
+  return warnings;
 }
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function normalizeRoot(root: string): string {
-  return root.replace(/\\/g, '/').replace(/\/+$/, '');
-}
-
-function underRoot(root: string, relative: string): string {
-  if (!root) return relative;
-  return `${root}/${relative}`;
-}
-
-function stripPrefix(path: string, prefix: string): string {
-  if (!prefix) return path;
-  const head = `${prefix}/`;
-  return path.startsWith(head) ? path.slice(head.length) : path;
 }

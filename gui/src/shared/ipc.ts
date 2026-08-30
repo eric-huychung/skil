@@ -1,8 +1,8 @@
 import type { Result } from '../../../src/core/result.js';
-import type { BrowseView, Collection, ExportResult, IDE, OriginCheck, OriginStatus, RuleRecord, ScanResult, Skill, SkillRecord, UsageRow } from '../../../src/types/index.js';
+import type { AdoptResult, BrowseView, Collection, IDE, LeftoverRecord, OriginCheck, OriginStatus, RuleRecord, ScanResult, Skill, SkillRecord, UsageRow } from '../../../src/types/index.js';
 import type { MarketSearchRow, ShelfRole } from '../../../src/backend/market-types.js';
 
-export type { BrowseView, Collection, ExportResult, IDE, MarketSearchRow, OriginCheck, OriginStatus, Result, RuleRecord, ScanResult, ShelfRole, Skill, SkillRecord, UsageRow };
+export type { AdoptResult, BrowseView, Collection, IDE, LeftoverRecord, MarketSearchRow, OriginCheck, OriginStatus, Result, RuleRecord, ScanResult, ShelfRole, Skill, SkillRecord, UsageRow };
 
 /**
  * Client-side shape of `GET /api/market/preview`'s `data` — not exported by
@@ -30,12 +30,10 @@ export const IPC_CHANNELS = {
   listCollections: 'skil:list-collections',
   createCollection: 'skil:create-collection',
   removeSkillFromCollection: 'skil:remove-skill-from-collection',
-  exportAll: 'skil:export-all',
-  importFrom: 'skil:import-from',
+  setCommandEnabled: 'skil:set-command-enabled',
   browseSkills: 'skil:browse-skills',
-  listInbox: 'skil:list-inbox',
   listSkills: 'skil:list-skills',
-  addToInbox: 'skil:add-to-inbox',
+  install: 'skil:install',
   addSkill: 'skil:add-skill',
   deleteCollection: 'skil:delete-collection',
   pickProjectFolder: 'skil:pick-project-folder',
@@ -54,10 +52,12 @@ export const IPC_CHANNELS = {
   readSkillMd: 'skil:read-skill-md',
   originChecks: 'skil:origin-checks',
   updateFromMarket: 'skil:update-from-market',
+  setSkillEnabled: 'skil:set-skill-enabled',
   listRules: 'skil:list-rules',
   readRule: 'skil:read-rule',
-  setAlwaysApply: 'skil:set-always-apply',
-  exportRules: 'skil:export-rules',
+  setSharedRuleEnabled: 'skil:set-shared-rule-enabled',
+  listLeftovers: 'skil:list-leftovers',
+  adoptLeftovers: 'skil:adopt-leftovers',
 } as const;
 
 /**
@@ -67,23 +67,26 @@ export const IPC_CHANNELS = {
  * session state — project root is adapter config, not an engine method.
  */
 export interface SkilBridge {
-  listCollections(ide?: IDE): Promise<Collection[]>;
-  createCollection(name: string, skillIds: string[], ide?: IDE): Promise<Result<Collection>>;
-  removeSkillFromCollection(name: string, skillId: string, ide?: IDE): Promise<Result<Collection>>;
-  exportAll(targetIDE: IDE, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>;
-  /** Copy one IDE's skills, stamped commands, and rules from another project folder. Does not bind. */
-  importFrom(
-    sourceRoot: string,
-    ide: IDE,
-    opts?: { replace?: boolean }
-  ): Promise<Result<ExportResult>>;
+  listCollections(): Promise<Collection[]>;
+  createCollection(name: string, skillIds: string[]): Promise<Result<Collection>>;
+  removeSkillFromCollection(name: string, skillId: string): Promise<Result<Collection>>;
+  /**
+   * Toggle a command on/off. `true` writes it as a human-only skill in
+   * both live trees (restoring from parked, or self-healing, if
+   * present); `false` parks it under `.skil/parked/commands/<name>`.
+   */
+  setCommandEnabled(name: string, enabled: boolean): Promise<Result<Collection>>;
   browseSkills(view: BrowseView): Promise<Result<Skill[]>>;
-  listInbox(): Promise<string[]>;
   /** Catalog rows from the last scan. Used by Sync for counts and source bars. */
   listSkills(): Promise<SkillRecord[]>;
-  addToInbox(skillId: string): Promise<Result<string[]>>;
-  addSkill(name: string, skillId: string, ide?: IDE): Promise<Result<Collection>>;
-  deleteCollection(name: string, ide?: IDE): Promise<Result<void>>;
+  /**
+   * Market `+`: writes a fresh skill into both live trees and upserts its
+   * catalog row (`source: 'skills.sh'`). Does not require filing onto a
+   * command.
+   */
+  install(skillId: string): Promise<Result<SkillRecord>>;
+  addSkill(name: string, skillId: string): Promise<Result<Collection>>;
+  deleteCollection(name: string): Promise<Result<void>>;
   /** Opens a directory dialog and binds the session. Returns the picked path, or `null` if canceled. */
   pickProjectFolder(): Promise<string | null>;
   /** Opens a directory dialog for install/export dest. Does not bind the session. */
@@ -96,17 +99,14 @@ export interface SkilBridge {
   listRecentFolders(): Promise<string[]>;
   /** Drop a folder from recents. If it is the bound folder, the session disconnects. Returns the remaining list. */
   removeRecentFolder(path: string): Promise<string[]>;
-  /** Pull: scan SKILL.md folders. New ids go to Inbox if missing. Does not install. */
+  /** Pull: scan SKILL.md folders into the catalog. Does not install. */
   scan(): Promise<Result<ScanResult>>;
   /**
    * Watcher (and successful Scan) push. Returns an unsubscribe function.
    * Renderer refreshes lists from this instead of polling.
    */
   onScan(listener: (result: ScanResult) => void): () => void;
-  /**
-   * Deletes a project skill from disk (all IDE copies) and Inbox, or
-   * drops a Discover-only Inbox id. Nested skill folders stay.
-   */
+  /** Deletes a project skill from disk (all IDE copies). Nested skill folders stay. */
   deleteSkill(skillId: string): Promise<Result<void>>;
   /** Claude-first read counts for catalog skills. Failure is an error Result; UI must not block export. */
   usage(): Promise<Result<UsageRow[]>>;
@@ -122,12 +122,24 @@ export interface SkilBridge {
   originChecks(): Promise<Result<OriginCheck[]>>;
   /** Re-install from the market. `replaceEdited` resets a forked copy. */
   updateFromMarket(skillId: string, opts?: { replaceEdited?: boolean }): Promise<Result<SkillRecord>>;
-  /** Rule files on disk (every dock). Disk is SoT. */
+  /**
+   * Toggle a catalog skill on/off. `false` parks the live pair; `true`
+   * restores it (or re-fetches a market skill whose parked copy is gone).
+   * This is the write — there is no separate install/export step.
+   */
+  setSkillEnabled(skillId: string, enabled: boolean): Promise<Result<SkillRecord>>;
+  /** Rule rows on disk: shared `AGENTS.md` sections (togglable) plus glob rule files (read-only). Disk is SoT. */
   listRules(): Promise<RuleRecord[]>;
-  /** Reads a rule file by path id. */
+  /** Reads a rule body by id. */
   readRule(id: string): Promise<Result<string>>;
-  /** Sets alwaysApply on a Cursor `.mdc` rule. */
-  setAlwaysApply(id: string, alwaysApply: boolean): Promise<Result<RuleRecord>>;
-  /** Copy scanned rules into the dest dock's rules dir. */
-  exportRules(targetIDE: IDE, opts?: { replace?: boolean; dest?: string }): Promise<Result<ExportResult>>;
+  /**
+   * Toggle a shared-law rule. `true` upserts its `AGENTS.md` section
+   * (restoring from parked); `false` removes the section and parks the
+   * body under `.skil/parked/rules/<id>`. Refuses a `glob` rule id.
+   */
+  setSharedRuleEnabled(id: string, enabled: boolean): Promise<Result<RuleRecord>>;
+  /** Skill/command/rule paths that are neither live nor parked (and never deprecated). */
+  listLeftovers(): Promise<Result<LeftoverRecord[]>>;
+  /** "Use ours and remove leftovers": copies missing ids into the live pair, then moves old paths to `.skil/deprecated/`. */
+  adoptLeftovers(ids?: string[]): Promise<Result<AdoptResult>>;
 }

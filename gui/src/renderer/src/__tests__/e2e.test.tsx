@@ -11,7 +11,7 @@ import {
 import { isErr, isOk } from '../../../../../src/core/result.js';
 
 describe('GUI workflow (real engine)', () => {
-  it('drives Discover Add → create → file → export through rendered components', async () => {
+  it('drives Discover Add → create → file → toggle on through rendered components', async () => {
     const { engine, fs } = createInMemoryWorkspace();
     installTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
 
@@ -32,35 +32,25 @@ describe('GUI workflow (real engine)', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Discover' }));
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: 'Add obra/react-patterns' }));
-    await waitFor(() => expect(engine.inbox()).toEqual(['obra/react-patterns']));
-    expect(engine.skills()).toEqual([]);
+    await waitFor(() => expect(engine.skills().map((skill) => skill.id)).toEqual(['obra/react-patterns']));
+    expect(engine.list()[0]?.skills).toEqual([]);
 
     await userEvent.click(screen.getByRole('tab', { name: 'Commands' }));
     const detail = await screen.findByRole('region', { name: 'Command frontend details' });
     await userEvent.click(within(detail).getByRole('button', { name: 'Add obra/react-patterns to frontend' }));
 
     await waitFor(() => expect(engine.list()[0]?.skills).toEqual(['obra/react-patterns']));
-    expect(engine.inbox()).toEqual(['obra/react-patterns']);
     expect(within(detail).getByRole('button', { name: 'Remove obra/react-patterns' })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /^Pick format:/ }));
-    await userEvent.click(screen.getByRole('menuitemradio', { name: 'Claude Code' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await userEvent.click(within(screen.getByRole('listitem', { name: 'Command frontend' })).getByRole('button', { name: 'Turn on frontend' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Exported' })).toHaveTextContent(
-      'Exported all commands to Claude Code in test-project'
-    );
-    const written = fs.readFile('.claude/commands/frontend.md');
-    expect(isOk(written)).toBe(true);
-    if (isOk(written)) {
-      expect(written.value).toContain('generated_by: skil');
-    }
-    // Discover-only ids now install to the live pair; the Claude export dock is covered by it.
-    expect(engine.skills()[0]?.deployedTo.map((row) => row.ide)).toEqual(['agents', 'claude']);
+    await waitFor(() => expect(isOk(fs.readFile('.agents/skills/frontend/SKILL.md'))).toBe(true));
+    expect(isOk(fs.readFile('.claude/skills/frontend/SKILL.md'))).toBe(true);
+    expect(within(screen.getByRole('listitem', { name: 'Command frontend' })).getByRole('button', { name: 'Turn off frontend' })).toBeInTheDocument();
     expect(engine.list()).toHaveLength(1);
   });
 
-  it('deletes a scanned inbox skill from disk after confirm', async () => {
+  it('deletes a scanned skill from disk after confirm', async () => {
     const { engine, fs } = createInMemoryWorkspace();
     fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
     fs.writeFile('.cursor/skills/tdd/references/notes.md', '# notes\n');
@@ -69,14 +59,14 @@ describe('GUI workflow (real engine)', () => {
     renderWithProviders(<App />);
     await screen.findByTitle(DEFAULT_TEST_PROJECT_ROOT);
     await userEvent.click(screen.getByRole('tab', { name: 'Skills' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Details for tdd' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Delete tdd' }));
     expect(await screen.findByRole('dialog', { name: 'Delete tdd?' })).toHaveTextContent(
       '.cursor/skills/tdd'
     );
     await userEvent.click(screen.getByRole('button', { name: 'Delete skill' }));
 
-    await waitFor(() => expect(engine.inbox()).toEqual([]));
-    expect(engine.skills()).toEqual([]);
+    await waitFor(() => expect(engine.skills()).toEqual([]));
     expect(isErr(fs.readFile('.cursor/skills/tdd/SKILL.md'))).toBe(true);
     expect(isErr(fs.readFile('.cursor/skills/tdd/references/notes.md'))).toBe(true);
   });

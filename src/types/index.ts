@@ -53,6 +53,13 @@ export interface Command {
    * created without it — always check before use.
    */
   command?: string;
+  /**
+   * Computed from disk, not persisted: `true` when both live
+   * command-skill folders (`.agents/skills/<name>`, `.claude/skills/<name>`)
+   * are present. A partial live copy (mid-toggle, or a disagreement) is
+   * `false`, same as fully off.
+   */
+  enabled: boolean;
 }
 
 /** Counts of how often a catalog skill was read. Phase 5 eval. */
@@ -61,7 +68,7 @@ export interface UsageRow {
   count: number;
 }
 
-/** Market origin vs disk vs live skills.sh, for Inbox Update. */
+/** Market origin vs disk vs live skills.sh, for the catalog's Update action. */
 export type OriginStatus = 'current' | 'update' | 'edited';
 
 export interface OriginCheck {
@@ -96,20 +103,39 @@ export interface SkillRecord {
   originHash?: string;
 }
 
-/** One rule file found on disk. Disk is SoT — we do not persist this. */
+/**
+ * One rule found on disk. Disk is SoT — we do not persist this.
+ * `shared` = one `AGENTS.md` section, togglable via `setSharedRuleEnabled`
+ * (park/restore, same model as a skill). `glob` = a path-scoped rule file
+ * (`.cursor/rules/*.mdc`, `.claude/rules/**\/*.md`, etc.) left on disk
+ * exactly as found — read-only, never folded into `AGENTS.md`.
+ */
 export interface RuleRecord {
-  /** Path relative to the project root (`.cursor/rules/behavior.mdc`). */
+  /** `pair-programming/behavior` for a shared section; a relative path for a glob file. */
   id: string;
-  /** Display name (`pair-programming/behavior`, `CLAUDE`). */
+  /** Display name (`pair-programming/behavior`, `behavior.mdc`). */
   name: string;
-  /** Same as `id`. Kept so callers can show the path without a second lookup. */
+  kind: 'shared' | 'glob';
+  /** `AGENTS.md` for a shared section; the `.mdc`/`.md` path for a glob file. */
   path: string;
-  /** Dock this file belongs to (root `AGENTS.md` is `agents`). */
-  dock: IDE;
-  /** Cursor `alwaysApply`, Copilot `applyTo: **`, or a root always-on file. */
-  alwaysApply: boolean;
-  /** False for whole-file roots (`CLAUDE.md`, `AGENTS.md`, copilot-instructions). */
-  canToggle: boolean;
+  /** Shared only. Present (`.skil/parked/rules/<id>`) but not in `AGENTS.md` → `false`. */
+  enabled?: boolean;
+}
+
+/** A leftover skill, command, or rule path — catalogued, never written to except by `adoptLeftovers`. */
+export interface LeftoverRecord {
+  kind: 'skill' | 'command' | 'rule';
+  id: string;
+  /** Relative to the project root, e.g. `.cursor/skills/tdd`. */
+  path: string;
+}
+
+/** Outcome of `adoptLeftovers()`. */
+export interface AdoptResult {
+  /** Catalog ids copied into the live pair because they were missing there. */
+  adopted: string[];
+  /** Old leftover paths moved under `.skil/deprecated/`. */
+  deprecated: string[];
 }
 
 /** Outcome of `scan()` — pull. */
@@ -117,8 +143,8 @@ export interface ScanResult {
   added: string[];
   gone: string[];
   changed: string[];
-  /** Stamp `skills:` ≠ map (warn only — stamps do not fork the map). */
-  commandPulls: Array<{ ide: IDE; name: string }>;
+  /** Leftover always-on rule files that fight `AGENTS.md` (warn only). */
+  alwaysOnWarnings: string[];
 }
 
 /**
@@ -130,19 +156,14 @@ export interface ScanResult {
  * `commands[].membership` as a union (cursor first, then other keys,
  * unique). Load v4 `commands[].skills` as that array. Load v3
  * `collections` → `commands` first, then the same. Missing `skills`
- * catalog → `[]`. `installedSkills` is leftover (not the catalog).
- * Missing `inbox` → `[]`. v1 `activeCollection` is still ignored.
- * No rewrite on read.
+ * catalog → `[]`. `installedSkills` is leftover (not the catalog). A
+ * leftover `inbox` field on an old file is read and dropped — not carried
+ * into `State`, never written back. v1 `activeCollection` is still
+ * ignored. No rewrite on read.
  */
 export interface State {
   commands: CommandRecord[];
   skills: SkillRecord[];
-  /**
-   * Staging pool of skill ids (scanned locals + Discover adds). Filing onto
-   * a command does not remove the id. Not a command — reserved name `inbox`
-   * cannot be created. Missing on pre-v3 files; treat as `[]`.
-   */
-  inbox: string[];
   /** Schema version, for future migrations. */
   version: string;
   /**

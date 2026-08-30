@@ -14,10 +14,9 @@ export function parseSkillIds(csv: string): string[] {
 export function runCreate(
   engine: ICollectionEngine,
   name: string,
-  skillIds: string[],
-  command?: string
+  skillIds: string[]
 ): CommandOutcome {
-  const result = engine.create(name, skillIds, command);
+  const result = engine.create(name, skillIds);
   if (!isOk(result)) {
     return { message: result.error.message, isError: true };
   }

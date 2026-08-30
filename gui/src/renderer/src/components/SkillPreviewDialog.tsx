@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Copy, GitBranch, Warning } from '@phosphor-icons/react';
+import { Check, Copy, GitBranch, Trash, Warning } from '@phosphor-icons/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useBridge } from '../bridge-context';
@@ -40,6 +40,7 @@ export default function SkillPreviewDialog({
   paths = [],
   originStatus,
   onReset,
+  onDelete,
   lockDismiss = false,
 }: {
   id: string;
@@ -48,6 +49,8 @@ export default function SkillPreviewDialog({
   paths?: string[];
   originStatus?: OriginStatus;
   onReset?: () => void;
+  /** Delete control lives only here, in preview — never on the list row. */
+  onDelete?: () => void;
   lockDismiss?: boolean;
 }) {
   const bridge = useBridge();
@@ -125,6 +128,16 @@ export default function SkillPreviewDialog({
         <button type="button" className={`modal-close ${FOCUS_RING}`} aria-label="Close details" onClick={onClose}>
           <span aria-hidden="true">×</span>
         </button>
+        {onDelete && (
+          <button
+            type="button"
+            aria-label={`Delete ${id}`}
+            className={`delete-card skill-preview-delete ${FOCUS_RING}`}
+            onClick={onDelete}
+          >
+            <Trash size={16} weight="regular" aria-hidden="true" />
+          </button>
+        )}
         <p className="eyebrow">Skill</p>
         <h2 id="skill-preview-title">{title}</h2>
         {error && <StatusNotice kind={error} onRetry={() => setReloadKey((key) => key + 1)} />}

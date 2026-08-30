@@ -3,7 +3,7 @@ import { groupRulesByFolder, ruleFileName, ruleParentFolder } from './rule-folde
 import type { RuleRecord } from '../../../shared/ipc';
 
 function rule(name: string, path = `${name}.mdc`): RuleRecord {
-  return { id: path, name, path, dock: 'cursor', alwaysApply: false, canToggle: true };
+  return { id: path, name, path, kind: 'glob' };
 }
 
 describe('ruleParentFolder', () => {

@@ -1,7 +1,6 @@
 import type { Command } from 'commander';
 import type { ICollectionEngine } from '../../interfaces/engine.js';
 import { isOk } from '../../core/result.js';
-import { toOption } from '../ides.js';
 import { printOutcome, type CommandOutcome } from '../output.js';
 
 export async function runInstall(engine: ICollectionEngine, skillId: string): Promise<CommandOutcome> {
@@ -16,13 +15,7 @@ export function registerInstallCommand(program: Command, engine: ICollectionEngi
   program
     .command('install <skillId>')
     .description('Install a market skill into the live trees (.agents/skills + .claude/skills)')
-    // Leftover flag from the dock-picker era: accepted but ignored so old
-    // scripts keep working until it is removed (see tasks/plan.md Task 10).
-    .addOption(toOption('--to <dock>', 'Ignored: installs always write the live trees'))
-    .action(async (skillId: string, _options: unknown, command: Command) => {
-      if (command.getOptionValueSource('to') === 'cli') {
-        console.log("Note: '--to' is ignored — installs write .agents/skills + .claude/skills.");
-      }
+    .action(async (skillId: string) => {
       console.log(`Installing '${skillId}'...`);
       printOutcome(await runInstall(engine, skillId));
     });

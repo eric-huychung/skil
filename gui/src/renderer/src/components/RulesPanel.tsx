@@ -1,128 +1,48 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CaretDown, CircleNotch, DownloadSimple, ToggleLeft, ToggleRight } from '@phosphor-icons/react';
+import { ToggleLeft, ToggleRight } from '@phosphor-icons/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
-import { conflictLabels, isRuleExportConflict } from '../lib/command-conflicts';
 import { groupRulesByFolder, ruleFileName } from '../lib/rule-folders';
-import type { IDE, RuleRecord } from '../../../shared/ipc';
-import { StatusNotice, StatusSkeleton, statusLine } from '../../../../../shared/status';
-import { StatusDialog } from './StatusDialog';
-import { FORMAT_LABELS, folderName } from './format-context';
-
-const DEST_DOCKS: IDE[] = ['cursor', 'claude', 'codex', 'copilot', 'agents'];
-
-type PushOutcome =
-  | { status: 'loading'; ide: IDE; dest?: string }
-  | { status: 'success'; ide: IDE; dest?: string; path?: string }
-  | { status: 'error'; ide: IDE; dest?: string; message: string; summary?: string };
+import type { RuleRecord } from '../../../shared/ipc';
+import { StatusNotice, StatusSkeleton } from '../../../../../shared/status';
 
 function stripFrontmatter(markdown: string): string {
   return markdown.replace(/^---\n[\s\S]*?\n---\n?/, '').trim();
 }
 
-function dockPhrase(dock: IDE, dest?: string | null): string {
-  return dest ? `${FORMAT_LABELS[dock]} in ${folderName(dest)}` : FORMAT_LABELS[dock];
-}
-
-function FormatPicker({ destDock, onDestDock }: { destDock: IDE; onDestDock: (dock: IDE) => void }) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const menuId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    function handlePointerDown(event: PointerEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function handleKey(event: globalThis.KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [open]);
-
-  return (
-    <div className="format-picker" ref={rootRef}>
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        aria-label={`Pick format: ${FORMAT_LABELS[destDock]}`}
-        className={`format-picker-trigger ${FOCUS_RING}`}
-      >
-        <span>{FORMAT_LABELS[destDock]}</span>
-        <CaretDown size={12} weight="regular" aria-hidden="true" />
-      </button>
-      {open && (
-        <div id={menuId} role="menu" aria-label="Pick format" className="skill-install-menu import-copy-menu">
-          {DEST_DOCKS.map((dock) => (
-            <button
-              key={dock}
-              type="button"
-              role="menuitemradio"
-              aria-checked={dock === destDock}
-              className={FOCUS_RING}
-              onClick={() => {
-                onDestDock(dock);
-                setOpen(false);
-              }}
-            >
-              {FORMAT_LABELS[dock]}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AlwaysOnToggle({
+function SharedRuleToggle({
   rule,
   onToggle,
 }: {
   rule: RuleRecord;
   onToggle: (rule: RuleRecord) => void;
 }) {
-  const canToggle = rule.canToggle;
-  const icon = rule.alwaysApply ? (
+  if (rule.kind === 'glob') {
+    return <span className="always-on-toggle read-only">Path-scoped</span>;
+  }
+
+  const enabled = rule.enabled !== false;
+  const icon = enabled ? (
     <ToggleRight size={18} weight="fill" aria-hidden="true" />
   ) : (
     <ToggleLeft size={18} weight="regular" aria-hidden="true" />
   );
 
-  if (!canToggle) {
-    if (!rule.alwaysApply) return null;
-    return (
-      <span className="always-on-toggle on">
-        {icon}
-        Always on
-      </span>
-    );
-  }
-
   return (
     <button
       type="button"
-      className={`always-on-toggle ${rule.alwaysApply ? 'on' : 'off'} ${FOCUS_RING}`}
-      aria-pressed={rule.alwaysApply}
+      className={`always-on-toggle ${enabled ? 'on' : 'off'} ${FOCUS_RING}`}
+      aria-pressed={enabled}
       onClick={(event) => {
         event.stopPropagation();
         onToggle(rule);
       }}
     >
       {icon}
-      Always on
+      {enabled ? 'On' : 'Off'}
     </button>
   );
 }
@@ -181,7 +101,7 @@ function RulePreviewDialog({ rule, onClose }: { rule: RuleRecord; onClose: () =>
         <p className="eyebrow">Rule</p>
         <h2 id="rule-preview-title">{rule.name}</h2>
         <p className="muted-copy">
-          {rule.path} · {FORMAT_LABELS[rule.dock]}
+          {rule.path} · {rule.kind === 'shared' ? 'Shared law' : 'Path-scoped'}
         </p>
         {error && <StatusNotice kind="rule" onRetry={() => setReloadKey((key) => key + 1)} />}
         {body === null && !error && <StatusSkeleton variant="preview" label="Loading rule" />}
@@ -196,17 +116,12 @@ function RulePreviewDialog({ rule, onClose }: { rule: RuleRecord; onClose: () =>
   );
 }
 
-export default function RulesPanel({ onProjectBound }: { onProjectBound?: (root: string) => void }) {
+export default function RulesPanel({ onProjectBound: _onProjectBound }: { onProjectBound?: (root: string) => void }) {
   const bridge = useBridge();
   const [rules, setRules] = useState<RuleRecord[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [destDock, setDestDock] = useState<IDE>('cursor');
-  const [exportOutcome, setExportOutcome] = useState<PushOutcome | null>(null);
-  const [conflict, setConflict] = useState<string[] | null>(null);
-  const [exportDest, setExportDest] = useState<string | undefined>();
   const [toggleError, setToggleError] = useState(false);
   const refreshId = useRef(0);
-  const isBusy = exportOutcome?.status === 'loading';
 
   const refresh = useCallback(async () => {
     const id = ++refreshId.current;
@@ -226,102 +141,9 @@ export default function RulesPanel({ onProjectBound }: { onProjectBound?: (root:
     });
   }, [bridge, refresh]);
 
-  async function bindPickedFolder(root: string | null, dest: string | undefined) {
-    if (root || !dest) return;
-    const bound = await bridge.bindProjectFolder(dest);
-    if (!bound) return;
-    onProjectBound?.(bound);
-    await bridge.scan();
-  }
-
-  async function pickDest(
-    replace: boolean,
-    cached: string | undefined,
-    setCached: (path: string) => void
-  ): Promise<{ root: string | null; dest: string | undefined; target: string | undefined } | null> {
-    const root = await bridge.getProjectRoot();
-    let dest: string | undefined;
-    if (!root) {
-      dest = replace ? cached : undefined;
-      if (dest === undefined) {
-        const picked = await bridge.pickDestinationFolder();
-        if (picked === null) return null;
-        dest = picked;
-        setCached(picked);
-      }
-    }
-    return { root, dest, target: dest ?? root ?? undefined };
-  }
-
-  async function handleExport(replace?: boolean) {
-    setConflict(null);
-    const picked = await pickDest(replace === true, exportDest, setExportDest);
-    if (!picked) return;
-    const { root, dest, target } = picked;
-    setExportOutcome({ status: 'loading', ide: destDock, dest: target });
-    const result = await bridge.exportRules(destDock, {
-      ...(replace ? { replace: true } : {}),
-      ...(dest ? { dest } : {}),
-    });
-
-    if (!result.ok) {
-      if (isRuleExportConflict(result)) {
-        setExportOutcome(null);
-        setConflict(conflictLabels(result));
-        return;
-      }
-      setExportDest(undefined);
-      setExportOutcome({ status: 'error', ide: destDock, dest: target, message: statusLine('export') });
-      await bindPickedFolder(root, dest);
-      return;
-    }
-    setExportDest(undefined);
-    if (result.value.failures.length > 0 && result.value.succeeded.length === 0) {
-      setExportOutcome({
-        status: 'error',
-        ide: destDock,
-        dest: target,
-        message: result.value.failures.join('\n'),
-        summary: `Could not export rules to ${dockPhrase(destDock, target)}`,
-      });
-      await bindPickedFolder(root, dest);
-      return;
-    }
-    if (result.value.failures.length > 0) {
-      setExportOutcome({
-        status: 'error',
-        ide: destDock,
-        dest: target,
-        summary: `Exported some rules to ${dockPhrase(destDock, target)}`,
-        message: result.value.failures.join('\n'),
-      });
-      await bindPickedFolder(root, dest);
-      return;
-    }
-    if (result.value.succeeded.length === 0) {
-      setExportOutcome({
-        status: 'error',
-        ide: destDock,
-        dest: target,
-        message: 'No rule files were written.',
-        summary: `Could not export rules to ${dockPhrase(destDock, target)}`,
-      });
-      await bindPickedFolder(root, dest);
-      return;
-    }
-    setExportOutcome({
-      status: 'success',
-      ide: destDock,
-      dest: target,
-      path: result.value.succeeded.join('\n'),
-    });
-    await bindPickedFolder(root, dest);
-    await refresh();
-  }
-
   async function handleToggle(rule: RuleRecord) {
     setToggleError(false);
-    const result = await bridge.setAlwaysApply(rule.id, !rule.alwaysApply);
+    const result = await bridge.setSharedRuleEnabled(rule.id, !(rule.enabled !== false));
     if (!result.ok) {
       setToggleError(true);
       return;
@@ -330,7 +152,6 @@ export default function RulesPanel({ onProjectBound }: { onProjectBound?: (root:
   }
 
   const selected = rules?.find((rule) => rule.id === selectedId) ?? null;
-  const hasRules = (rules?.length ?? 0) > 0;
   const groups = useMemo(() => groupRulesByFolder(rules ?? []), [rules]);
 
   return (
@@ -341,25 +162,8 @@ export default function RulesPanel({ onProjectBound }: { onProjectBound?: (root:
             <p className="eyebrow">Workspace</p>
             <h1>Rules</h1>
             <p className="workspace-lede">
-              Every rule file in this project, including other formats. Export copies them into a dock.
+              Shared law lives in AGENTS.md — toggle a section on/off. Path-scoped rule files stay on disk as-is.
             </p>
-          </div>
-          <div className="library-heading-actions">
-            <FormatPicker destDock={destDock} onDestDock={setDestDock} />
-            <button
-              type="button"
-              onClick={() => void handleExport()}
-              disabled={!hasRules || isBusy}
-              aria-busy={isBusy || undefined}
-              className={`import-button ${FOCUS_RING}`}
-            >
-              {isBusy ? (
-                <CircleNotch size={16} weight="regular" className="spin" aria-hidden="true" />
-              ) : (
-                <DownloadSimple size={16} weight="regular" aria-hidden="true" />
-              )}
-              Export
-            </button>
           </div>
         </div>
 
@@ -385,7 +189,7 @@ export default function RulesPanel({ onProjectBound }: { onProjectBound?: (root:
                         aria-label={`Details for ${rule.name}`}
                       />
                       <span className="rule-card-name">{ruleFileName(rule.name)}</span>
-                      <AlwaysOnToggle rule={rule} onToggle={(next) => void handleToggle(next)} />
+                      <SharedRuleToggle rule={rule} onToggle={(next) => void handleToggle(next)} />
                     </li>
                   ))}
                 </ul>
@@ -396,74 +200,6 @@ export default function RulesPanel({ onProjectBound }: { onProjectBound?: (root:
       </section>
 
       {selected && <RulePreviewDialog key={selected.id} rule={selected} onClose={() => setSelectedId(null)} />}
-
-      {exportOutcome && (
-        <StatusDialog
-          eyebrow="Export"
-          title={
-            exportOutcome.status === 'loading'
-              ? 'Exporting…'
-              : exportOutcome.status === 'success'
-                ? 'Exported'
-                : 'Export failed'
-          }
-          kind={exportOutcome.status}
-          errorDetail={exportOutcome.status === 'error' ? exportOutcome.message : undefined}
-          closeLabel="Close export status"
-          onClose={() => setExportOutcome(null)}
-        >
-          {exportOutcome.status === 'loading' && (
-            <p role="status" className="muted-copy">
-              Exporting rules to {dockPhrase(exportOutcome.ide, exportOutcome.dest)}
-            </p>
-          )}
-          {exportOutcome.status === 'success' && (
-            <>
-              <p className="status-copy-success">{`Exported rules to ${dockPhrase(exportOutcome.ide, exportOutcome.dest)}`}</p>
-              {exportOutcome.path && <p className="status-path">{exportOutcome.path}</p>}
-            </>
-          )}
-          {exportOutcome.status === 'error' && (
-            <p role="alert" className="muted-copy text-destructive">
-              {exportOutcome.summary ?? `Could not export rules to ${dockPhrase(exportOutcome.ide, exportOutcome.dest)}`}
-            </p>
-          )}
-        </StatusDialog>
-      )}
-
-      {conflict && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setConflict(null)}>
-          <div
-            className="help-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="rule-conflict-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <p className="eyebrow">Sync</p>
-            <h2 id="rule-conflict-title">Replace existing rules?</h2>
-            <p className="muted-copy">
-              These rule files already exist in the dest dock. Replace overwrites them with the copies from this
-              project.
-            </p>
-            {conflict.length > 0 && (
-              <ul className="conflict-list" aria-label="Conflicting rules">
-                {conflict.map((name) => (
-                  <li key={name}>{name}</li>
-                ))}
-              </ul>
-            )}
-            <div className="modal-actions">
-              <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={() => setConflict(null)}>
-                Cancel
-              </button>
-              <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={() => void handleExport(true)}>
-                Replace
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

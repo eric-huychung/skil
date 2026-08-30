@@ -52,8 +52,8 @@ describe('DiskWatch', () => {
   });
 
   it('groups root rule files by parent so CLAUDE.md is watched at the project root', () => {
-    expect(watchFilesByParent(ROOT_RULE_FILES.map((file) => file.path))).toEqual([
-      { dir: '', names: ['CLAUDE.md', 'AGENTS.md'] },
+    expect(watchFilesByParent(ROOT_RULE_FILES)).toEqual([
+      { dir: '', names: ['AGENTS.md', 'CLAUDE.md'] },
       { dir: '.github', names: ['copilot-instructions.md'] },
     ]);
   });

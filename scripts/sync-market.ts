@@ -21,8 +21,9 @@ import { getVercelOidcToken } from '@vercel/oidc';
 import { createClient } from '@supabase/supabase-js';
 import { isOk } from '../src/core/result.js';
 import { SEED_FIELDS, SEED_ROLES } from '../src/backend/market-seed.js';
-import { createMarketSync } from '../src/backend/create-market-sync.js';
 import { MarketSync } from '../src/backend/market-sync.js';
+import { RealMarketSkillsClient } from '../src/backend/market-skills-client.js';
+import { LlmSkillClassifier } from '../src/backend/llm-skill-classifier.js';
 import { SupabaseMarketStore } from '../src/backend/supabase-market-store.js';
 
 /** Stay under skills.sh's 600 req/min with headroom for listing + shelf-refresh requests sharing the same budget. */
@@ -115,10 +116,10 @@ async function main(): Promise<void> {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
   const store = new SupabaseMarketStore(supabase);
-  const sync = createMarketSync({
+  const sync = new MarketSync({
     store,
-    getOidcToken: () => getVercelOidcToken(),
-    getGatewayToken: async () => gatewayKey,
+    client: new RealMarketSkillsClient({ fetchImpl: fetch, getOidcToken: () => getVercelOidcToken() }),
+    classifier: new LlmSkillClassifier({ fetchImpl: fetch, getAccessToken: async () => gatewayKey }),
   });
 
   console.log(`Seeding ${SEED_ROLES.length} roles / ${SEED_FIELDS.length} fields...`);

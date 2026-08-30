@@ -2,19 +2,16 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS, type SkilBridge, type ScanResult } from '../shared/ipc.js';
 
 const bridge: SkilBridge = {
-  listCollections: (ide) => ipcRenderer.invoke(IPC_CHANNELS.listCollections, ide),
-  createCollection: (name, skillIds, ide) =>
-    ipcRenderer.invoke(IPC_CHANNELS.createCollection, name, skillIds, ide),
-  removeSkillFromCollection: (name, skillId, ide) =>
-    ipcRenderer.invoke(IPC_CHANNELS.removeSkillFromCollection, name, skillId, ide),
-  exportAll: (targetIDE, opts) => ipcRenderer.invoke(IPC_CHANNELS.exportAll, targetIDE, opts),
-  importFrom: (sourceRoot, ide, opts) => ipcRenderer.invoke(IPC_CHANNELS.importFrom, sourceRoot, ide, opts),
+  listCollections: () => ipcRenderer.invoke(IPC_CHANNELS.listCollections),
+  createCollection: (name, skillIds) => ipcRenderer.invoke(IPC_CHANNELS.createCollection, name, skillIds),
+  removeSkillFromCollection: (name, skillId) =>
+    ipcRenderer.invoke(IPC_CHANNELS.removeSkillFromCollection, name, skillId),
+  setCommandEnabled: (name, enabled) => ipcRenderer.invoke(IPC_CHANNELS.setCommandEnabled, name, enabled),
   browseSkills: (view) => ipcRenderer.invoke(IPC_CHANNELS.browseSkills, view),
-  listInbox: () => ipcRenderer.invoke(IPC_CHANNELS.listInbox),
   listSkills: () => ipcRenderer.invoke(IPC_CHANNELS.listSkills),
-  addToInbox: (skillId) => ipcRenderer.invoke(IPC_CHANNELS.addToInbox, skillId),
-  addSkill: (name, skillId, ide) => ipcRenderer.invoke(IPC_CHANNELS.addSkill, name, skillId, ide),
-  deleteCollection: (name, ide) => ipcRenderer.invoke(IPC_CHANNELS.deleteCollection, name, ide),
+  install: (skillId) => ipcRenderer.invoke(IPC_CHANNELS.install, skillId),
+  addSkill: (name, skillId) => ipcRenderer.invoke(IPC_CHANNELS.addSkill, name, skillId),
+  deleteCollection: (name) => ipcRenderer.invoke(IPC_CHANNELS.deleteCollection, name),
   pickProjectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.pickProjectFolder),
   pickDestinationFolder: () => ipcRenderer.invoke(IPC_CHANNELS.pickDestinationFolder),
   bindProjectFolder: (path) => ipcRenderer.invoke(IPC_CHANNELS.bindProjectFolder, path),
@@ -37,10 +34,12 @@ const bridge: SkilBridge = {
   readSkillMd: (skillId) => ipcRenderer.invoke(IPC_CHANNELS.readSkillMd, skillId),
   originChecks: () => ipcRenderer.invoke(IPC_CHANNELS.originChecks),
   updateFromMarket: (skillId, opts) => ipcRenderer.invoke(IPC_CHANNELS.updateFromMarket, skillId, opts),
+  setSkillEnabled: (skillId, enabled) => ipcRenderer.invoke(IPC_CHANNELS.setSkillEnabled, skillId, enabled),
   listRules: () => ipcRenderer.invoke(IPC_CHANNELS.listRules),
   readRule: (id) => ipcRenderer.invoke(IPC_CHANNELS.readRule, id),
-  setAlwaysApply: (id, alwaysApply) => ipcRenderer.invoke(IPC_CHANNELS.setAlwaysApply, id, alwaysApply),
-  exportRules: (targetIDE, opts) => ipcRenderer.invoke(IPC_CHANNELS.exportRules, targetIDE, opts),
+  setSharedRuleEnabled: (id, enabled) => ipcRenderer.invoke(IPC_CHANNELS.setSharedRuleEnabled, id, enabled),
+  listLeftovers: () => ipcRenderer.invoke(IPC_CHANNELS.listLeftovers),
+  adoptLeftovers: (ids) => ipcRenderer.invoke(IPC_CHANNELS.adoptLeftovers, ids),
 };
 
 contextBridge.exposeInMainWorld('skil', bridge);

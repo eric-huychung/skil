@@ -1,31 +1,55 @@
-import { cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
-import { CaretDown, CaretLeft, CaretRight, Check, CircleNotch, DownloadSimple, Plus, Trash, X } from '@phosphor-icons/react';
+import { cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react';
+import { CaretDown, CaretLeft, CaretRight, Check, Plus, ToggleLeft, ToggleRight, Trash, X } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
-import { conflictLabels, isUnstampedConflict } from '../lib/command-conflicts';
+import { conflictLabels, isCommandNameCollision } from '../lib/command-conflicts';
 import { statusLine } from '../../../../../shared/status';
 import { groupCommandsByStage } from '../lib/sdlc';
-import type { Collection, IDE } from '../../../shared/ipc';
-import { StatusDialog } from './StatusDialog';
-import { FORMAT_LABELS, folderName } from './format-context';
+import type { Collection } from '../../../shared/ipc';
 
 const INBOX_PAGE_SIZE = 10;
-const DEST_DOCKS: IDE[] = ['cursor', 'claude', 'codex', 'copilot', 'agents'];
-
-type PushOutcome =
-  | { status: 'loading'; ide: IDE; dest?: string }
-  | { status: 'success'; ide: IDE; dest?: string; path?: string }
-  | { status: 'error'; ide: IDE; dest?: string; message: string; summary?: string };
-
-type ConflictPrompt = { names: string[] };
 
 function matchesQuery(skillId: string, query: string): boolean {
   const needle = query.trim().toLowerCase();
   return needle.length === 0 || skillId.toLowerCase().includes(needle);
 }
 
-function dockPhrase(dock: IDE, dest?: string | null): string {
-  return dest ? `${FORMAT_LABELS[dock]} in ${folderName(dest)}` : FORMAT_LABELS[dock];
+/**
+ * On/off is a path, not a flag — `collection.enabled` is computed from
+ * disk each time `list()` runs. Toggling is the write; there is nothing
+ * else to confirm first (a name collision surfaces as an inline error).
+ */
+function CommandToggle({
+  collection,
+  busy,
+  onToggle,
+}: {
+  collection: Collection;
+  busy: boolean;
+  onToggle: () => void;
+}) {
+  const on = collection.enabled;
+  return (
+    <button
+      type="button"
+      className={`always-on-toggle ${on ? 'on' : 'off'} ${FOCUS_RING}`}
+      aria-pressed={on}
+      aria-busy={busy || undefined}
+      disabled={busy}
+      aria-label={on ? `Turn off ${collection.name}` : `Turn on ${collection.name}`}
+      onClick={(event: MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+    >
+      {on ? (
+        <ToggleRight size={18} weight="fill" aria-hidden="true" />
+      ) : (
+        <ToggleLeft size={18} weight="regular" aria-hidden="true" />
+      )}
+      {on ? 'On' : 'Off'}
+    </button>
+  );
 }
 
 function CollectionDetail({
@@ -46,6 +70,7 @@ function CollectionDetail({
   const [inboxQuery, setInboxQuery] = useState('');
   const [inboxPage, setInboxPage] = useState(0);
   const [usageCounts, setUsageCounts] = useState<Record<string, number>>({});
+  const [toggling, setToggling] = useState(false);
   const inboxPickerId = `inbox-picker-${collection.name}`;
 
   useEffect(() => {
@@ -91,6 +116,22 @@ function CollectionDetail({
     onChange();
   }
 
+  async function handleToggle() {
+    setError(null);
+    setToggling(true);
+    const result = await bridge.setCommandEnabled(collection.name, !collection.enabled);
+    setToggling(false);
+    if (!result.ok) {
+      setError(
+        isCommandNameCollision(result)
+          ? `Can't turn on /${collection.name}: ${conflictLabels(result).join(', ')} already exists and isn't ours to manage.`
+          : statusLine('enable')
+      );
+      return;
+    }
+    onChange();
+  }
+
   async function handleDelete() {
     setError(null);
     const result = await bridge.deleteCollection(collection.name);
@@ -114,6 +155,7 @@ function CollectionDetail({
           </p>
         </div>
         <div className="detail-actions">
+          <CommandToggle collection={collection} busy={toggling} onToggle={() => void handleToggle()} />
           <button
             type="button"
             onClick={() => setConfirmDelete(true)}
@@ -274,111 +316,17 @@ function selectCollection(event: KeyboardEvent<HTMLLIElement>, name: string, onS
   }
 }
 
-function FormatPicker({ destDock, onDestDock }: { destDock: IDE; onDestDock: (dock: IDE) => void }) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const menuId = 'export-format-menu';
-
-  useEffect(() => {
-    if (!open) return;
-
-    function handlePointerDown(event: PointerEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [open]);
-
-  return (
-    <div className="format-picker" ref={rootRef}>
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        aria-label={`Pick format: ${FORMAT_LABELS[destDock]}`}
-        className={`format-picker-trigger ${FOCUS_RING}`}
-      >
-        <span>{FORMAT_LABELS[destDock]}</span>
-        <CaretDown size={12} weight="regular" aria-hidden="true" />
-      </button>
-      {open && (
-        <div id={menuId} role="menu" aria-label="Pick format" className="skill-install-menu import-copy-menu">
-          {DEST_DOCKS.map((dock) => (
-            <button
-              key={dock}
-              type="button"
-              role="menuitemradio"
-              aria-checked={dock === destDock}
-              className={FOCUS_RING}
-              onClick={() => {
-                onDestDock(dock);
-                setOpen(false);
-              }}
-            >
-              {FORMAT_LABELS[dock]}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CollectionsPanel({
-  children,
-  destDock,
-  onDestDock,
-  onExport,
-  isBusy,
-  canExport,
-}: {
-  children: ReactNode;
-  destDock: IDE;
-  onDestDock: (dock: IDE) => void;
-  onExport: () => void;
-  isBusy: boolean;
-  canExport: boolean;
-}) {
+function CollectionsPanel({ children }: { children: ReactNode }) {
   return (
     <section className="collections-panel panel-section">
       <div className="section-heading">
         <div>
           <p className="eyebrow">Workspace</p>
           <h1>Commands</h1>
-          <p className="workspace-lede">Named SDLC knobs. File inbox skills onto them, then export to a dock.</p>
-        </div>
-        <div className="library-heading-actions">
-          <FormatPicker destDock={destDock} onDestDock={onDestDock} />
-          <button
-            type="button"
-            onClick={onExport}
-            disabled={!canExport || isBusy}
-            aria-busy={isBusy || undefined}
-            className={`import-button ${FOCUS_RING}`}
-          >
-            {isBusy ? (
-              <CircleNotch size={16} weight="regular" className="spin" aria-hidden="true" />
-            ) : (
-              <DownloadSimple size={16} weight="regular" aria-hidden="true" />
-            )}
-            Export
-          </button>
+          <p className="workspace-lede">
+            Named SDLC knobs. File Skills onto them, then toggle a command on to write it as a human-only skill in
+            both live trees.
+          </p>
         </div>
       </div>
       {children}
@@ -386,76 +334,25 @@ function CollectionsPanel({
   );
 }
 
-function ConflictDialog({
-  title,
-  body,
-  names,
-  confirmLabel,
-  onCancel,
-  onConfirm,
-}: {
-  title: string;
-  body: string;
-  names: string[];
-  confirmLabel: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
-      <div
-        className="help-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="conflict-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <p className="eyebrow">Sync</p>
-        <h2 id="conflict-title">{title}</h2>
-        <p className="muted-copy">{body}</p>
-        {names.length > 0 && (
-          <ul className="conflict-list" aria-label="Conflicting commands">
-            {names.map((name) => (
-              <li key={name}>/{name}</li>
-            ))}
-          </ul>
-        )}
-        <div className="modal-actions">
-          <button type="button" className={`outline-button ${FOCUS_RING}`} onClick={onCancel}>
-            Cancel
-          </button>
-          <button type="button" className={`primary-button ${FOCUS_RING}`} onClick={onConfirm}>
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function CollectionList({
   children,
-  onProjectBound,
 }: {
   children?: ReactNode;
+  /** No-op: commands no longer bind a project folder to write. Kept so callers don't need to change. */
   onProjectBound?: (root: string) => void;
 }) {
   const bridge = useBridge();
   const [collections, setCollections] = useState<Collection[] | null>(null);
   const [inbox, setInbox] = useState<string[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
-  const [destDock, setDestDock] = useState<IDE>('cursor');
-  const [exportOutcome, setExportOutcome] = useState<PushOutcome | null>(null);
-  const [conflict, setConflict] = useState<ConflictPrompt | null>(null);
-  const [exportDest, setExportDest] = useState<string | undefined>();
+  const [togglingName, setTogglingName] = useState<string | null>(null);
   const refreshId = useRef(0);
-  const isBusy = exportOutcome?.status === 'loading';
 
   const refresh = useCallback(async () => {
     const id = ++refreshId.current;
-    const [nextInbox, next] = await Promise.all([bridge.listInbox(), bridge.listCollections()]);
+    const [nextSkills, next] = await Promise.all([bridge.listSkills(), bridge.listCollections()]);
     if (id !== refreshId.current) return;
-    setInbox(nextInbox);
+    setInbox(nextSkills.map((skill) => skill.id));
     setCollections(next);
     setSelectedName((current) => {
       if (current && next.some((collection) => collection.name === current)) return current;
@@ -473,74 +370,11 @@ export default function CollectionList({
     });
   }, [bridge, refresh]);
 
-  async function bindPickedFolder(root: string | null, dest: string | undefined) {
-    if (root || !dest) return;
-    const bound = await bridge.bindProjectFolder(dest);
-    if (!bound) return;
-    onProjectBound?.(bound);
-    await bridge.scan();
-  }
-
-  async function pickDest(
-    replace: boolean,
-    cached: string | undefined,
-    setCached: (path: string) => void
-  ): Promise<{ root: string | null; dest: string | undefined; target: string | undefined } | null> {
-    const root = await bridge.getProjectRoot();
-    let dest: string | undefined;
-    if (!root) {
-      dest = replace ? cached : undefined;
-      if (dest === undefined) {
-        const picked = await bridge.pickDestinationFolder();
-        if (picked === null) return null;
-        dest = picked;
-        setCached(picked);
-      }
-    }
-    return { root, dest, target: dest ?? root ?? undefined };
-  }
-
-  async function handleExport(replace?: boolean) {
-    setConflict(null);
-    const picked = await pickDest(replace === true, exportDest, setExportDest);
-    if (!picked) return;
-    const { root, dest, target } = picked;
-    setExportOutcome({ status: 'loading', ide: destDock, dest: target });
-    const result = await bridge.exportAll(destDock, {
-      ...(replace ? { replace: true } : {}),
-      ...(dest ? { dest } : {}),
-    });
-
-    if (!result.ok) {
-      if (isUnstampedConflict(result)) {
-        setExportOutcome(null);
-        setConflict({ names: conflictLabels(result) });
-        return;
-      }
-      setExportDest(undefined);
-      setExportOutcome({ status: 'error', ide: destDock, dest: target, message: statusLine('export') });
-      await bindPickedFolder(root, dest);
-      return;
-    }
-    setExportDest(undefined);
-    if (result.value.failures.length > 0) {
-      setExportOutcome({
-        status: 'error',
-        ide: destDock,
-        dest: target,
-        summary: `Exported the command files, but some skills did not deploy to ${dockPhrase(destDock, target)}`,
-        message: result.value.failures.join('\n'),
-      });
-      await bindPickedFolder(root, dest);
-      return;
-    }
-    setExportOutcome({
-      status: 'success',
-      ide: destDock,
-      dest: target,
-      path: result.value.succeeded[0],
-    });
-    await bindPickedFolder(root, dest);
+  async function handleListToggle(collection: Collection) {
+    setTogglingName(collection.name);
+    await bridge.setCommandEnabled(collection.name, !collection.enabled);
+    setTogglingName(null);
+    await refresh();
   }
 
   const createSlot = isValidElement(children)
@@ -552,17 +386,10 @@ export default function CollectionList({
     : children;
 
   const selected = collections ? (collections.find((collection) => collection.name === selectedName) ?? null) : null;
-  const hasCommands = (collections?.length ?? 0) > 0;
 
   return (
     <>
-      <CollectionsPanel
-        destDock={destDock}
-        onDestDock={setDestDock}
-        onExport={() => void handleExport()}
-        isBusy={isBusy}
-        canExport={hasCommands}
-      >
+      <CollectionsPanel>
         {collections === null ? null : collections.length === 0 ? (
           <p className="muted-copy">No commands yet</p>
         ) : (
@@ -589,6 +416,11 @@ export default function CollectionList({
                           {collection.skills.length} {collection.skills.length === 1 ? 'skill' : 'skills'}
                         </span>
                       </div>
+                      <CommandToggle
+                        collection={collection}
+                        busy={togglingName === collection.name}
+                        onToggle={() => void handleListToggle(collection)}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -605,50 +437,6 @@ export default function CollectionList({
           inbox={inbox}
           onChange={refresh}
           onDeleted={refresh}
-        />
-      )}
-      {exportOutcome && (
-        <StatusDialog
-          eyebrow="Export"
-          title={
-            exportOutcome.status === 'loading'
-              ? 'Exporting…'
-              : exportOutcome.status === 'success'
-                ? 'Exported'
-                : 'Export failed'
-          }
-          kind={exportOutcome.status}
-          errorDetail={exportOutcome.status === 'error' ? exportOutcome.message : undefined}
-          closeLabel="Close export status"
-          onClose={() => setExportOutcome(null)}
-        >
-          {exportOutcome.status === 'loading' && (
-            <p role="status" className="muted-copy">
-              Exporting all commands to {dockPhrase(exportOutcome.ide, exportOutcome.dest)}
-            </p>
-          )}
-          {exportOutcome.status === 'success' && (
-            <>
-              <p className="status-copy-success">{`Exported all commands to ${dockPhrase(exportOutcome.ide, exportOutcome.dest)}`}</p>
-              {exportOutcome.path && <p className="status-path">{exportOutcome.path}</p>}
-            </>
-          )}
-          {exportOutcome.status === 'error' && (
-            <p role="alert" className="muted-copy text-destructive">
-              {exportOutcome.summary ??
-                `Could not export commands to ${dockPhrase(exportOutcome.ide, exportOutcome.dest)}`}
-            </p>
-          )}
-        </StatusDialog>
-      )}
-      {conflict && (
-        <ConflictDialog
-          title="Replace existing commands?"
-          body="These command files already exist and were not generated by skil. Replace them with our command templates?"
-          names={conflict.names}
-          confirmLabel="Replace"
-          onCancel={() => setConflict(null)}
-          onConfirm={() => void handleExport(true)}
         />
       )}
     </>

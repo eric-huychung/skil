@@ -7,11 +7,9 @@ import { registerSearchCommand } from './commands/search.js';
 import { registerInstallCommand } from './commands/install.js';
 import { registerAddCommand } from './commands/add.js';
 import { registerRemoveCommand } from './commands/remove.js';
-import { registerExportCommand } from './commands/export.js';
-import { registerInboxCommand } from './commands/inbox.js';
+import { registerEnableCommand, registerDisableCommand } from './commands/enable.js';
 import { registerDeleteCommand } from './commands/delete.js';
 import { registerScanCommand } from './commands/scan.js';
-import { registerCopyCommand } from './commands/copy.js';
 import { registerUsageCommand } from './commands/usage.js';
 import { registerRulesCommand } from './commands/rules.js';
 import { engineAsDiscover, type Discover } from '../backend/discover.js';
@@ -26,7 +24,7 @@ export function createProgram(engine: ICollectionEngine, discover: Discover = en
 
   program
     .name('skil')
-    .description('skil: map + inbox + skill deploy. Group skills onto commands, then install or export.')
+    .description('skil: scan, catalog, and toggle skills/commands on and off in .agents + .claude.')
     .version(SKIL_VERSION);
 
   registerCreateCommand(program, engine);
@@ -35,11 +33,10 @@ export function createProgram(engine: ICollectionEngine, discover: Discover = en
   registerInstallCommand(program, engine);
   registerAddCommand(program, engine);
   registerRemoveCommand(program, engine);
-  registerExportCommand(program, engine);
-  registerInboxCommand(program, engine);
+  registerEnableCommand(program, engine);
+  registerDisableCommand(program, engine);
   registerDeleteCommand(program, engine);
   registerScanCommand(program, engine);
-  registerCopyCommand(program, engine);
   registerUsageCommand(program, engine);
   registerRulesCommand(program, engine);
 

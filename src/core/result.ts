@@ -21,7 +21,7 @@
  *   console.error(result.error.message);
  * }
  */
-export type EngineErrorCode = 'UNSTAMPED_COMMAND' | 'IMPORT_CONFLICT' | 'RULE_EXPORT_CONFLICT';
+export type EngineErrorCode = 'COMMAND_NAME_COLLISION';
 
 export type Result<T> =
   | { ok: true; value: T }

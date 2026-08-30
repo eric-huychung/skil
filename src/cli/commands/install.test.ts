@@ -50,12 +50,11 @@ describe('registerInstallCommand', () => {
     expect(skills.getInstalls()).toEqual([{ skillId: 'obra/x' }]);
   });
 
-  it('ignores a leftover --to dock and still writes the live pair', () => {
-    const { engine, skills } = buildEngine();
+  it('rejects a --to flag: install always writes the live trees', () => {
+    const { engine } = buildEngine();
     const program = createProgram(engine);
     program.exitOverride();
 
-    program.parse(['install', 'obra/x', '--to', 'codex'], { from: 'user' });
-    expect(skills.getInstalls()).toEqual([{ skillId: 'obra/x' }]);
+    expect(() => program.parse(['install', 'obra/x', '--to', 'codex'], { from: 'user' })).toThrow();
   });
 });
