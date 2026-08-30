@@ -33,7 +33,10 @@ import {
 import {
   COMMAND_DIR_BY_IDE,
   COMMAND_EXTENSION_BY_IDE,
+  liveSkillPaths,
   NPX_PROJECT_SKILL_ROOT,
+  parkedSkillPath,
+  SCAN_SKILL_ROOTS,
   SKILL_ROOTS,
   SKILL_ROOT_BY_IDE,
 } from './dock-layout.js';
@@ -929,7 +932,7 @@ export class CollectionEngine implements ICollectionEngine {
   scan(): Result<ScanResult> {
     const found = new Map<string, { hash: string; paths: string[] }>();
 
-    for (const root of SKILL_ROOTS) {
+    for (const root of SCAN_SKILL_ROOTS) {
       const folders = this.fs.findSkillFolders(root);
       if (!isOk(folders)) {
         return err(folders.error);

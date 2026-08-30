@@ -1477,6 +1477,37 @@ describe('CollectionEngine', () => {
       ]);
     });
 
+    it('catalogs a parked-only skill as off, with no live path', () => {
+      fs.writeFile('.skil/parked/skills/tdd/SKILL.md', '# tdd\n');
+
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.skills()).toEqual([
+        expect.objectContaining({ id: 'tdd', paths: ['.skil/parked/skills/tdd'] }),
+      ]);
+      expect(engine.skills()[0]?.paths.some((p) => p.startsWith('.agents/skills/') || p.startsWith('.claude/skills/'))).toBe(false);
+    });
+
+    it('does not scan .skil/deprecated', () => {
+      fs.writeFile('.skil/deprecated/.cursor/skills/tdd/SKILL.md', '# tdd\n');
+
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      expect(engine.skills()).toEqual([]);
+    });
+
+    it('a leftover-only skill is catalogued without creating a live or parked copy', () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+
+      engine.scan();
+
+      expect(fs.readFile('.agents/skills/tdd/SKILL.md').ok).toBe(false);
+      expect(fs.readFile('.claude/skills/tdd/SKILL.md').ok).toBe(false);
+      expect(fs.readFile('.skil/parked/skills/tdd/SKILL.md').ok).toBe(false);
+    });
+
     it('merges the same id under two IDE trees into one catalog row', () => {
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
       fs.writeFile('.claude/skills/tdd/SKILL.md', '# tdd\n');
