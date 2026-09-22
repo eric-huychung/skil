@@ -30,6 +30,8 @@ describe('GUI workflow (real engine)', () => {
     expect(engine.list()[0]).toMatchObject({ name: 'frontend', skills: [] });
 
     await userEvent.click(screen.getByRole('tab', { name: 'Discover' }));
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Leaderboard' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('tab', { name: 'Leaderboard' }));
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: 'Add obra/react-patterns' }));
     await waitFor(() => expect(engine.skills().map((skill) => skill.id)).toEqual(['obra/react-patterns']));
