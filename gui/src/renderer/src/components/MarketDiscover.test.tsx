@@ -52,6 +52,12 @@ const PREVIEW: MarketPreviewData = {
   audit: { status: 'pass' },
 };
 
+async function openLeaderboard() {
+  await waitFor(() => expect(screen.getByRole('tab', { name: 'Leaderboard' })).toBeInTheDocument());
+  await userEvent.click(screen.getByRole('tab', { name: 'Leaderboard' }));
+  await waitFor(() => expect(screen.getByRole('tab', { name: 'Top' })).toHaveAttribute('aria-selected', 'true'));
+}
+
 const SUGGESTED = {
   updatedAt: '2026-03-09',
   roles: [
@@ -79,9 +85,11 @@ describe('MarketDiscover', () => {
 
     renderWithProviders(<MarketDiscover />, { bridge });
 
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Top' })).toBeInTheDocument());
-    expect(screen.getByRole('tab', { name: 'Suggested' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'skills.sh' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Leaderboard' })).toBeInTheDocument());
+    expect(screen.getByRole('tab', { name: 'Suggested' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('link', { name: 'skills.sh' })).toHaveAttribute('href', 'https://skills.sh');
+    await openLeaderboard();
+    expect(screen.getByRole('tab', { name: 'Top' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Trending' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'SWE' })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
@@ -93,9 +101,10 @@ describe('MarketDiscover', () => {
 
     renderWithProviders(<MarketDiscover />, { bridge });
 
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'SWE' })).toBeInTheDocument());
+    await openLeaderboard();
+    await userEvent.click(screen.getByRole('tab', { name: 'SWE' }));
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Frontend' })).toBeInTheDocument());
     expect(screen.getByRole('tab', { name: 'PM' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Frontend' })).toBeInTheDocument();
     expect(screen.getByText('obra/react-patterns')).toBeInTheDocument();
     expect(screen.getByText(/1\.2k/)).toBeInTheDocument();
   });
@@ -105,6 +114,8 @@ describe('MarketDiscover', () => {
     const bridge = { ...createTestBridge(engine), marketShelves: async (): Promise<Result<ShelfRole[]>> => ok(SHELVES) };
 
     renderWithProviders(<MarketDiscover />, { bridge });
+    await openLeaderboard();
+    await userEvent.click(screen.getByRole('tab', { name: 'SWE' }));
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole('tab', { name: 'Backend' }));
@@ -121,6 +132,7 @@ describe('MarketDiscover', () => {
     const bridge = { ...createTestBridge(engine), marketShelves: async (): Promise<Result<ShelfRole[]>> => ok(SHELVES) };
 
     renderWithProviders(<MarketDiscover />, { bridge });
+    await openLeaderboard();
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole('button', { name: 'Add obra/react-patterns' }));
@@ -144,14 +156,14 @@ describe('MarketDiscover', () => {
     };
 
     renderWithProviders(<MarketDiscover />, { bridge });
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'SWE' })).toBeInTheDocument());
+    await openLeaderboard();
 
     await userEvent.type(screen.getByLabelText('Search skills'), 'react');
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
     expect(screen.getByRole('tab', { name: 'Suggested' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'skills.sh' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Leaderboard' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'SWE' })).toBeInTheDocument();
 
     await userEvent.clear(screen.getByLabelText('Search skills'));
@@ -173,6 +185,7 @@ describe('MarketDiscover', () => {
     expect(screen.queryByText('Loading\u2026')).not.toBeInTheDocument();
 
     deferred.resolve(ok(SHELVES));
+    await openLeaderboard();
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
   });
 
@@ -187,9 +200,7 @@ describe('MarketDiscover', () => {
     };
 
     renderWithProviders(<MarketDiscover />, { bridge });
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Top' })).toBeInTheDocument());
-
-    await userEvent.click(screen.getByRole('tab', { name: 'Top' }));
+    await openLeaderboard();
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole('tab', { name: 'Trending' }));
@@ -210,9 +221,7 @@ describe('MarketDiscover', () => {
     };
 
     renderWithProviders(<MarketDiscover />, { bridge });
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Top' })).toBeInTheDocument());
-
-    await userEvent.click(screen.getByRole('tab', { name: 'Top' }));
+    await openLeaderboard();
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Couldn't load skills/));
     expect(screen.queryByText(/leaderboard unreachable/)).not.toBeInTheDocument();
@@ -228,6 +237,7 @@ describe('MarketDiscover', () => {
     };
 
     renderWithProviders(<MarketDiscover />, { bridge });
+    await openLeaderboard();
     await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole('button', { name: 'Details for obra/react-patterns' }));
@@ -414,7 +424,7 @@ describe('MarketDiscover', () => {
       await userEvent.click(screen.getByRole('tab', { name: 'Suggested' }));
       await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
 
-      await userEvent.click(screen.getByRole('tab', { name: 'skills.sh' }));
+      await userEvent.click(screen.getByRole('tab', { name: 'Leaderboard' }));
       await waitFor(() => expect(screen.queryByRole('tab', { name: 'Suggested', selected: true })).not.toBeInTheDocument());
 
       await userEvent.click(screen.getByRole('tab', { name: 'Suggested' }));

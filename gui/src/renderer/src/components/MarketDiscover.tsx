@@ -4,6 +4,7 @@ import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import { formatInstalls } from '../lib/format-installs';
 import type { BrowseView, LlmStatus, MarketSearchRow, ShelfRole } from '../../../shared/ipc';
+import { LeaderboardSourceNote } from '../../../../../shared/leaderboard-source-note';
 import { StatusNotice, StatusSkeleton, type StatusKind } from '../../../../../shared/status';
 import SkillPreviewDialog from './SkillPreviewDialog';
 import WorkspaceWarning from './WorkspaceWarning';
@@ -25,7 +26,7 @@ export function clearDiscoverSuggestCache(): void {
   llmSuggestCache.clear();
 }
 
-/** Live skills.sh browse, same tabs as Landing Discover. */
+/** Live skills.sh Top / Trending browse — same chips as the web leaderboard. */
 const BROWSE_TABS: Array<{ view: BrowseView; label: string }> = [
   { view: 'all-time', label: 'Top' },
   { view: 'trending', label: 'Trending' },
@@ -84,7 +85,7 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
   const [addingId, setAddingId] = useState<string | null>(null);
   const [addStates, setAddStates] = useState<Record<string, AddState>>({});
   const browseCache = useRef<Partial<Record<BrowseView, Row[]>>>({});
-  const [suggestedActive, setSuggestedActive] = useState(false);
+  const [suggestedActive, setSuggestedActive] = useState(true);
   const [suggestRole, setSuggestRole] = useState<string>(SUGGEST_ROLE_TABS[0].slug);
   const [suggestGate, setSuggestGate] = useState<SuggestGate>({ status: 'idle' });
   const [llm, setLlm] = useState<LlmStatus>({
@@ -103,9 +104,6 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
       setShelves(roles);
       setActiveRole(roles[0]?.slug ?? null);
       setActiveField(roles[0]?.fields[0]?.slug ?? null);
-      if (roles.length === 0) {
-        void loadBrowse('all-time');
-      }
     });
     return () => {
       cancelled = true;
@@ -263,23 +261,29 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
     [bridge]
   );
 
+  useEffect(() => {
+    if (!suggestedActive || shelves === null) return;
+    void runSuggestCheck(suggestRole);
+  }, [suggestedActive, shelves, suggestRole, runSuggestCheck]);
+
   function handleSelectSuggested() {
     clearSearch();
     setBrowseView(null);
     setBrowseError(null);
     setSuggestedActive(true);
-    void runSuggestCheck(suggestRole);
   }
 
-  function handleSelectSkillsSh() {
+  function handleSelectLeaderboard() {
     clearSearch();
     setSuggestedActive(false);
+    if (browseView === null) {
+      void loadBrowse('all-time');
+    }
   }
 
   function handleSuggestRoleSelect(slug: string) {
     clearSearch();
     setSuggestRole(slug);
-    void runSuggestCheck(slug);
   }
 
   async function runMarketSearch(trimmed: string) {
@@ -411,6 +415,8 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
         </label>
       </form>
 
+      <LeaderboardSourceNote linkClassName={`leaderboard-source-link skill-details-link ${FOCUS_RING}`} />
+
       {shelves && (
         <>
           <div role="tablist" aria-label="Discover" className="filter-row role-tabs">
@@ -427,10 +433,10 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
               type="button"
               role="tab"
               aria-selected={!suggestedActive}
-              onClick={handleSelectSkillsSh}
+              onClick={handleSelectLeaderboard}
               className={`filter ${!suggestedActive ? 'active-filter' : ''} ${FOCUS_RING}`}
             >
-              skills.sh
+              Leaderboard
             </button>
           </div>
 
@@ -453,7 +459,7 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
 
           {!suggestedActive && (
             <>
-              <div role="tablist" aria-label="skills.sh" className="filter-row">
+              <div role="tablist" aria-label="Leaderboard" className="filter-row">
                 {BROWSE_TABS.map((tab) => (
                   <button
                     key={tab.view}
@@ -514,7 +520,7 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
         </>
       ) : suggestedActive ? (
         <>
-          {suggestGate.status === 'loading' && <StatusSkeleton />}
+          {(shelves === null || suggestGate.status === 'loading') && <StatusSkeleton />}
           {suggestGate.status === 'error' && (
             <StatusNotice kind="load" onRetry={() => void runSuggestCheck(suggestRole)} />
           )}

@@ -16,6 +16,7 @@ import {
   type MarketSearchRow,
   type ShelfRole,
 } from '@/lib/market-api'
+import { LeaderboardSourceNote } from '../../../shared/leaderboard-source-note'
 import { StatusNotice, StatusSkeleton } from '../../../shared/status'
 
 const BROWSE_TABS: Array<{ view: BrowseView; label: string }> = [
@@ -107,9 +108,7 @@ export function Discover() {
     setRoles(data)
     setActiveRole(data[0]?.slug ?? null)
     setActiveField(data[0]?.fields[0]?.slug ?? null)
-    if (data.length === 0) {
-      void loadBrowse('all-time')
-    }
+    void loadBrowse('all-time')
   }
 
   function handleRoleSelect(r: ShelfRole) {
@@ -212,6 +211,8 @@ export function Discover() {
             </button>
           </label>
         </form>
+
+        <LeaderboardSourceNote linkClassName="leaderboard-source-link skill-details-link" />
 
         {searchResults === null && roles && (
           <>

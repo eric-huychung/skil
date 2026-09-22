@@ -153,6 +153,18 @@
   white-space: nowrap;
 }
 
+.leaderboard-source-note {
+  margin: 8px 0 0;
+  text-align: right;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted-ink);
+}
+
+.leaderboard-source-link {
+  font-weight: 500;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .status-bar {
     animation: none;
