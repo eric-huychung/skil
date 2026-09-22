@@ -30,12 +30,11 @@ function bearerMatches(auth: string | null, cronSecret: string): boolean {
 }
 
 /**
- * Vercel Cron handler for the weekly market-index refresh. Auth is
- * `Authorization: Bearer $CRON_SECRET` (Vercel sets this automatically
- * when `CRON_SECRET` is in the project env). Same `MarketSync` class as
+ * HTTP handler for the weekly market-index refresh. Auth is
+ * `Authorization: Bearer $CRON_SECRET`. Same `MarketSync` class as
  * `scripts/sync-market.ts` (`refreshActiveFields`), but only classify +
  * `CRON_MAX_DETAIL` hydrates — not the 20k listing crawl, which times out
- * on Vercel.
+ * on Vercel. GitHub Actions hits this on the public site each Sunday.
  */
 export async function handleCronSyncRequest(request: Request, deps: CronSyncDeps): Promise<Response> {
   const { cronSecret, sync } = deps;

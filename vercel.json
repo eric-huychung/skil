@@ -26,12 +26,6 @@
       "maxDuration": 300
     }
   },
-  "crons": [
-    {
-      "path": "/api/cron/sync-market",
-      "schedule": "0 0 * * 0"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",

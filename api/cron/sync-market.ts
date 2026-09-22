@@ -7,12 +7,12 @@ import { LlmSkillClassifier } from '../../dist/backend/llm-skill-classifier.js';
 import { SupabaseMarketStore } from '../../dist/backend/supabase-market-store.js';
 
 /**
- * Vercel Cron entry: `GET /api/cron/sync-market` (weekly). Thin adapter —
- * bearer check, `sync({ maxDetail: 40 })`, and response shape live in
- * `handleCronSyncRequest`. Imports compiled `dist/` (not `src/*.js`) for
- * the same reason as `api/market/shelves.ts`.
+ * Weekly market sync HTTP entry: `GET /api/cron/sync-market`.
+ * GitHub Actions calls the public site with `Authorization: Bearer $CRON_SECRET`.
+ * Thin adapter — bearer check, `sync({ maxDetail: 40 })`, and response
+ * shape live in `handleCronSyncRequest`. Imports compiled `dist/` (not
+ * `src/*.js`) for the same reason as `api/market/shelves.ts`.
  *
- * Vercel sends `Authorization: Bearer $CRON_SECRET` when that env is set.
  * Service role + OIDC stay server-only — never in `gui/` or `web/`.
  */
 export const maxDuration = 300;

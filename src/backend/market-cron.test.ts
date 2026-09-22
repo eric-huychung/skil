@@ -113,14 +113,17 @@ describe('handleCronSyncRequest', () => {
   });
 });
 
-describe('vercel.json cron schedule', () => {
-  it('runs /api/cron/sync-market once a week', () => {
+describe('weekly market sync schedule', () => {
+  it('is GitHub Actions hitting the public site, not Vercel Cron', () => {
     const vercel = JSON.parse(readFileSync(join(process.cwd(), 'vercel.json'), 'utf8')) as {
       crons?: Array<{ path: string; schedule: string }>;
-      headers?: Array<{ source: string; headers: Array<{ key: string; value: string }> }>;
     };
+    const workflow = readFileSync(join(process.cwd(), '.github/workflows/sync-market.yml'), 'utf8');
 
-    expect(vercel.crons).toEqual([{ path: '/api/cron/sync-market', schedule: '0 0 * * 0' }]);
-    expect(vercel.headers?.some((entry) => entry.headers.some((h) => h.key === 'X-Content-Type-Options'))).toBe(true);
+    expect(vercel.crons ?? []).toEqual([]);
+    expect(workflow).toMatch(/cron: ['"]0 0 \* \* 0['"]/);
+    expect(workflow).toContain('https://www.skil.website/api/cron/sync-market');
+    expect(workflow).toContain('Authorization: Bearer');
+    expect(workflow).toContain('secrets.CRON_SECRET');
   });
 });

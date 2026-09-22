@@ -31,7 +31,7 @@ Store adapters: `InMemoryMarketStore` (tests), `SupabaseMarketStore` (`supabase/
 ## Sync
 
 - **First fill:** `npm run sync-market` — seed, crawl listing, paced hydrate, classify shelves. Resumable (re-discovers `hash: null`). Needs Supabase env + OIDC. Apply migrations first.
-- **Weekly cron:** `GET /api/cron/sync-market`, Sunday 00:00 UTC, `Authorization: Bearer $CRON_SECRET`. `sync({ maxDetail: 40 })` — shelves + 40 hydrates. No 20k listing crawl. 401 if secret missing/wrong.
+- **Weekly cron:** GitHub Actions (`/.github/workflows/sync-market.yml`) `GET https://www.skil.website/api/cron/sync-market` Sunday 00:00 UTC, `Authorization: Bearer $CRON_SECRET`. `sync({ maxDetail: 40 })` — shelves + 40 hydrates. No 20k listing crawl. 401 if secret missing/wrong. Same secret must exist in Vercel env (handler) and GitHub Actions secrets (caller).
 
 ## Read API
 
