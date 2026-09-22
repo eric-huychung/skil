@@ -114,7 +114,7 @@ describe('handleCronSyncRequest', () => {
 });
 
 describe('weekly market sync schedule', () => {
-  it('is GitHub Actions hitting the public site, not Vercel Cron', () => {
+  it('is GitHub Actions running classify-only, not Vercel Cron or the HTTP handler', () => {
     const vercel = JSON.parse(readFileSync(join(process.cwd(), 'vercel.json'), 'utf8')) as {
       crons?: Array<{ path: string; schedule: string }>;
     };
@@ -122,8 +122,11 @@ describe('weekly market sync schedule', () => {
 
     expect(vercel.crons ?? []).toEqual([]);
     expect(workflow).toMatch(/cron: ['"]0 0 \* \* 0['"]/);
-    expect(workflow).toContain('https://www.skil.website/api/cron/sync-market');
-    expect(workflow).toContain('Authorization: Bearer');
-    expect(workflow).toContain('secrets.CRON_SECRET');
+    expect(workflow).toContain('sync-market -- --classify-only');
+    expect(workflow).toContain('secrets.AI_GATEWAY_API_KEY');
+    expect(workflow).toContain('secrets.NEXT_PUBLIC_SUPABASE_URL');
+    expect(workflow).toContain('secrets.SUPABASE_SERVICE_ROLE_KEY');
+    expect(workflow).not.toContain('/api/cron/sync-market');
+    expect(workflow).not.toContain('secrets.CRON_SECRET');
   });
 });

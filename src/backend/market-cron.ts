@@ -30,11 +30,11 @@ function bearerMatches(auth: string | null, cronSecret: string): boolean {
 }
 
 /**
- * HTTP handler for the weekly market-index refresh. Auth is
+ * HTTP handler for a manual market-index refresh. Auth is
  * `Authorization: Bearer $CRON_SECRET`. Same `MarketSync` class as
  * `scripts/sync-market.ts` (`refreshActiveFields`), but only classify +
  * `CRON_MAX_DETAIL` hydrates — not the 20k listing crawl, which times out
- * on Vercel. GitHub Actions hits this on the public site each Sunday.
+ * on Vercel. Weekly refresh is GitHub Actions `--classify-only`, not this route.
  */
 export async function handleCronSyncRequest(request: Request, deps: CronSyncDeps): Promise<Response> {
   const { cronSecret, sync } = deps;

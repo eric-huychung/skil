@@ -8,13 +8,13 @@
  * Reindex shelves only (needs AI_GATEWAY_API_KEY, no OIDC):
  *   npm run sync-market -- --classify-only
  *   seed → classify top 1000 → write shelves
- *   Same category step as Sunday cron: GET /api/cron/sync-market
+ *   Same path as Sunday GitHub Actions.
  *
  * Smoke hydrate:
  *   npm run sync-market -- --max-detail=40
  *
  * Safe to re-run. Classify fail → last week's shelves stay.
- * Weekly cron does classify + 40 hydrates only (no 20k crawl).
+ * Weekly GitHub Actions runs `--classify-only` (no 20k crawl, no Vercel HTTP).
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { getVercelOidcToken } from '@vercel/oidc';

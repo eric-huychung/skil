@@ -31,7 +31,7 @@ Store adapters: `InMemoryMarketStore` (tests), `SupabaseMarketStore` (`supabase/
 ## Sync
 
 - **First fill:** `npm run sync-market` — seed, crawl listing, paced hydrate, classify shelves. Resumable (re-discovers `hash: null`). Needs Supabase env + OIDC. Apply migrations first.
-- **Weekly cron:** GitHub Actions (`/.github/workflows/sync-market.yml`) `GET https://www.skil.website/api/cron/sync-market` Sunday 00:00 UTC, `Authorization: Bearer $CRON_SECRET`. `sync({ maxDetail: 40 })` — shelves + 40 hydrates. No 20k listing crawl. 401 if secret missing/wrong. Same secret must exist in Vercel env (handler) and GitHub Actions secrets (caller).
+- **Weekly cron:** GitHub Actions (`/.github/workflows/sync-market.yml`) runs `npm run sync-market -- --classify-only` Sunday 00:00 UTC. Talks to Supabase + Vercel AI Gateway directly — no Vercel function, no 300s cap. Needs `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `AI_GATEWAY_API_KEY` as GitHub secrets. Classify fail → last week's shelves stay.
 
 ## Read API
 

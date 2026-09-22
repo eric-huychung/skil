@@ -7,8 +7,8 @@ import { LlmSkillClassifier } from '../../dist/backend/llm-skill-classifier.js';
 import { SupabaseMarketStore } from '../../dist/backend/supabase-market-store.js';
 
 /**
- * Weekly market sync HTTP entry: `GET /api/cron/sync-market`.
- * GitHub Actions calls the public site with `Authorization: Bearer $CRON_SECRET`.
+ * Manual market sync HTTP entry: `GET /api/cron/sync-market`.
+ * Weekly refresh is GitHub Actions `--classify-only`, not this route.
  * Thin adapter — bearer check, `sync({ maxDetail: 40 })`, and response
  * shape live in `handleCronSyncRequest`. Imports compiled `dist/` (not
  * `src/*.js`) for the same reason as `api/market/shelves.ts`.
