@@ -22,11 +22,10 @@ class MarketSync {                 // src/backend/market-sync.ts
   hydrateDetails(ids)              // description + hash
   syncListing()                    // crawl, then markInactiveBefore (full success only)
   refreshActiveFields()            // top 1000 → dedup → LLM classify → rank
-  sync({ maxDetail })              // weekly cron: shelves + cap hydrate; no listing crawl
 }
 ```
 
-Store adapters: `InMemoryMarketStore` (tests), `SupabaseMarketStore` (`supabase/migrations/0001_market_index.sql`). Seed: 6 roles / 21 fields in `src/backend/market-seed.ts`. `q` is unused for shelves. Weekly refresh classifies the top 1000 via Vercel AI Gateway (`LlmSkillClassifier`, `openai/gpt-4o-mini`). Laptop `scripts/sync-market.ts` and `api/cron/sync-market.ts` each construct `MarketSync` directly.
+Store adapters: `InMemoryMarketStore` (tests), `SupabaseMarketStore` (`supabase/migrations/0001_market_index.sql`). Seed: 6 roles / 21 fields in `src/backend/market-seed.ts`. `q` is unused for shelves. Weekly refresh classifies the top 1000 via Vercel AI Gateway (`LlmSkillClassifier`, `openai/gpt-4o-mini`). Laptop `scripts/sync-market.ts` constructs `MarketSync` directly; GitHub Actions runs the same `--classify-only` path.
 
 ## Sync
 

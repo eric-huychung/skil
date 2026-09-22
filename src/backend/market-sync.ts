@@ -40,19 +40,6 @@ export interface RefreshShelvesResult {
   queued: string[];
 }
 
-/** Outcome of one `sync({ maxDetail })` run — shelves + capped hydrate, no listing crawl. */
-export interface MarketSyncRunResult {
-  seenAt: string;
-  /** Always empty — weekly `sync` does not crawl the listing. First fill uses `syncListing`. */
-  listingQueued: string[];
-  hydrated: string[];
-  unchanged: string[];
-  refreshed: string[];
-  failed: string[];
-  /** Ids shelf refresh queued for hydrate (may exceed `maxDetail`). */
-  shelfQueued: string[];
-}
-
 /**
  * Drives the market index sync: listing crawl, detail hydrate, inactive
  * reconciliation, and shelf refresh. `MarketStore` and `MarketSkillsClient`
@@ -215,39 +202,6 @@ export class MarketSync {
       refreshed: shelves.map((shelf) => shelf.fieldSlug),
       failed: [],
       queued: unique.filter((row) => row.hash === null).map((row) => row.id),
-    });
-  }
-
-  /**
-   * Weekly cron path: refresh active field shelves, then hydrate at most
-   * `maxDetail` of the ids those searches queued (no hash yet). Does **not**
-   * crawl the 20k listing or mark inactive — that is what timed out at
-   * Vercel's 300s cap. First fill / full listing stays on
-   * `scripts/sync-market.ts`.
-   */
-  async sync(opts: { maxDetail: number }): Promise<Result<MarketSyncRunResult>> {
-    const maxDetail = Math.max(0, Math.floor(opts.maxDetail));
-    const seenAt = this.now();
-
-    const shelves = await this.refreshActiveFields();
-    if (!isOk(shelves)) {
-      return shelves;
-    }
-
-    const shelfSlice = shelves.value.queued.slice(0, maxDetail);
-    const hydrate = await this.hydrateDetails(shelfSlice);
-    if (!isOk(hydrate)) {
-      return hydrate;
-    }
-
-    return ok({
-      seenAt,
-      listingQueued: [],
-      hydrated: hydrate.value.hydrated,
-      unchanged: hydrate.value.unchanged,
-      refreshed: shelves.value.refreshed,
-      failed: shelves.value.failed,
-      shelfQueued: shelves.value.queued,
     });
   }
 }

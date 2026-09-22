@@ -160,7 +160,7 @@ Live command skill: both trees get `skills/<name>/SKILL.md` + `agents/openai.yam
 
 ## Secrets & runners
 
-Service role, cron secret, AI Gateway, and Vercel OIDC live in server env / `.env` (gitignored). Never `NEXT_PUBLIC_` on the service role. Never in `gui/` or the Next client bundle. Market HTTP handlers are thin adapters over `dist/`. Cron is `Authorization: Bearer $CRON_SECRET`. BYOK keys stay on the user's machine (`safeStorage` / `SKIL_LLM_API_KEY`).
+Service role, AI Gateway, and Vercel OIDC live in server env / `.env` (gitignored). Never `NEXT_PUBLIC_` on the service role. Never in `gui/` or the Next client bundle. Market HTTP handlers are thin adapters over `dist/`. Weekly shelf refresh is GitHub Actions `--classify-only` (Supabase + AI Gateway secrets). BYOK keys stay on the user's machine (`safeStorage` / `SKIL_LLM_API_KEY`).
 
 ## Tests
 
