@@ -113,7 +113,7 @@ export interface SkilBridge {
   listRecentFolders(): Promise<string[]>;
   /** Drop a folder from recents. If it is the bound folder, the session disconnects. Returns the remaining list. */
   removeRecentFolder(path: string): Promise<string[]>;
-  /** Pull: scan SKILL.md folders into the catalog. Does not install. */
+  /** Pull: scan SKILL.md folders. Leftover-only skills/commands copy into the live pair. Does not install. */
   scan(): Promise<Result<ScanResult>>;
   /**
    * Watcher (and successful Scan) push. Returns an unsubscribe function.

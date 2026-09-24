@@ -2,7 +2,15 @@ import { createHash } from 'node:crypto';
 import type { IFileSystemAdapter } from '../interfaces/adapters.js';
 import type { LeftoverRecord, SyncAudit, SyncRow } from '../types/index.js';
 import { isCommandSkillStamp } from './command-file.js';
-import { isCanonicalHomePath, isParkedPath, liveSkillPaths } from './dock-layout.js';
+import {
+  isCanonicalHomePath,
+  isParkedPath,
+  liveSkillPaths,
+  parkedCommandPath,
+  parkedRulePath,
+  parkedSkillPath,
+} from './dock-layout.js';
+import { hashSkillTree } from './skill-folder.js';
 import { AGENTS_MD, leftoverRuleId, readRuleSection } from './project-rules.js';
 import { isOk, err, ok, type Result } from './result.js';
 
@@ -19,9 +27,11 @@ export function buildSyncAudit(fs: IFileSystemAdapter, leftovers: LeftoverRecord
     if (isParkedPath(leftover.path)) {
       continue;
     }
-    // Skills/commands already in `.agents/` or `.claude/` are canonical.
-    // Rule files under `.claude/rules` are glob copies — AGENTS.md is canonical.
-    if (leftover.kind !== 'rule' && isCanonicalHomePath(leftover.path)) {
+    // Live skill folders in `.agents/` / `.claude/` are canonical. Command
+    // files under those docks (`.claude/commands/*.md`) are leftovers — live
+    // commands are skill folders, not dock markdown. Rule files under
+    // `.claude/rules` are glob copies; AGENTS.md is canonical.
+    if (leftover.kind === 'skill' && isCanonicalHomePath(leftover.path)) {
       continue;
     }
     const row =
@@ -44,12 +54,24 @@ export function buildSyncAudit(fs: IFileSystemAdapter, leftovers: LeftoverRecord
 }
 
 function classifySkill(fs: IFileSystemAdapter, leftover: LeftoverRecord): SyncRow | null {
-  const hashHere = hashSkillFolder(fs, leftover.path);
+  const hashHere = hashSkillTree(fs, leftover.path);
   if (!hashHere) {
     return null;
   }
-  const canonicalPath = firstLiveSkillFolder(fs, leftover.id);
-  if (!canonicalPath) {
+  const livePath = firstLiveSkillFolder(fs, leftover.id);
+  if (!livePath) {
+    const parkedPath = parkedSkillFolder(fs, leftover.id);
+    if (parkedPath) {
+      return {
+        kind: 'skill',
+        id: leftover.id,
+        path: leftover.path,
+        canonicalPath: parkedPath,
+        status: 'ready-to-remove',
+        hashHere,
+        hashCanonical: hashSkillTree(fs, parkedPath) ?? hashHere,
+      };
+    }
     return {
       kind: 'skill',
       id: leftover.id,
@@ -58,7 +80,7 @@ function classifySkill(fs: IFileSystemAdapter, leftover: LeftoverRecord): SyncRo
       hashHere,
     };
   }
-  const hashCanonical = hashSkillFolder(fs, canonicalPath);
+  const hashCanonical = hashSkillTree(fs, livePath);
   if (!hashCanonical) {
     return {
       kind: 'skill',
@@ -72,7 +94,7 @@ function classifySkill(fs: IFileSystemAdapter, leftover: LeftoverRecord): SyncRo
     kind: 'skill',
     id: leftover.id,
     path: leftover.path,
-    canonicalPath,
+    canonicalPath: livePath,
     status: hashHere === hashCanonical ? 'ready-to-remove' : 'drift',
     hashHere,
     hashCanonical,
@@ -85,8 +107,21 @@ function classifyCommand(fs: IFileSystemAdapter, leftover: LeftoverRecord): Sync
     return null;
   }
   const hashHere = sha256(contents.value);
-  const canonicalPath = firstLiveSkillFolder(fs, leftover.id);
-  if (!canonicalPath) {
+  const livePath = firstLiveSkillFolder(fs, leftover.id);
+  if (!livePath) {
+    const parkedPath = parkedCommandFolder(fs, leftover.id);
+    if (parkedPath) {
+      const parked = fs.readFile(`${parkedPath}/SKILL.md`);
+      return {
+        kind: 'command',
+        id: leftover.id,
+        path: leftover.path,
+        canonicalPath: parkedPath,
+        status: 'ready-to-remove',
+        hashHere,
+        hashCanonical: isOk(parked) ? sha256(parked.value) : hashHere,
+      };
+    }
     return {
       kind: 'command',
       id: leftover.id,
@@ -95,6 +130,7 @@ function classifyCommand(fs: IFileSystemAdapter, leftover: LeftoverRecord): Sync
       hashHere,
     };
   }
+  const canonicalPath = livePath;
   const live = fs.readFile(`${canonicalPath}/SKILL.md`);
   if (!isOk(live)) {
     return {
@@ -141,6 +177,19 @@ function classifyRule(fs: IFileSystemAdapter, leftover: LeftoverRecord): SyncRow
   const agents = fs.readFile(AGENTS_MD);
   const section = isOk(agents) ? readRuleSection(agents.value, ruleId) : null;
   if (section === null) {
+    const parkedPath = parkedRulePath(ruleId);
+    const parked = fs.readFile(parkedPath);
+    if (isOk(parked)) {
+      return {
+        kind: 'rule',
+        id: leftover.id,
+        path: leftover.path,
+        canonicalPath: parkedPath,
+        status: 'ready-to-remove',
+        hashHere,
+        hashCanonical: sha256(normalizeBody(parked.value)),
+      };
+    }
     return {
       kind: 'rule',
       id: leftover.id,
@@ -165,12 +214,14 @@ function firstLiveSkillFolder(fs: IFileSystemAdapter, id: string): string | unde
   return liveSkillPaths(id).find((path) => isOk(fs.readFile(`${path}/SKILL.md`)));
 }
 
-function hashSkillFolder(fs: IFileSystemAdapter, folder: string): string | undefined {
-  const contents = fs.readFile(`${folder}/SKILL.md`);
-  if (!isOk(contents)) {
-    return undefined;
-  }
-  return sha256(contents.value);
+function parkedSkillFolder(fs: IFileSystemAdapter, id: string): string | undefined {
+  const path = parkedSkillPath(id);
+  return isOk(fs.readFile(`${path}/SKILL.md`)) ? path : undefined;
+}
+
+function parkedCommandFolder(fs: IFileSystemAdapter, id: string): string | undefined {
+  const path = parkedCommandPath(id);
+  return isOk(fs.readFile(`${path}/SKILL.md`)) ? path : undefined;
 }
 
 function sha256(text: string): string {

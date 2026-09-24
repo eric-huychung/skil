@@ -4,6 +4,9 @@ All notable changes to skil are documented here. Versions follow [Semantic Versi
 
 ## [Unreleased]
 
+### Changed
+- Scan copies leftover-only skills and commands into the live pair. Leftover glob rules stay path-scoped. Parked leftovers stay off.
+
 ## [0.7.2] - 2026-09-11
 
 ### Fixed

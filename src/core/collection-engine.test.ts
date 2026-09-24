@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, isErr, isOk, ok } from './result.js';
+import { isCommandSkillStamp, writeCommandFile } from './command-file.js';
 import { CollectionEngine, STATE_PATH } from './collection-engine.js';
 import { InMemoryFileSystemAdapter } from '../adapters/in-memory-fs.js';
 import { InMemorySkillsAdapter } from '../adapters/in-memory-skills.js';
@@ -972,11 +973,14 @@ describe('CollectionEngine', () => {
       expect(record).toEqual(
         expect.objectContaining({
           id: 'tdd',
-          paths: ['.cursor/skills/tdd'],
+          paths: ['.cursor/skills/tdd', '.agents/skills/tdd', '.claude/skills/tdd'],
           source: 'local',
         })
       );
       expect(record?.hash).toBeTruthy();
+      expect(isOk(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('.claude/skills/tdd/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('.cursor/skills/tdd/SKILL.md'))).toBe(true);
     });
 
     it('uses a nested path relative to the skills root as the catalog id', () => {
@@ -991,6 +995,71 @@ describe('CollectionEngine', () => {
       expect(engine.skills()[0]?.id).toBe('ui/styling');
     });
 
+    it('copies leftover-only skills and commands into the live pair', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      fs.writeFile('.cursor/commands/build.md', writeCommandFile('build', ['tdd']));
+
+      const result = engine.scan();
+
+      expect(isOk(result)).toBe(true);
+      expect(isOk(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('.claude/skills/tdd/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('.agents/skills/build/SKILL.md'))).toBe(true);
+      expect(engine.list()).toEqual([expect.objectContaining({ name: 'build', enabled: true })]);
+      const audit = engine.auditSync();
+      expect(isOk(audit)).toBe(true);
+      if (isOk(audit)) {
+        expect(audit.value.rows.filter((row) => row.kind !== 'rule').every((row) => row.status === 'ready-to-remove')).toBe(
+          true
+        );
+      }
+    });
+
+    it('does not turn a parked leftover back on', () => {
+      fs.writeFile('.skil/parked/skills/tdd/SKILL.md', '# parked\n');
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# leftover\n');
+
+      engine.scan();
+
+      expect(isErr(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('.skil/parked/skills/tdd/SKILL.md'))).toBe(true);
+      const audit = engine.auditSync();
+      expect(isOk(audit)).toBe(true);
+      if (isOk(audit)) {
+        expect(audit.value.rows.find((row) => row.path === '.cursor/skills/tdd')?.status).toBe(
+          'ready-to-remove'
+        );
+      }
+    });
+
+    it('does not fold leftover glob rules into AGENTS.md on scan', () => {
+      fs.writeFile('.cursor/rules/extra.mdc', '---\nglobs: src/**\n---\n# extra\n');
+
+      engine.scan();
+
+      expect(isErr(fs.readFile('AGENTS.md'))).toBe(true);
+      const audit = engine.auditSync();
+      expect(isOk(audit)).toBe(true);
+      if (isOk(audit)) {
+        expect(audit.value.rows.find((row) => row.path === '.cursor/rules/extra.mdc')?.status).toBe('needs-import');
+      }
+    });
+
+    it('does not overwrite a live copy that differs from the leftover', () => {
+      fs.writeFile('.agents/skills/tdd/SKILL.md', '# live\n');
+      fs.writeFile('.claude/skills/tdd/SKILL.md', '# live\n');
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# leftover\n');
+
+      engine.scan();
+
+      expect(fs.readFile('.agents/skills/tdd/SKILL.md')).toEqual({ ok: true, value: '# live\n' });
+      const audit = engine.auditSync();
+      expect(isOk(audit)).toBe(true);
+      if (isOk(audit)) {
+        expect(audit.value.rows.find((row) => row.id === 'tdd')?.status).toBe('drift');
+      }
+    });
+
     it('finds skills under .cursor, .claude, .windsurf, and .agents', () => {
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
       fs.writeFile('.claude/skills/ui/SKILL.md', '# ui\n');
@@ -1001,10 +1070,22 @@ describe('CollectionEngine', () => {
 
       expect(isOk(result)).toBe(true);
       expect(engine.skills()).toEqual([
-        expect.objectContaining({ id: 'tdd', paths: ['.cursor/skills/tdd'] }),
-        expect.objectContaining({ id: 'ui', paths: ['.claude/skills/ui'] }),
-        expect.objectContaining({ id: 'review', paths: ['.agents/skills/review'] }),
-        expect.objectContaining({ id: 'lint', paths: ['.windsurf/skills/lint'] }),
+        expect.objectContaining({
+          id: 'tdd',
+          paths: ['.cursor/skills/tdd', '.agents/skills/tdd', '.claude/skills/tdd'],
+        }),
+        expect.objectContaining({
+          id: 'ui',
+          paths: ['.claude/skills/ui', '.agents/skills/ui'],
+        }),
+        expect.objectContaining({
+          id: 'review',
+          paths: ['.agents/skills/review', '.claude/skills/review'],
+        }),
+        expect.objectContaining({
+          id: 'lint',
+          paths: ['.windsurf/skills/lint', '.agents/skills/lint', '.claude/skills/lint'],
+        }),
       ]);
     });
 
@@ -1015,7 +1096,10 @@ describe('CollectionEngine', () => {
 
       expect(isOk(result)).toBe(true);
       expect(engine.skills()).toEqual([
-        expect.objectContaining({ id: 'tdd', paths: ['.codex/skills/tdd'] }),
+        expect.objectContaining({
+          id: 'tdd',
+          paths: ['.codex/skills/tdd', '.agents/skills/tdd', '.claude/skills/tdd'],
+        }),
       ]);
     });
 
@@ -1026,7 +1110,10 @@ describe('CollectionEngine', () => {
 
       expect(isOk(result)).toBe(true);
       expect(engine.skills()).toEqual([
-        expect.objectContaining({ id: 'tdd', paths: ['.github/skills/tdd'] }),
+        expect.objectContaining({
+          id: 'tdd',
+          paths: ['.github/skills/tdd', '.agents/skills/tdd', '.claude/skills/tdd'],
+        }),
       ]);
     });
 
@@ -1051,13 +1138,14 @@ describe('CollectionEngine', () => {
       expect(engine.skills()).toEqual([]);
     });
 
-    it('a leftover-only skill is catalogued without creating a live or parked copy', () => {
+    it('copies a leftover-only skill into the live pair and leaves the leftover path', () => {
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
 
       engine.scan();
 
-      expect(fs.readFile('.agents/skills/tdd/SKILL.md').ok).toBe(false);
-      expect(fs.readFile('.claude/skills/tdd/SKILL.md').ok).toBe(false);
+      expect(fs.readFile('.agents/skills/tdd/SKILL.md').ok).toBe(true);
+      expect(fs.readFile('.claude/skills/tdd/SKILL.md').ok).toBe(true);
+      expect(fs.readFile('.cursor/skills/tdd/SKILL.md').ok).toBe(true);
       expect(fs.readFile('.skil/parked/skills/tdd/SKILL.md').ok).toBe(false);
     });
 
@@ -1070,7 +1158,7 @@ describe('CollectionEngine', () => {
       expect(engine.skills()).toEqual([
         expect.objectContaining({
           id: 'tdd',
-          paths: ['.cursor/skills/tdd', '.claude/skills/tdd'],
+          paths: ['.cursor/skills/tdd', '.claude/skills/tdd', '.agents/skills/tdd'],
         }),
       ]);
     });
@@ -1164,7 +1252,7 @@ describe('CollectionEngine', () => {
       expect(loaded.skills()).toEqual([]);
     });
 
-    it('treats same-hash path change as a rename, not gone plus added', () => {
+    it('keeps the live catalog id when only a leftover folder is renamed', () => {
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
       engine.scan();
       engine.create('build', []);
@@ -1175,12 +1263,10 @@ describe('CollectionEngine', () => {
       const result = engine.scan();
 
       expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value.added).toEqual([]);
-        expect(result.value.gone).toEqual([]);
-      }
-      expect(engine.list()[0]?.skills).toEqual(['testing']);
-      expect(engine.skills().map((record) => record.id)).toEqual(['testing']);
+      expect(engine.list()[0]?.skills).toEqual(['tdd']);
+      expect(engine.skills().map((record) => record.id).sort()).toEqual(['tdd', 'testing']);
+      expect(isOk(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('.agents/skills/testing/SKILL.md'))).toBe(true);
     });
 
     it('unions the same hash in two docks into one catalog row', () => {
@@ -1193,7 +1279,7 @@ describe('CollectionEngine', () => {
       expect(engine.skills()).toEqual([
         expect.objectContaining({
           id: 'tdd',
-          paths: ['.cursor/skills/tdd', '.claude/skills/tdd'],
+          paths: ['.cursor/skills/tdd', '.claude/skills/tdd', '.agents/skills/tdd'],
         }),
       ]);
     });
@@ -1536,6 +1622,8 @@ describe('CollectionEngine', () => {
       engine.addSkill('build', 'design');
       await engine.setCommandEnabled('build', true);
       fs.removeFile('.cursor/skills/design/SKILL.md');
+      fs.removeFile('.agents/skills/design/SKILL.md');
+      fs.removeFile('.claude/skills/design/SKILL.md');
 
       const result = engine.scan();
 
@@ -2210,7 +2298,7 @@ describe('CollectionEngine', () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.value.adopted).toEqual(['tdd']);
+        expect(result.value.adopted).toEqual([]);
         expect(result.value.deprecated).toEqual(['.skil/deprecated/.cursor/skills/tdd']);
       }
       expect(isOk(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true);
@@ -2262,10 +2350,10 @@ describe('CollectionEngine', () => {
 
       expect(isOk(result)).toBe(true);
       if (!isOk(result)) return;
-      expect(result.value.needsImportCount).toBe(1);
-      expect(result.value.readyCount).toBe(1);
+      expect(result.value.needsImportCount).toBe(0);
+      expect(result.value.readyCount).toBe(2);
       expect(result.value.driftCount).toBe(1);
-      expect(result.value.rows.find((row) => row.id === 'other')?.status).toBe('needs-import');
+      expect(result.value.rows.find((row) => row.id === 'other')?.status).toBe('ready-to-remove');
       expect(result.value.rows.find((row) => row.id === 'tdd')?.status).toBe('ready-to-remove');
       expect(result.value.rows.find((row) => row.id === 'design')?.status).toBe('drift');
     });
@@ -2292,8 +2380,7 @@ describe('CollectionEngine', () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.value.adopted).toEqual(['tdd']);
-        expect(result.value.deprecated).toEqual([]);
+        expect(result.value.adopted).toEqual([]);
       }
       expect(isOk(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true);
       expect(isOk(fs.readFile('.claude/skills/tdd/SKILL.md'))).toBe(true);
@@ -2338,6 +2425,73 @@ describe('CollectionEngine', () => {
         );
       }
     });
+
+    it('creates a leftover command in state, writes the live pair, and leaves the dock file', async () => {
+      const leftover = writeCommandFile('build', ['tdd']);
+      fs.writeFile('.cursor/commands/build.md', leftover);
+      engine.scan();
+
+      const result = await engine.importToCanonical(['build']);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.adopted).toEqual([]);
+        expect(result.value.deprecated).toEqual([]);
+      }
+      expect(engine.list()).toEqual([expect.objectContaining({ name: 'build', skills: ['tdd'], enabled: true })]);
+      const live = fs.readFile('.agents/skills/build/SKILL.md');
+      expect(isOk(live)).toBe(true);
+      if (isOk(live)) {
+        expect(isCommandSkillStamp(live.value)).toBe(true);
+        expect(live.value).toContain('## Goal');
+      }
+      expect(isOk(fs.readFile('.claude/skills/build/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('.agents/skills/build/agents/openai.yaml'))).toBe(true);
+      expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+      const audit = engine.auditSync();
+      expect(isOk(audit)).toBe(true);
+      if (isOk(audit)) {
+        expect(audit.value.rows.find((row) => row.path === '.cursor/commands/build.md')?.status).toBe(
+          'ready-to-remove'
+        );
+      }
+    });
+
+    it('imports leftover skills, commands, and rules in one pass', async () => {
+      fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+      fs.writeFile('.cursor/commands/build.md', writeCommandFile('build', ['tdd']));
+      fs.writeFile('.cursor/rules/behavior.mdc', '# behavior\n');
+      engine.scan();
+
+      const result = await engine.importToCanonical(['tdd', 'build', 'behavior']);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.adopted).toEqual(['behavior']);
+      }
+      expect(isOk(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('.agents/skills/build/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('AGENTS.md'))).toBe(true);
+      expect(engine.list().map((command) => command.name)).toEqual(['build']);
+    });
+
+    it('skips a leftover command that conflicts with a live skill', async () => {
+      fs.writeFile('.agents/skills/build/SKILL.md', '# a real skill named build\n');
+      fs.writeFile('.cursor/commands/build.md', writeCommandFile('build', []));
+      engine.scan();
+
+      const result = await engine.importToCanonical(['build']);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.adopted).toEqual([]);
+      }
+      expect(engine.list()).toEqual([]);
+      expect(fs.readFile('.agents/skills/build/SKILL.md')).toEqual({
+        ok: true,
+        value: '# a real skill named build\n',
+      });
+    });
   });
 
   describe('removeLeftovers', () => {
@@ -2358,15 +2512,75 @@ describe('CollectionEngine', () => {
       expect(isOk(fs.readFile('.skil/deprecated/.cursor/skills/tdd/SKILL.md'))).toBe(true);
     });
 
-    it('refuses drift and needs-import so a blind remove cannot delete the copy to keep', async () => {
-      fs.writeFile('.cursor/skills/other/SKILL.md', '# other\n');
+    it('deprecates the whole nested skill tree, not only SKILL.md', async () => {
+      const body = '---\nname: debug\n---\n# debug\n';
+      const yaml = 'interface:\n  display_name: debug\n';
+      const script = '#!/bin/sh\n';
+      for (const root of ['.agents/skills/testing/debug', '.claude/skills/testing/debug', '.cursor/skills/testing/debug']) {
+        fs.writeFile(`${root}/SKILL.md`, body);
+        fs.writeFile(`${root}/agents/openai.yaml`, yaml);
+        fs.writeFile(`${root}/scripts/hitl-loop.template.sh`, script);
+      }
+      engine.scan();
+
+      const result = await engine.removeLeftovers(['.cursor/skills/testing/debug']);
+
+      expect(isOk(result)).toBe(true);
+      expect(isErr(fs.readFile('.cursor/skills/testing/debug/SKILL.md'))).toBe(true);
+      expect(isErr(fs.readFile('.cursor/skills/testing/debug/agents/openai.yaml'))).toBe(true);
+      expect(isErr(fs.readFile('.cursor/skills/testing/debug/scripts/hitl-loop.template.sh'))).toBe(true);
+      expect(isOk(fs.readFile('.skil/deprecated/.cursor/skills/testing/debug/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('.skil/deprecated/.cursor/skills/testing/debug/agents/openai.yaml'))).toBe(
+        true
+      );
+      expect(
+        isOk(fs.readFile('.skil/deprecated/.cursor/skills/testing/debug/scripts/hitl-loop.template.sh'))
+      ).toBe(true);
+    });
+
+    it('deprecates a nested skill tree on a real disk', async () => {
+      const tmpDir = mkdtempSync(join(process.cwd(), 'tmp-skil-deprecate-'));
+      try {
+        const realFs = new RealFileSystemAdapter(tmpDir);
+        const realEngine = new CollectionEngine(realFs, new InMemorySkillsAdapter());
+        const body = '# debug\n';
+        const yaml = 'x: 1\n';
+        const script = '#!/bin/sh\n';
+        for (const root of [
+          '.agents/skills/testing/debug',
+          '.claude/skills/testing/debug',
+          '.cursor/skills/testing/debug',
+        ]) {
+          realFs.writeFile(`${root}/SKILL.md`, body);
+          realFs.writeFile(`${root}/agents/openai.yaml`, yaml);
+          realFs.writeFile(`${root}/scripts/hitl-loop.template.sh`, script);
+        }
+        realEngine.scan();
+
+        const result = await realEngine.removeLeftovers(['.cursor/skills/testing/debug']);
+
+        expect(isOk(result)).toBe(true);
+        expect(existsSync(join(tmpDir, '.cursor', 'skills', 'testing', 'debug', 'SKILL.md'))).toBe(false);
+        expect(
+          existsSync(join(tmpDir, '.skil', 'deprecated', '.cursor', 'skills', 'testing', 'debug', 'agents', 'openai.yaml'))
+        ).toBe(true);
+        expect(
+          existsSync(join(tmpDir, '.skil', 'deprecated', '.cursor', 'skills', 'testing', 'debug', 'scripts', 'hitl-loop.template.sh'))
+        ).toBe(true);
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('refuses drift so a blind remove cannot delete the copy to keep', async () => {
+      fs.writeFile('.cursor/rules/extra.mdc', '# extra\n');
       fs.writeFile('.agents/skills/design/SKILL.md', '# live\n');
       fs.writeFile('.cursor/skills/design/SKILL.md', '# leftover\n');
       engine.scan();
 
-      const missing = await engine.removeLeftovers(['.cursor/skills/other']);
+      const missing = await engine.removeLeftovers(['.cursor/rules/extra.mdc']);
       expect(isErr(missing)).toBe(true);
-      expect(isOk(fs.readFile('.cursor/skills/other/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('.cursor/rules/extra.mdc'))).toBe(true);
 
       const drift = await engine.removeLeftovers(['.cursor/skills/design']);
       expect(isErr(drift)).toBe(true);

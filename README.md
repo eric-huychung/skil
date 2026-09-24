@@ -76,7 +76,7 @@ skil skills enable tdd
 skil skills disable tdd
 ```
 
-- `scan` — find `SKILL.md` folders in this repo. Read only.
+- `scan` — find `SKILL.md` folders. Copies leftover-only skills/commands into the live pair; leftover path stays.
 - `skills` — what’s in the catalog (on / off)
 - `skills enable` / `disable` — turn one skill on or off. Not `skil enable` — that one’s for commands.
 

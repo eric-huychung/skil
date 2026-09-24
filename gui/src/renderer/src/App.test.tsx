@@ -11,6 +11,7 @@ import {
   renderWithProviders,
 } from './test-utils';
 import { err, isOk, ok } from '../../../../src/core/result.js';
+import { isCommandSkillStamp, writeCommandFile } from '../../../../src/core/command-file.js';
 import { version as APP_VERSION } from '../../../package.json';
 
 async function openSync() {
@@ -526,7 +527,7 @@ describe('App', () => {
     expect(sync.querySelector('.sync-dot')).not.toBeInTheDocument();
   });
 
-  it('shows leftover-only skills as needs-import, then copies without deleting', async () => {
+  it('copies leftover-only skills into the live pair on scan, leftover stays for remove', async () => {
     const { engine, fs } = createInMemoryWorkspace();
     fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
     engine.scan();
@@ -536,19 +537,38 @@ describe('App', () => {
     await openSync();
 
     expect(await screen.findByRole('button', { name: '1 leftover' })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Cleanup' })).not.toBeInTheDocument();
-
     await userEvent.click(screen.getByRole('button', { name: '1 leftover' }));
     expect(await screen.findByRole('heading', { name: 'Cleanup' })).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Needs import' })).toHaveTextContent('.cursor/skills/tdd');
-    expect(screen.queryByRole('list', { name: 'Ready to remove' })).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Import all' }));
-
-    await waitFor(() => expect(isOk(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true));
+    expect(screen.queryByRole('list', { name: 'Needs import' })).not.toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Ready to remove' })).toHaveTextContent('.cursor/skills/tdd');
+    expect(isOk(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true);
     expect(isOk(fs.readFile('.claude/skills/tdd/SKILL.md'))).toBe(true);
     expect(isOk(fs.readFile('.cursor/skills/tdd/SKILL.md'))).toBe(true);
-    expect(await screen.findByRole('list', { name: 'Ready to remove' })).toHaveTextContent('.cursor/skills/tdd');
+  });
+
+  it('imports leftover commands into the live pair on scan and shows them on Commands', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    fs.writeFile('.cursor/commands/build.md', writeCommandFile('build', ['tdd']));
+    engine.scan();
+    installTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+
+    renderWithProviders(<App />);
+    await openSync();
+    await userEvent.click(await screen.findByRole('button', { name: '1 leftover' }));
+    expect(screen.queryByRole('list', { name: 'Needs import' })).not.toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Ready to remove' })).toHaveTextContent('.cursor/commands/build.md');
+
+    await waitFor(() => expect(isOk(fs.readFile('.agents/skills/build/SKILL.md'))).toBe(true));
+    const live = fs.readFile('.agents/skills/build/SKILL.md');
+    expect(isOk(live)).toBe(true);
+    if (isOk(live)) expect(isCommandSkillStamp(live.value)).toBe(true);
+    expect(isOk(fs.readFile('.claude/skills/build/SKILL.md'))).toBe(true);
+    expect(isOk(fs.readFile('.cursor/commands/build.md'))).toBe(true);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(within(syncMetric('Commands')).getByText('1')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('tab', { name: 'Commands' }));
+    expect(await screen.findByRole('listitem', { name: 'Command build' })).toBeInTheDocument();
   });
 
   it('removes matching leftovers after import and leaves the live pair', async () => {
@@ -563,6 +583,11 @@ describe('App', () => {
     await openSync();
     await userEvent.click(await screen.findByRole('button', { name: '1 leftover' }));
     await userEvent.click(screen.getByRole('button', { name: 'Remove leftovers' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: /Remove 1 leftover/ })).getByRole('button', {
+        name: 'Remove leftovers',
+      })
+    );
 
     await waitFor(() => expect(screen.queryByRole('button', { name: '1 leftover' })).not.toBeInTheDocument());
     expect(isOk(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true);
@@ -642,7 +667,7 @@ describe('App', () => {
 
   it('shows a friendly error when importing leftovers fails, without dropping the list', async () => {
     const { engine, fs } = createInMemoryWorkspace();
-    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    fs.writeFile('.cursor/rules/extra.mdc', '---\nglobs: src/**\n---\n# extra\n');
     engine.scan();
     const real = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
     const bridge = { ...real, importToCanonical: async () => err(new Error('EACCES: permission denied')) };
@@ -654,6 +679,6 @@ describe('App', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't import those paths");
     expect(screen.getByRole('heading', { name: 'Cleanup' })).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Needs import' })).toHaveTextContent('.cursor/skills/tdd');
+    expect(screen.getByRole('list', { name: 'Needs import' })).toHaveTextContent('.cursor/rules/extra.mdc');
   });
 });

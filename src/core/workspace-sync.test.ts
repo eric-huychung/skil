@@ -40,6 +40,21 @@ describe('buildSyncAudit', () => {
     expect(audit.rows[0]?.canonicalPath).toBeUndefined();
   });
 
+  it('classifies same SKILL.md but different supporting files as drift', () => {
+    const fs = new InMemoryFileSystemAdapter();
+    const body = '# tdd\n';
+    fs.writeFile('.agents/skills/tdd/SKILL.md', body);
+    fs.writeFile('.claude/skills/tdd/SKILL.md', body);
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', body);
+    fs.writeFile('.cursor/skills/tdd/scripts/run.sh', '#!/bin/sh\n');
+
+    const audit = buildSyncAudit(fs, [leftover('skill', 'tdd', '.cursor/skills/tdd')]);
+
+    expect(audit.driftCount).toBe(1);
+    expect(audit.readyCount).toBe(0);
+    expect(audit.rows[0]?.status).toBe('drift');
+  });
+
   it('classifies a leftover skill matching the live hash as ready-to-remove', () => {
     const fs = new InMemoryFileSystemAdapter();
     fs.writeFile('.agents/skills/tdd/SKILL.md', '# tdd\n');
@@ -73,19 +88,47 @@ describe('buildSyncAudit', () => {
     expect(audit.rows[0]?.hashHere).not.toBe(audit.rows[0]?.hashCanonical);
   });
 
-  it('never lists parked or already-canonical paths', () => {
+  it('never lists parked or already-canonical skill paths', () => {
     const fs = new InMemoryFileSystemAdapter();
     fs.writeFile('.skil/parked/skills/design/SKILL.md', '# design\n');
     fs.writeFile('.agents/skills/tdd/SKILL.md', '# tdd\n');
-    fs.writeFile('.agents/commands/build.md', writeCommandFile('build', []));
 
     const audit = buildSyncAudit(fs, [
       leftover('skill', 'design', '.skil/parked/skills/design'),
       leftover('skill', 'tdd', '.agents/skills/tdd'),
-      leftover('command', 'build', '.agents/commands/build.md'),
     ]);
 
     expect(audit.rows).toEqual([]);
+  });
+
+  it('marks a leftover extra of a parked skill as ready-to-remove, not needs-import', () => {
+    const fs = new InMemoryFileSystemAdapter();
+    fs.writeFile('.skil/parked/skills/tdd/SKILL.md', '# parked\n');
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# leftover\n');
+
+    const audit = buildSyncAudit(fs, [leftover('skill', 'tdd', '.cursor/skills/tdd')]);
+
+    expect(audit.needsImportCount).toBe(0);
+    expect(audit.readyCount).toBe(1);
+    expect(audit.rows[0]).toMatchObject({
+      status: 'ready-to-remove',
+      canonicalPath: '.skil/parked/skills/tdd',
+    });
+  });
+
+  it('classifies leftover command files under .agents/commands as needs-import', () => {
+    const fs = new InMemoryFileSystemAdapter();
+    fs.writeFile('.agents/commands/build.md', writeCommandFile('build', []));
+
+    const audit = buildSyncAudit(fs, [leftover('command', 'build', '.agents/commands/build.md')]);
+
+    expect(audit.needsImportCount).toBe(1);
+    expect(audit.rows[0]).toMatchObject({
+      kind: 'command',
+      id: 'build',
+      path: '.agents/commands/build.md',
+      status: 'needs-import',
+    });
   });
 
   it('uses nested live-pair copies: matching leftover is ready-to-remove, an edit is drift', () => {

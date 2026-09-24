@@ -35,7 +35,7 @@ export function registerScanCommand(program: Command, engine: ICollectionEngine)
   program
     .command('scan')
     .description(
-      'Pull: scan SKILL.md folders in this repo. The command map stays. Does not read commands/ or sync a team config.'
+      'Pull: scan SKILL.md folders. Copies leftover-only skills/commands into the live pair. The command map stays. Does not read commands/ or sync a team config.'
     )
     .action(() => {
       printOutcome(runScan(engine));

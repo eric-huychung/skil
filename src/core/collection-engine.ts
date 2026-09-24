@@ -36,6 +36,7 @@ import {
 } from './project-rules.js';
 import { computeLlmFindings, computeSkillFindings, estimateTokens, llmFindingsCacheKey, parseDescription } from './health-checks.js';
 import type { LlmFindingsSkillInput } from './health-checks.js';
+import { relocateSkillFolder } from './skill-folder.js';
 import { buildSyncAudit, readSyncBodies } from './workspace-sync.js';
 import {
   filterShelvesByRole,
@@ -784,7 +785,15 @@ export class CollectionEngine implements ICollectionEngine {
     }
 
     const written = this.state.commands.flatMap((command) => this.writeThroughCommandSkill(command.name));
-    this.writtenPaths = written;
+    const imported = this.importMissingLeftovers();
+    if (!isOk(imported)) {
+      return err(new Error(`Failed to import leftovers: ${imported.error.message}`));
+    }
+    const filled = this.fillMissingLiveCopies();
+    if (!isOk(filled)) {
+      return err(new Error(`Failed to import leftovers: ${filled.error.message}`));
+    }
+    this.writtenPaths = [...written, ...this.writtenPaths, ...filled.value];
 
     const alwaysOnWarnings = leftoverAlwaysOnWarnings(this.fs);
     return ok({ added, gone, changed, alwaysOnWarnings });
@@ -920,6 +929,75 @@ export class CollectionEngine implements ICollectionEngine {
   }
 
   async importToCanonical(ids: string[]): Promise<Result<AdoptResult>> {
+    return this.importToCanonicalSync(ids);
+  }
+
+  /** Leftover-only copies (no live, not parked) → live pair / AGENTS.md. */
+  private importMissingLeftovers(): Result<AdoptResult> {
+    const listed = this.leftovers();
+    if (!isOk(listed)) {
+      return listed;
+    }
+    const ids = [
+      ...new Set(
+        buildSyncAudit(this.fs, listed.value)
+          .rows.filter((row) => row.status === 'needs-import' && row.kind !== 'rule')
+          .map((row) => row.id)
+      ),
+    ];
+    if (ids.length === 0) {
+      this.writtenPaths = [];
+      return ok({ adopted: [], deprecated: [] });
+    }
+    const imported = this.importToCanonicalSync(ids, { skipErrors: true });
+    return isOk(imported) ? imported : ok({ adopted: [], deprecated: [] });
+  }
+
+  /** Copy leftover or present live into any missing live-pair folder. Skip parked. */
+  private fillMissingLiveCopies(): Result<string[]> {
+    const written: string[] = [];
+    for (const record of this.state.skills) {
+      if (isOk(this.fs.readFile(`${parkedSkillPath(record.id)}/SKILL.md`))) {
+        continue;
+      }
+      if (this.state.commands.some((command) => command.name === record.id) || this.liveIsCommandSkill(record.id)) {
+        continue;
+      }
+      const livePaths = liveSkillPaths(record.id);
+      const missing = livePaths.filter((path) => !isOk(this.fs.readFile(`${path}/SKILL.md`)));
+      if (missing.length === 0) {
+        continue;
+      }
+      const source =
+        livePaths.find((path) => isOk(this.fs.readFile(`${path}/SKILL.md`))) ??
+        record.paths.find(
+          (path) => !isLiveSkillPath(path) && !isParkedPath(path) && isOk(this.fs.readFile(`${path}/SKILL.md`))
+        );
+      if (!source) {
+        continue;
+      }
+      for (const path of missing) {
+        const copied = this.fs.copyDir(source, path);
+        if (!isOk(copied)) {
+          return err(new Error(`Failed to adopt '${record.id}': ${copied.error.message}`));
+        }
+        written.push(path);
+      }
+      record.paths = [...new Set([...record.paths, ...livePaths])];
+    }
+    if (written.length > 0) {
+      const persistResult = this.persist();
+      if (!isOk(persistResult)) {
+        return err(new Error(`Failed to save after import: ${persistResult.error.message}`));
+      }
+    }
+    return ok(written);
+  }
+
+  private importToCanonicalSync(
+    ids: string[],
+    opts?: { skipErrors?: boolean }
+  ): Result<AdoptResult> {
     const listed = this.leftovers();
     if (!isOk(listed)) {
       return listed;
@@ -931,6 +1009,7 @@ export class CollectionEngine implements ICollectionEngine {
     const idSet = new Set(ids);
     const targets = listed.value.filter((row) => idSet.has(row.id) && needsImport.has(row.id));
     const importedIds = new Set<string>();
+    const written: string[] = [];
 
     for (const row of targets) {
       if (importedIds.has(row.id)) {
@@ -938,10 +1017,14 @@ export class CollectionEngine implements ICollectionEngine {
       }
       const adoptResult = this.adoptOne(row);
       if (!isOk(adoptResult)) {
+        if (opts?.skipErrors) {
+          continue;
+        }
         return err(adoptResult.error);
       }
       if (adoptResult.value) {
         importedIds.add(row.id);
+        written.push(...this.writtenPaths);
       }
     }
 
@@ -950,6 +1033,7 @@ export class CollectionEngine implements ICollectionEngine {
       return err(new Error(`Failed to save after import: ${persistResult.error.message}`));
     }
 
+    this.writtenPaths = written;
     return ok({ adopted: [...importedIds], deprecated: [] });
   }
 
@@ -1142,16 +1226,12 @@ export class CollectionEngine implements ICollectionEngine {
         }
       }
       record.paths = [...new Set([...record.paths, ...livePaths])];
+      this.writtenPaths = missing;
       return ok(true);
     }
 
     if (row.kind === 'command') {
-      const command = this.state.commands.find((c) => c.name === row.id);
-      if (!command) {
-        return ok(false);
-      }
-      const on = this.turnCommandOn(row.id, command);
-      return isOk(on) ? ok(true) : err(on.error);
+      return this.adoptLeftoverCommand(row);
     }
 
     const name = leftoverRuleId(row.path);
@@ -1170,6 +1250,69 @@ export class CollectionEngine implements ICollectionEngine {
     if (!isOk(written)) {
       return err(new Error(`Failed to adopt '${row.id}': ${written.error.message}`));
     }
+    this.writtenPaths = [AGENTS_MD];
+    return ok(true);
+  }
+
+  /**
+   * Leftover dock command file → live command skill pair. Creates the
+   * command in state if scan never saw it (scan only walks skill folders).
+   * Leaves the leftover in place; caller persist()s.
+   */
+  private adoptLeftoverCommand(row: LeftoverRecord): Result<boolean> {
+    const contents = this.fs.readFile(row.path);
+    if (!isOk(contents) || !isSkilStamped(contents.value)) {
+      return ok(false);
+    }
+    const unsafe = rejectUnsafeCatalogId(row.id, 'command');
+    if (unsafe) return unsafe;
+
+    for (const path of liveSkillPaths(row.id)) {
+      const skillMd = this.fs.readFile(`${path}/SKILL.md`);
+      if (isOk(skillMd) && !isCommandSkillStamp(skillMd.value)) {
+        return err(
+          new Error(
+            `Cannot import '${row.id}': '${path}' already exists and is not a command skil manages. Rename or remove that skill first.`
+          ),
+          { code: 'COMMAND_NAME_COLLISION', labels: [row.id] }
+        );
+      }
+    }
+
+    const leftoverSkills = parseStampedSkills(contents.value) ?? [];
+    let command = this.state.commands.find((item) => item.name === row.id);
+    const created = !command;
+    if (!command) {
+      command = {
+        name: row.id,
+        skills: leftoverSkills,
+        createdAt: new Date().toISOString(),
+      };
+      this.state.commands.push(command);
+    }
+
+    const livePaths = liveSkillPaths(row.id);
+    const missing = livePaths.filter((path) => !isOk(this.fs.readFile(`${path}/SKILL.md`)));
+    if (missing.length === 0) {
+      return ok(false);
+    }
+
+    const body = writeCommandFile(row.id, command.skills, contents.value);
+    const written: string[] = [];
+    for (const path of missing) {
+      const skillMd = this.fs.writeFile(`${path}/SKILL.md`, body);
+      if (!isOk(skillMd)) {
+        if (created) this.state.commands.pop();
+        return err(new Error(`Failed to adopt '${row.id}': ${skillMd.error.message}`));
+      }
+      const yaml = this.fs.writeFile(`${path}/agents/openai.yaml`, writeOpenAiYaml());
+      if (!isOk(yaml)) {
+        if (created) this.state.commands.pop();
+        return err(new Error(`Failed to adopt '${row.id}': ${yaml.error.message}`));
+      }
+      written.push(path);
+    }
+    this.writtenPaths = written;
     return ok(true);
   }
 
@@ -1222,17 +1365,13 @@ export class CollectionEngine implements ICollectionEngine {
     return ok([AGENTS_MD]);
   }
 
-  /** Skill leftovers are folders (copyDir/removeDir); command/rule leftovers are single files. */
+  /** Skill leftovers are full folders; command/rule leftovers are single files. */
   private moveToDeprecated(row: LeftoverRecord): Result<string> {
     const dest = deprecatedPathFor(row.path);
     if (row.kind === 'skill') {
-      const copied = this.fs.copyDir(row.path, dest);
-      if (!isOk(copied)) {
-        return err(new Error(`Failed to deprecate '${row.path}': ${copied.error.message}`));
-      }
-      const removed = this.fs.removeDir(row.path);
-      if (!isOk(removed)) {
-        return err(new Error(`Failed to remove leftover '${row.path}': ${removed.error.message}`));
+      const moved = relocateSkillFolder(this.fs, row.path, dest);
+      if (!isOk(moved)) {
+        return err(new Error(`Failed to deprecate '${row.path}': ${moved.error.message}`));
       }
       return ok(dest);
     }

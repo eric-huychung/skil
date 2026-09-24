@@ -27,7 +27,7 @@ const groups: {
     title: 'Skills',
     note: 'On = live pair. Off = parked, not deleted. Not skil enable — that one’s for commands.',
     commands: [
-      { cmd: 'skil scan', desc: 'find SKILL.md folders. read only.' },
+      { cmd: 'skil scan', desc: 'find SKILL.md folders. leftover-only copies into live pair.' },
       { cmd: 'skil skills', desc: 'catalog, on / off' },
       { cmd: 'skil skills enable <id>', desc: 'turn a skill on' },
       { cmd: 'skil skills disable <id>', desc: 'park it' },
