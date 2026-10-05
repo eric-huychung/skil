@@ -72,6 +72,23 @@ describe('MarketSync.crawlListing', () => {
     }
   });
 
+  it('continues past the 20-page boundary instead of applying an implicit page cap', async () => {
+    const store = new InMemoryMarketStore();
+    const pages = Array.from({ length: 21 }, (_, index) => ({
+      items: [listingItem(`a/page-${index}`)],
+      ...(index < 20 ? { nextCursor: `page-${index + 1}` } : {}),
+    }));
+    const client = fakeClient(pages);
+    const sync = syncOf(store, client);
+
+    const result = await sync.crawlListing();
+
+    expect(isOk(result)).toBe(true);
+    expect(client.listPage).toHaveBeenCalledTimes(21);
+    expect(client.listPage).toHaveBeenLastCalledWith('page-20');
+    expect(isOk(result) && result.value.queued).toContain('a/page-20');
+  });
+
   it('does not re-queue a known id that already has a hash', async () => {
     const store = new InMemoryMarketStore();
     await store.upsertListing(listingItem('a/known'), '2025-12-01T00:00:00.000Z');
