@@ -40,7 +40,7 @@ We wrap skills.sh (OIDC backend) and `npx skills add`. We do not host a marketpl
 Six tabs. Same engine as the CLI. No login.
 
 - **Sync** — pick / change folder, recents (max 5), leftover cleanup.
-- **Discover** — Top / Trending / role shelves / search, plus Suggested (editorial without a key; LLM-rerank with one). `+` installs to the live pair.
+- **Discover** — Top / Trending / Creators / role shelves / search, plus Suggested (editorial without a key; LLM-rerank with one). `+` installs to the live pair.
 - **Skills** — the catalog. Market vs Project is a filter. Toggle per row. Preview, Delete, Update (unedited) / Reset (edited).
 - **Commands** — one list. Create, file, remove, delete, toggle. Health strip per row. Filed skills show Claude read counts.
 - **Rules** — shared sections toggle; glob rows are read-only. Preview. Does not create rules.
@@ -70,6 +70,8 @@ GUI keeps Discover browse, leftover cleanup, DiskWatch, recents, encrypted keys.
 - One `/build` for the project, not one per tool. File without enabling. Toggle writes both trees.
 - Turning `/build` on refuses clearly if a skill already owns that folder name.
 - Discover `+` turns a market skill on immediately. Update when the market moved and we did not edit; Reset if we did.
+- Discover Creators sits next to Top / Trending: 30 creators from a hand-edited list, each card with skill count, total installs ("installs, skills.sh") and an "Official on skills.sh" badge when skills.sh lists the owner. Never "verified". Click → that creator's skills grouped by repo, with topic chips and `+` (Landing: copy `npx skills add`).
+- Shelves collapse a vendor suite to one row, "name, +N more" (click searches the suite), and cap one owner at 5 rows per shelf.
 - Leftover cleanup adopts what's missing and deprecates the rest.
 - Doctor flags idle-cost, fat-body, unused, hash-split, and secrets with no key. A local LLM key adds conflict / vague-trigger. Key stays on this machine, sent only to the provider.
 - Suggested ranks market skills for this `package.json`. No folder → connect prompt. No key → editorial picks + Settings warning. `skil suggest` prints the same ids.
