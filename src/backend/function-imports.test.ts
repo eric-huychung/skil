@@ -25,6 +25,7 @@ function relativeImportSpecifiers(source: string): string[] {
  * crashes at load time with FUNCTION_INVOCATION_FAILED.
  */
 describe('Vercel function relative imports', () => {
+  // Compiles the project and spawns a Node process per import; well over vitest's 5s default under load.
   it('resolve to real files that native Node ESM can load', () => {
     execFileSync(resolve(repoRoot, 'node_modules/typescript/bin/tsc'), ['-p', 'tsconfig.json'], {
       cwd: repoRoot,
@@ -46,5 +47,5 @@ describe('Vercel function relative imports', () => {
         );
       }
     }
-  });
+  }, 60_000);
 });
