@@ -603,3 +603,82 @@ describe('InMemoryMarketStore creator checks', () => {
     expect(isOk(rows) && rows.value).toEqual([]);
   });
 });
+
+describe('InMemoryMarketStore.searchListings (T21 relevance-first)', () => {
+  async function seed(rows: Array<{ id: string; installs: number; description?: string }>) {
+    const store = new InMemoryMarketStore();
+    for (const row of rows) {
+      await store.upsertListing(listing(row.id, { installs: row.installs }), '2026-01-01T00:00:00.000Z');
+      if (row.description) await store.setDetail(row.id, { description: row.description, hash: null });
+    }
+    return store;
+  }
+
+  async function searchIds(store: InMemoryMarketStore, q: string, limit = 25) {
+    const result = await store.searchListings(q, { limit });
+    if (!isOk(result)) throw result.error;
+    return result.value.map((row) => row.id);
+  }
+
+  it('ranks an exact name above prefix and text matches with more installs (shadcn)', async () => {
+    const store = await seed([
+      { id: 'ui-kit', installs: 9000, description: 'Components built on shadcn and Tailwind' },
+      { id: 'shadcn-ui-blocks', installs: 5000 },
+      { id: 'shadcn', installs: 10 },
+      { id: 'react-forms', installs: 8000, description: 'Form helpers' },
+    ]);
+
+    expect(await searchIds(store, 'shadcn')).toEqual(['shadcn', 'shadcn-ui-blocks', 'ui-kit']);
+    expect(await searchIds(store, 'ShadCN')).toEqual(['shadcn', 'shadcn-ui-blocks', 'ui-kit']);
+  });
+
+  it('finds a name from a typo and keeps exact > prefix > text for the correct spelling (tdd / tddd)', async () => {
+    const store = await seed([
+      { id: 'test-runner', installs: 7000, description: 'Run tests in a tdd loop' },
+      { id: 'tdd-workflow', installs: 3000 },
+      { id: 'tdd', installs: 100 },
+      { id: 'docs-writer', installs: 9000, description: 'Write docs' },
+    ]);
+
+    expect(await searchIds(store, 'tdd')).toEqual(['tdd', 'tdd-workflow', 'test-runner']);
+    expect(await searchIds(store, 'tddd')).toEqual(['tdd']);
+  });
+
+  it('answers a concept query from descriptions, every word required, installs as the tie-break', async () => {
+    const store = await seed([
+      { id: 'jest-helper', installs: 200, description: 'Write tests with Jest' },
+      { id: 'pytest-pro', installs: 900, description: 'Generate and write tests for Python code' },
+      { id: 'docs-writer', installs: 5000, description: 'Write docs for a project' },
+      { id: 'flaky-hunter', installs: 9000, description: 'Find flaky tests' },
+    ]);
+
+    expect(await searchIds(store, 'write tests')).toEqual(['pytest-pro', 'jest-helper']);
+  });
+
+  it('puts close trigram matches above text-only matches, most similar first', async () => {
+    const store = await seed([
+      { id: 'notes', installs: 9000, description: 'Keeps a changelog of your notes' },
+      { id: 'chnagelog', installs: 500 },
+      { id: 'change-log', installs: 10 },
+    ]);
+
+    // Neither name contains `changelog`; both are typo-close (trigram), and
+    // the closer one wins over installs. The description match comes last.
+    expect(await searchIds(store, 'changelog')).toEqual(['change-log', 'chnagelog', 'notes']);
+  });
+
+  it('excludes inactive rows, honors the limit, and returns nothing for a blank query', async () => {
+    const store = await seed([
+      { id: 'shadcn', installs: 10 },
+      { id: 'shadcn-old', installs: 99999 },
+      { id: 'shadcn-forms', installs: 50 },
+    ]);
+    await store.upsertListing(listing('shadcn', { installs: 10 }), '2026-02-01T00:00:00.000Z');
+    await store.upsertListing(listing('shadcn-forms', { installs: 50 }), '2026-02-01T00:00:00.000Z');
+    await store.markInactiveBefore('2026-02-01T00:00:00.000Z');
+
+    expect(await searchIds(store, 'shadcn')).toEqual(['shadcn', 'shadcn-forms']);
+    expect(await searchIds(store, 'shadcn', 1)).toEqual(['shadcn']);
+    expect(await searchIds(store, '   ')).toEqual([]);
+  });
+});

@@ -213,7 +213,7 @@ describe('handleMarketSearchRequest', () => {
     expect(body.error).toBe('invalid_request');
   });
 
-  it('returns id/name/installs rows matching name or description, ranked by installs', async () => {
+  it('returns id/name/installs rows matching name or description, name prefix ranked above a description match', async () => {
     const store = new InMemoryMarketStore();
     await store.upsertListing(listing('a/one', { name: 'SQL helper', installs: 5 }), '2026-01-01T00:00:00.000Z');
     await store.upsertListing(listing('a/two', { name: 'Other', installs: 50 }), '2026-01-01T00:00:00.000Z');
@@ -228,8 +228,8 @@ describe('handleMarketSearchRequest', () => {
     expect(response.status).toBe(200);
     expect(body).toEqual({
       data: [
-        { id: 'a/two', name: 'Other', installs: 50 },
         { id: 'a/one', name: 'SQL helper', installs: 5 },
+        { id: 'a/two', name: 'Other', installs: 50 },
       ],
     });
   });
