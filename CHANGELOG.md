@@ -4,7 +4,18 @@ All notable changes to skil are documented here. Versions follow [Semantic Versi
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-05
+
+Smarter Discover shelves and a new Creators tab.
+
+### Added
+- Discover has a **Creators** tab in the app and on the website: top skill authors, their skills grouped by repo, with a preview.
+- Six new topic shelves: Mobile, Languages, Game dev, Docs, AI / ML, and Agent tooling (27 shelves in all).
+- Search also matches a skill's owner and its topics.
+
 ### Changed
+- Every skill in the index is sorted onto shelves (not just the top 1,000), using its SKILL.md text as well as its name and description. A skill can sit on more than one shelf, and no single author can crowd a shelf.
+- Shelves refresh weekly in one all-or-nothing update, so Discover never shows a half-built set.
 - Scan copies leftover-only skills and commands into the live pair. Leftover glob rules stay path-scoped. Parked leftovers stay off.
 
 ## [0.7.2] - 2026-09-11

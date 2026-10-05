@@ -1,4 +1,4 @@
-export const SKIL_VERSION = '0.7.2';
+export const SKIL_VERSION = '0.8.0';
 
 // Public API surface for consumers embedding skil's engine directly
 // (currently: the GUI's Electron main process). CLI commands import from
