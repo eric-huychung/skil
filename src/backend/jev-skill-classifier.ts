@@ -13,6 +13,14 @@ export interface JevSkillClassifierDeps {
   requestsPerMinute?: number;
 }
 
+/** Jev usage so far, for the run summary. */
+export interface JevUsage {
+  /** `evaluate` calls made, retries included. */
+  modelCalls: number;
+  /** Sum of `inputTokens` over successful calls. */
+  inputTokens: number;
+}
+
 const DEFAULT_CONCURRENCY = 8;
 const DEFAULT_REQUESTS_PER_MINUTE = 600;
 
@@ -28,6 +36,8 @@ export class JevSkillClassifier implements SkillClassifier {
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly concurrency: number;
   private readonly intervalMs: number;
+  private modelCalls = 0;
+  private inputTokens = 0;
 
   constructor(
     private readonly client: JevClient,
@@ -37,6 +47,11 @@ export class JevSkillClassifier implements SkillClassifier {
     this.sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.concurrency = deps.concurrency ?? DEFAULT_CONCURRENCY;
     this.intervalMs = 60_000 / (deps.requestsPerMinute ?? DEFAULT_REQUESTS_PER_MINUTE);
+  }
+
+  /** Read-only counters across every `classify` call on this instance. */
+  get usage(): JevUsage {
+    return { modelCalls: this.modelCalls, inputTokens: this.inputTokens };
   }
 
   async classify(rows: LabelPoolRow[], questions: TopicQuestion[]): Promise<Result<SkillScore[]>> {
@@ -55,7 +70,10 @@ export class JevSkillClassifier implements SkillClassifier {
       const wait = slot - this.now();
       if (wait > 0) await this.sleep(wait);
       if (failure) return undefined;
-      return this.client.evaluate(state, jevQuestions);
+      this.modelCalls += 1;
+      const result = await this.client.evaluate(state, jevQuestions);
+      if (result.ok) this.inputTokens += result.value.inputTokens;
+      return result;
     };
 
     const scoreOne = async (row: LabelPoolRow): Promise<SkillScore | undefined> => {

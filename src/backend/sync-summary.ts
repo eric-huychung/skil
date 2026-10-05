@@ -93,12 +93,23 @@ export function failureKindOf(error: unknown, fallback: FailureKind): FailureKin
     : fallback;
 }
 
-function describeError(error: unknown, secrets: readonly string[]): string {
+/** What to do next, appended to `firstError` for failures whose raw message doesn't say. */
+const FAILURE_HINTS: Partial<Record<FailureKind, string>> = {
+  bad_answers: 'too many Jev answers failed validation; saved batches are kept and the next run retries errored rows',
+  incomplete_coverage:
+    'shelves left unchanged; some active rows have no current label, so let a full label run finish (not --dry-run) and re-run',
+};
+
+function describeError(error: unknown, kind: FailureKind, secrets: readonly string[]): string {
   const message = error instanceof Error ? error.message : String(error);
   const status = (error as { status?: unknown } | null)?.status;
   const text = typeof status === 'number' ? `${status} ${message}` : message;
   const redacted = redactSecrets(text, secrets).replace(/\s+/g, ' ').trim();
-  return redacted.length > MAX_ERROR_LENGTH ? `${redacted.slice(0, MAX_ERROR_LENGTH - 1)}…` : redacted;
+  const hint = FAILURE_HINTS[kind];
+  const suffix = hint ? ` (${hint})` : '';
+  const room = MAX_ERROR_LENGTH - suffix.length;
+  const head = redacted.length > room ? `${redacted.slice(0, room - 1)}…` : redacted;
+  return `${head}${suffix}`;
 }
 
 export function summarize(outcome: SyncRunOutcome): SyncRunSummary {
@@ -117,7 +128,7 @@ export function summarize(outcome: SyncRunOutcome): SyncRunSummary {
   if (outcome.failure) {
     summary.failedStep = outcome.failure.step;
     summary.failureKind = outcome.failure.kind;
-    summary.firstError = describeError(outcome.failure.error, outcome.secrets ?? []);
+    summary.firstError = describeError(outcome.failure.error, outcome.failure.kind, outcome.secrets ?? []);
   }
   return summary;
 }

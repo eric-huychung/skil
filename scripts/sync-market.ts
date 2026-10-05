@@ -10,6 +10,17 @@
  *   seed → classify top 1000 → write shelves
  *   Same path as Sunday GitHub Actions.
  *
+ * Jev labels + shelves (TEMPORARY flag until the job switches over; combine with the above):
+ *   npm run sync-market -- --classify-only --jev
+ *   labelPool (incremental, Jev) → rebuildShelves (coverage gate, one replaceShelves write)
+ *   instead of the old classify-top-1000 path. Incomplete label coverage fails the run (exit 1).
+ *
+ * Dry run (needs --jev; writes nothing: no seed, no crawl/hydrate, no labels, no shelves):
+ *   npm run sync-market -- --jev --dry-run
+ *   Prints the label diff and shelf-health numbers (unlabeled share, per-shelf counts and
+ *   distinct owners, review band). The coverage gate reads stored labels only, so it fails
+ *   until a real label run has saved them.
+ *
  * Smoke hydrate:
  *   npm run sync-market -- --max-detail=40
  *
@@ -39,6 +50,8 @@ import { SupabaseMarketStore } from '../src/backend/supabase-market-store.js';
 import { loadMarketCreators } from '../src/backend/market-creators.js';
 import { JevCreatorGate, printCreatorsReport } from '../src/backend/creators-report.js';
 import { GatewayJevClient } from '../src/backend/jev-client.js';
+import { JevSkillClassifier } from '../src/backend/jev-skill-classifier.js';
+import { runJevLabelAndShelves } from '../src/backend/jev-run.js';
 
 import {
   exitCodeFor,
@@ -87,6 +100,14 @@ function parseClassifyOnly(argv: string[]): boolean {
 
 function parseBackfillExcerpt(argv: string[]): boolean {
   return argv.includes('--backfill-excerpt');
+}
+
+function parseJev(argv: string[]): boolean {
+  return argv.includes('--jev');
+}
+
+function parseDryRun(argv: string[]): boolean {
+  return argv.includes('--dry-run');
 }
 
 function sleep(ms: number): Promise<void> {
@@ -154,8 +175,17 @@ async function run(state: RunState): Promise<SyncRunOutcome> {
   const classifyOnly = parseClassifyOnly(flags);
   const maxDetail = parseMaxDetail(flags);
   const backfillExcerpt = parseBackfillExcerpt(flags);
+  const jev = parseJev(flags);
+  const dryRun = parseDryRun(flags);
 
-  if (!classifyOnly && !oidcToken) {
+  if (dryRun && !jev) {
+    return configError(state, '--dry-run needs --jev (the old classify path has no dry run).');
+  }
+  if (dryRun && backfillExcerpt) {
+    return configError(state, '--dry-run cannot be combined with --backfill-excerpt (backfill writes excerpts).');
+  }
+
+  if (!classifyOnly && !dryRun && !oidcToken) {
     return configError(
       state,
       'Missing VERCEL_OIDC_TOKEN. Run: npm i -g vercel && vercel link && vercel env pull (writes .env.local).',
@@ -184,6 +214,16 @@ async function run(state: RunState): Promise<SyncRunOutcome> {
     return { shelvesWritten: false, secrets: state.secrets };
   }
 
+  if (dryRun) {
+    state.step = 'label';
+    console.log('Dry run: skip seed and listing crawl; no label or shelf writes.');
+    const outcome = await runJevLabelAndShelves(
+      { sync, store, classifier: jevClassifier(gatewayKey), log: (line) => console.log(line) },
+      { dryRun: true },
+    );
+    return { ...outcome, secrets: state.secrets };
+  }
+
   state.step = 'seed';
   console.log(`Seeding ${SEED_ROLES.length} roles / ${SEED_FIELDS.length} fields...`);
   for (const role of SEED_ROLES) {
@@ -206,6 +246,19 @@ async function run(state: RunState): Promise<SyncRunOutcome> {
     if (!isOk(drained)) return fail(state, 'unavailable', drained.error);
   } else {
     console.log('Classify-only: skip listing crawl.');
+  }
+
+  if (jev) {
+    state.step = 'label';
+    const outcome = await runJevLabelAndShelves({
+      sync,
+      store,
+      classifier: jevClassifier(gatewayKey),
+      log: (line) => console.log(line),
+    });
+    state.shelvesWritten = outcome.shelvesWritten;
+    if (!outcome.failure) console.log('Done.');
+    return { ...outcome, secrets: state.secrets };
   }
 
   state.step = 'label';
@@ -233,6 +286,10 @@ async function run(state: RunState): Promise<SyncRunOutcome> {
 
   console.log('Done.');
   return { shelvesWritten: state.shelvesWritten, secrets: state.secrets };
+}
+
+function jevClassifier(apiKey: string): JevSkillClassifier {
+  return new JevSkillClassifier(new GatewayJevClient({ fetchImpl: fetch, apiKey }));
 }
 
 function writeSummary(outcome: SyncRunOutcome): number {
