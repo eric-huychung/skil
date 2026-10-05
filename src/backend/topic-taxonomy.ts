@@ -44,8 +44,8 @@ export const TOPIC_QUESTIONS: TopicQuestion[] = [
   ),
 ];
 
-/** Starting value, tuned on the gold set. Not part of the version: all probabilities are stored. */
-export const TOPIC_THRESHOLD = 0.6;
+/** Lowered from 0.6 after the first label run left 41% of skills with no topic (26% at 0.4). Not part of the version: all probabilities are stored. */
+export const TOPIC_THRESHOLD = 0.4;
 export const MAX_TOPICS_PER_SKILL = 3;
 export const REVIEW_BAND = { low: 0.4, high: 0.6 } as const;
 

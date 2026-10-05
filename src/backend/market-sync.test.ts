@@ -862,9 +862,9 @@ describe('MarketSync.rebuildShelves', () => {
     await label(store, {
       'old/r/kept': { frontend: 0.1, integrations: 0.1 },
       'a/r/one': { frontend: 0.9, integrations: 0.1 },
-      'a/r/two': { frontend: 0.7, integrations: 0.45 },
-      'b/r/three': { frontend: 0.65, integrations: 0.1 },
-      'c/r/unsure': { frontend: 0.5, integrations: 0.55 },
+      'a/r/two': { frontend: 0.7, integrations: TOPIC_THRESHOLD - 0.1 },
+      'b/r/three': { frontend: 0.55, integrations: 0.1 },
+      'c/r/unsure': { frontend: TOPIC_THRESHOLD - 0.05, integrations: TOPIC_THRESHOLD - 0.01 },
       'd/r/errored': null,
       'e/r/blank': { frontend: 0, integrations: 0 },
     });
@@ -878,7 +878,7 @@ describe('MarketSync.rebuildShelves', () => {
       errored: 1,
       unlabeled: 4,
       unlabeledShare: 4 / 7,
-      reviewBand: 2,
+      reviewBand: 1,
       fields: [
         { slug: 'frontend', count: 3, distinctOwners: 2, topOwnerShare: 2 / 3 },
         { slug: 'integrations', count: 0, distinctOwners: 0, topOwnerShare: 0 },

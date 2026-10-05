@@ -17,6 +17,13 @@ const scores: SkillScore[] = [
 describe('taxonomy review', () => {
   it('reports unlabeled, review-band, and missing rows without dropping their scores', () => {
     expect(buildTaxonomyReview(pool, scores)).toEqual([
+      expect.objectContaining({ id: 'a/review', flags: ['review-band'] }),
+      expect.objectContaining({ id: 'a/missing', flags: ['unlabeled'], status: 'missing' }),
+    ]);
+  });
+
+  it('flags a below-threshold score in the band as both unlabeled and review-band', () => {
+    expect(buildTaxonomyReview(pool, scores, { threshold: 0.6 })).toEqual([
       expect.objectContaining({ id: 'a/review', flags: ['unlabeled', 'review-band'] }),
       expect.objectContaining({ id: 'a/missing', flags: ['unlabeled'], status: 'missing' }),
     ]);

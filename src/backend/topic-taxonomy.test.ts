@@ -54,8 +54,8 @@ describe('TAXONOMY_VERSION', () => {
 });
 
 describe('constants', () => {
-  it('match the design starting values', () => {
-    expect(TOPIC_THRESHOLD).toBe(0.6);
+  it('match the tuned values', () => {
+    expect(TOPIC_THRESHOLD).toBe(0.4);
     expect(MAX_TOPICS_PER_SKILL).toBe(3);
     expect(REVIEW_BAND).toEqual({ low: 0.4, high: 0.6 });
   });
