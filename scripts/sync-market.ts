@@ -33,7 +33,8 @@ import { RealMarketSkillsClient } from '../src/backend/market-skills-client.js';
 import { LlmSkillClassifier } from '../src/backend/llm-skill-classifier.js';
 import { SupabaseMarketStore } from '../src/backend/supabase-market-store.js';
 import { loadMarketCreators } from '../src/backend/market-creators.js';
-import { printCreatorsReport } from '../src/backend/creators-report.js';
+import { JevCreatorGate, printCreatorsReport } from '../src/backend/creators-report.js';
+import { GatewayJevClient } from '../src/backend/jev-client.js';
 
 import {
   exitCodeFor,
@@ -228,24 +229,32 @@ function writeSummary(outcome: SyncRunOutcome): number {
   return exitCodeFor(summary);
 }
 
-/** `--creators-report`: prints only. No summary file, no store or YAML writes. */
+/** `--creators-report`: prints only. No summary file, no YAML writes; the only store write is the creator-check cache. */
 async function creatorsReport(): Promise<number> {
   loadEnvFile('.env');
   loadEnvFile('.env.local');
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const gatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
   if (!supabaseUrl || !serviceRoleKey) {
     console.error('Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY. Copy .env.example to .env and fill them in.');
     return 1;
   }
+  if (!gatewayKey) {
+    console.error('Missing AI_GATEWAY_API_KEY. Add it to .env (Vercel AI Gateway).');
+    return 1;
+  }
   try {
     const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+    const store = new SupabaseMarketStore(supabase);
+    const jev = new GatewayJevClient({ fetchImpl: fetch, apiKey: gatewayKey });
     return await printCreatorsReport(
       {
-        store: new SupabaseMarketStore(supabase),
+        store,
         config: loadMarketCreators(),
         fetchImpl: fetch,
         githubToken: process.env.GITHUB_TOKEN?.trim() || undefined,
+        gate: new JevCreatorGate({ jev, store, warn: (line) => console.error(line) }),
       },
       { log: (line) => console.log(line), error: (line) => console.error(line) },
     );
