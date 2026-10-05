@@ -3,8 +3,7 @@ import type { LabelPoolRow, SkillScore, TopicQuestion } from './market-types.js'
 
 /**
  * Scores each skill against every topic question (design §4.4). Prod
- * adapters: `LlmSkillClassifier` (baseline), later Jev. Tests inject
- * `FakeSkillClassifier`.
+ * adapter: `JevSkillClassifier`. Tests inject `FakeSkillClassifier`.
  */
 export interface SkillClassifier {
   classify(rows: LabelPoolRow[], questions: TopicQuestion[]): Promise<Result<SkillScore[]>>;

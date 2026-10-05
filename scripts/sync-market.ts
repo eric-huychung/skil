@@ -3,7 +3,8 @@
  *
  * Full fill / recrawl (needs .env + VERCEL_OIDC_TOKEN from `vercel env pull`):
  *   npm run sync-market
- *   seed → crawl the skills.sh listing (~9.7k rows) → hydrate missing details → classify top 1000
+ *   seed → crawl the skills.sh listing (~9.7k rows) → hydrate missing details →
+ *   incrementally label the pool with Jev → rebuild shelves
  *
  * Reindex shelves only (needs AI_GATEWAY_API_KEY, no OIDC):
  *   npm run sync-market -- --classify-only

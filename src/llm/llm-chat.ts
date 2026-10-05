@@ -7,7 +7,7 @@ export type LlmProvider = 'anthropic' | 'openai' | 'openrouter';
  * A user's own LLM key, direct to the provider. `complete` is the only
  * method — health()'s conflict/vague-trigger slice and Settings' ping
  * both call it. Never routed through skil's backend or AI Gateway; see
- * `LlmSkillClassifier` for that separate, key-less path.
+ * `JevSkillClassifier` for that separate, key-less path.
  */
 export interface LlmChat {
   complete(opts: { system: string; user: string; maxTokens?: number }): Promise<Result<string>>;

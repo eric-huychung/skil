@@ -35,7 +35,7 @@ class MarketSync {                 // src/backend/market-sync.ts
 }
 ```
 
-Store adapters: `InMemoryMarketStore` (tests), `SupabaseMarketStore` (`supabase/migrations/0001`–`0008`). Seed: roles / fields in `src/backend/market-seed.ts`. Classifier: `JevSkillClassifier` → `GatewayJevClient` (`typesafe-ai/jev` via Vercel AI Gateway `/v1/evaluate`, `AI_GATEWAY_API_KEY`). Tests use `FakeSkillClassifier`. `refreshActiveFields` and `LlmSkillClassifier` (`gpt-4o-mini`, top 1000) are still in the tree; the script no longer calls them. Laptop `scripts/sync-market.ts` constructs `MarketSync` directly; GitHub Actions runs the same `--classify-only` path.
+Store adapters: `InMemoryMarketStore` (tests), `SupabaseMarketStore` (`supabase/migrations/0001`–`0008`). Seed: roles / fields in `src/backend/market-seed.ts`. Classifier: `JevSkillClassifier` → `GatewayJevClient` (`typesafe-ai/jev` via Vercel AI Gateway `/v1/evaluate`, `AI_GATEWAY_API_KEY`). Tests use `FakeSkillClassifier`. Laptop `scripts/sync-market.ts` constructs `MarketSync` directly; GitHub Actions runs the same `--classify-only` path.
 
 ## Labels
 
