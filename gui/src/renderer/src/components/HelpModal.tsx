@@ -47,7 +47,7 @@ const FAQ = [
   },
   {
     q: 'Do I need an account?',
-    a: 'No. Connect a folder. State lives in .skil/state.json in that repo. Nothing phones home.',
+    a: 'No. No account. Catalog is .skil/state.json in that folder. Discover fetches listings (skills.sh via skil.website). The website uses Vercel Analytics. Scan, toggles, doctor stay local.',
   },
   {
     q: 'I turned a skill off. Is it gone?',

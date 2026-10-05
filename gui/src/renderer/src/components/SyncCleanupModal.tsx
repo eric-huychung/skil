@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { FOCUS_RING } from '../lib/focus-ring';
 import type { DriftAction, SyncAudit, SyncRow } from '../../../shared/ipc';
+import ConfirmModal from './ConfirmModal';
 import SyncCompareDialog from './SyncCompareDialog';
 
 export function syncBannerText(audit: SyncAudit): string {
@@ -35,6 +36,7 @@ export default function SyncCleanupModal({
   const readyKey = ready.map((row) => row.path).join('\0');
   const [selected, setSelected] = useState<Set<string>>(() => new Set(ready.map((row) => row.path)));
   const [comparePath, setComparePath] = useState<string | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<string[] | null>(null);
 
   useEffect(() => {
     setSelected(new Set(readyKey === '' ? [] : readyKey.split('\0')));
@@ -68,10 +70,14 @@ export default function SyncCleanupModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="sync-cleanup-title"
+        aria-describedby="sync-cleanup-lede"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="sync-cleanup-header">
           <h2 id="sync-cleanup-title">Cleanup</h2>
+          <p id="sync-cleanup-lede" className="muted-copy">
+            Drop extra copies so agents read from .agents and .claude.
+          </p>
           <p className="muted-copy">{syncBannerText(audit)}</p>
         </header>
         {error && (
@@ -195,13 +201,33 @@ export default function SyncCleanupModal({
               type="button"
               className={`outline-button ${FOCUS_RING}`}
               disabled={busy || selectedReady.length === 0}
-              onClick={() => onRemove(selectedReady)}
+              onClick={() => setPendingRemove(selectedReady)}
             >
               Remove leftovers
             </button>
           )}
         </div>
       </div>
+      {pendingRemove && pendingRemove.length > 0 && (
+        <ConfirmModal
+          eyebrow="Sync"
+          titleId="remove-leftovers-title"
+          title={`Remove ${pendingRemove.length} ${pendingRemove.length === 1 ? 'leftover' : 'leftovers'}?`}
+          confirmLabel="Remove leftovers"
+          confirmDisabled={busy}
+          onCancel={() => setPendingRemove(null)}
+          onConfirm={() => {
+            const paths = pendingRemove;
+            setPendingRemove(null);
+            onRemove(paths);
+          }}
+        >
+          <p className="muted-copy">
+            We&apos;ll move them under <span className="sync-cleanup-path">.skil/deprecated/</span>. Check there if
+            you need to restore them.
+          </p>
+        </ConfirmModal>
+      )}
       {comparePath && <SyncCompareDialog path={comparePath} onClose={() => setComparePath(null)} />}
     </div>
   );

@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, watch as watchDir, type FSWatcher } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { createEngine } from '../../../src/create-engine.js';
 import { LlmCallCache } from '../../../src/llm/llm-call-cache.js';
@@ -16,6 +17,7 @@ import { isOk } from '../../../src/core/result.js';
 import type { LlmProvider } from '../../../src/llm/llm-chat.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
 import { checkAppUpdate, GITHUB_LATEST_RELEASE } from '../shared/app-update.js';
+import { isAppNavigationUrl, isSafeExternalUrl } from '../shared/window-policy.js';
 import { forgetFolder, parseRecentFolders, rememberFolder } from '../shared/recent-folders.js';
 import { llmStatus, loadLlmChat, removeLlmKey, revealLlmKey, saveLlmSettings, setActiveLlmKey } from './llm-settings.js';
 
@@ -283,16 +285,25 @@ safeHandle(IPC_CHANNELS.previewSync, (_event, path: string) => currentEngine().p
 safeHandle(IPC_CHANNELS.importToCanonical, async (_event, ids: string[]) => {
   const result = await currentEngine().importToCanonical(ids);
   muteOwnWrites();
+  if (isOk(result)) {
+    notifyScan({ added: result.value.adopted, gone: [], changed: [], alwaysOnWarnings: [] });
+  }
   return result;
 });
 safeHandle(IPC_CHANNELS.removeLeftovers, async (_event, paths: string[]) => {
   const result = await currentEngine().removeLeftovers(paths);
   muteOwnWrites();
+  if (isOk(result)) {
+    notifyScan({ added: [], gone: [], changed: [], alwaysOnWarnings: [] });
+  }
   return result;
 });
 safeHandle(IPC_CHANNELS.resolveDrift, async (_event, id: string, action: DriftAction, path?: string) => {
   const result = await currentEngine().resolveDrift(id, action, path);
   muteOwnWrites();
+  if (isOk(result)) {
+    notifyScan({ added: result.value.adopted, gone: [], changed: [], alwaysOnWarnings: [] });
+  }
   return result;
 });
 safeHandle(IPC_CHANNELS.health, () => currentEngine().health());
@@ -349,16 +360,31 @@ function createWindow(): void {
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
       // ESM preload + sandbox:true can fail to expose window.skil → blank window.
       sandbox: false,
     },
   });
 
+  const rendererDir = join(import.meta.dirname, '../renderer');
+  const rendererFilePrefix = pathToFileURL(rendererDir.endsWith('/') ? rendererDir : `${rendererDir}/`).href;
+  const openExternalIfSafe = (url: string): void => {
+    if (isSafeExternalUrl(url)) void shell.openExternal(url);
+  };
+  const stayInApp = (event: { preventDefault: () => void }, url: string): void => {
+    if (isAppNavigationUrl(url, { devServerUrl: process.env['ELECTRON_RENDERER_URL'], rendererFilePrefix })) return;
+    event.preventDefault();
+    openExternalIfSafe(url);
+  };
+
   window.on('ready-to-show', () => window.show());
   window.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    openExternalIfSafe(url);
     return { action: 'deny' };
   });
+  window.webContents.on('will-navigate', stayInApp);
+  window.webContents.on('will-redirect', stayInApp);
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     window.loadURL(process.env['ELECTRON_RENDERER_URL']);

@@ -42,3 +42,18 @@ export function groupRulesByFolder(rules: RuleRecord[]): RuleFolderGroup[] {
   }
   return groups;
 }
+
+/**
+ * Shared law is one file (`AGENTS.md`) — no leftover folder heading.
+ * Path-scoped leftover files still group by parent folder.
+ */
+export function groupRulesForPanel(rules: RuleRecord[]): RuleFolderGroup[] {
+  const shared = rules.filter((rule) => rule.kind === 'shared');
+  const glob = rules.filter((rule) => rule.kind === 'glob');
+  const groups: RuleFolderGroup[] = [];
+  if (shared.length > 0) {
+    groups.push({ key: 'shared', label: null, rules: shared });
+  }
+  groups.push(...groupRulesByFolder(glob));
+  return groups;
+}

@@ -21,22 +21,18 @@ describe('RulesPanel', () => {
     expect(await screen.findByRole('heading', { name: 'Rules' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Pick format:/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('pair-programming')).not.toBeInTheDocument();
 
-    const folder = screen.getByText('pair-programming').closest('.command-stage');
-    expect(folder).not.toBeNull();
-    const behavior = within(folder as HTMLElement).getByRole('listitem', { name: 'Rule pair-programming/behavior' });
+    const behavior = await screen.findByRole('listitem', { name: 'Rule behavior' });
     expect(within(behavior).getByText('behavior')).toBeInTheDocument();
     expect(behavior).not.toHaveTextContent('pair-programming/behavior');
-    expect(within(behavior).getByRole('button', { name: 'On', pressed: true })).toBeInTheDocument();
+    expect(within(behavior).getByRole('button', { name: 'Turn off behavior', pressed: true })).toBeInTheDocument();
 
-    const other = screen.getByText('Other').closest('.command-stage');
-    expect(other).not.toBeNull();
-    expect(other).not.toBe(folder);
-    const optional = within(other as HTMLElement).getByRole('listitem', { name: 'Rule optional' });
+    const optional = screen.getByRole('listitem', { name: 'Rule optional' });
     expect(within(optional).getByText('Path-scoped')).toBeInTheDocument();
-    expect(within(optional).queryByRole('button', { name: /^(On|Off)$/ })).not.toBeInTheDocument();
+    expect(within(optional).queryByRole('button', { name: /Always apply/ })).not.toBeInTheDocument();
 
-    expect(screen.queryByRole('dialog', { name: 'pair-programming/behavior' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'behavior' })).not.toBeInTheDocument();
   });
 
   it('hides a glob copy after it is imported into AGENTS.md', async () => {
@@ -76,8 +72,8 @@ describe('RulesPanel', () => {
 
     renderWithProviders(<RulesPanel />, { bridge });
 
-    expect(await screen.findByLabelText('pair-programming/behavior has a health warning')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'pair-programming/behavior has a health warning' })).not.toBeInTheDocument();
+    expect(await screen.findByLabelText('behavior has a health warning')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'behavior has a health warning' })).not.toBeInTheDocument();
     expect(screen.queryByText('Finding')).not.toBeInTheDocument();
   });
 
@@ -102,9 +98,9 @@ describe('RulesPanel', () => {
     });
 
     renderWithProviders(<RulesPanel />, { bridge });
-    await userEvent.click(await screen.findByRole('button', { name: 'Details for pair-programming/behavior' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Details for behavior' }));
 
-    const preview = await screen.findByRole('dialog', { name: 'pair-programming/behavior' });
+    const preview = await screen.findByRole('dialog', { name: 'behavior' });
     expect(await within(preview).findByText(/token/)).toBeInTheDocument();
     expect(within(preview).queryByText('Secret leak')).not.toBeInTheDocument();
 
@@ -121,16 +117,16 @@ describe('RulesPanel', () => {
 
     renderWithProviders(<RulesPanel />, { bridge });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Details for behavior' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Details for Hello rule' }));
 
-    const preview = await screen.findByRole('dialog', { name: 'behavior' });
-    expect(await within(preview).findByRole('heading', { name: 'Hello rule' })).toBeInTheDocument();
+    const preview = await screen.findByRole('dialog', { name: 'Hello rule' });
+    expect(await within(preview).findByRole('heading', { level: 2, name: 'Hello rule' })).toBeInTheDocument();
     expect(preview).toHaveTextContent('AGENTS.md');
     expect(preview).toHaveTextContent('Shared law');
-    expect(within(preview).getByRole('button', { name: 'On', pressed: true })).toBeInTheDocument();
+    expect(within(preview).getByRole('button', { name: 'Turn off Hello rule', pressed: true })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Close details' }));
-    expect(screen.queryByRole('dialog', { name: 'behavior' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Hello rule' })).not.toBeInTheDocument();
   });
 
   it('opens a preview modal for a glob rule and strips frontmatter', async () => {
@@ -140,10 +136,10 @@ describe('RulesPanel', () => {
 
     renderWithProviders(<RulesPanel />, { bridge });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Details for behavior' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Details for Hello rule' }));
 
-    const preview = await screen.findByRole('dialog', { name: 'behavior' });
-    expect(await within(preview).findByRole('heading', { name: 'Hello rule' })).toBeInTheDocument();
+    const preview = await screen.findByRole('dialog', { name: 'Hello rule' });
+    expect(await within(preview).findByRole('heading', { level: 2, name: 'Hello rule' })).toBeInTheDocument();
     expect(preview).not.toHaveTextContent('description: test');
     expect(preview).toHaveTextContent('.cursor/rules/behavior.mdc');
     expect(preview).toHaveTextContent('Path-scoped');
@@ -155,10 +151,10 @@ describe('RulesPanel', () => {
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<RulesPanel />, { bridge });
-    await userEvent.click(await screen.findByRole('button', { name: 'On', pressed: true }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Turn off body', pressed: true }));
 
-    expect(await screen.findByRole('button', { name: 'Off', pressed: false })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'behavior' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Always apply body', pressed: false })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'body' })).not.toBeInTheDocument();
   });
 
   it('turns a shared rule off, parking it, and back on, restoring the AGENTS.md section', async () => {
@@ -167,15 +163,15 @@ describe('RulesPanel', () => {
     const bridge = createTestBridge(engine);
 
     renderWithProviders(<RulesPanel />, { bridge });
-    await userEvent.click(await screen.findByRole('button', { name: 'On', pressed: true }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Turn off body', pressed: true }));
 
-    expect(await screen.findByRole('button', { name: 'Off', pressed: false })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Always apply body', pressed: false })).toBeInTheDocument();
     expect(fs.readFile('AGENTS.md')).toEqual({ ok: true, value: '' });
     expect(isOk(fs.readFile('.skil/parked/rules/behavior'))).toBe(true);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Off', pressed: false }));
+    await userEvent.click(screen.getByRole('button', { name: 'Always apply body', pressed: false }));
 
-    expect(await screen.findByRole('button', { name: 'On', pressed: true })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Turn off body', pressed: true })).toBeInTheDocument();
     const agents = fs.readFile('AGENTS.md');
     expect(isOk(agents)).toBe(true);
     if (isOk(agents)) {
@@ -191,10 +187,10 @@ describe('RulesPanel', () => {
     const bridge = { ...real, setSharedRuleEnabled: async () => err(new Error('EACCES: permission denied')) };
 
     renderWithProviders(<RulesPanel />, { bridge });
-    await userEvent.click(await screen.findByRole('button', { name: 'On', pressed: true }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Turn off body', pressed: true }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't update this rule");
-    expect(screen.getByRole('button', { name: 'On', pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Turn off body', pressed: true })).toBeInTheDocument();
   });
 
   it('refreshes after a watcher scan when a new rule appears', async () => {
@@ -230,8 +226,8 @@ describe('RulesPanel', () => {
 
     const folder = (await screen.findByText('team/security')).closest('.command-stage');
     expect(folder).not.toBeNull();
-    expect(within(folder as HTMLElement).getByRole('listitem', { name: 'Rule team/security/auth' })).toBeInTheDocument();
-    expect(within(folder as HTMLElement).getByRole('listitem', { name: 'Rule team/security/secrets' })).toBeInTheDocument();
+    expect(within(folder as HTMLElement).getByRole('listitem', { name: 'Rule auth' })).toBeInTheDocument();
+    expect(within(folder as HTMLElement).getByRole('listitem', { name: 'Rule secrets' })).toBeInTheDocument();
     expect(within(folder as HTMLElement).queryByRole('listitem', { name: 'Rule ship' })).not.toBeInTheDocument();
     const other = screen.getByText('Other').closest('.command-stage');
     expect(within(other as HTMLElement).getByRole('listitem', { name: 'Rule ship' })).toBeInTheDocument();

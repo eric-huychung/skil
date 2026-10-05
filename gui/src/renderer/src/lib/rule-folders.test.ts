@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { groupRulesByFolder, ruleFileName, ruleParentFolder } from './rule-folders';
+import { groupRulesByFolder, groupRulesForPanel, ruleFileName, ruleParentFolder } from './rule-folders';
 import type { RuleRecord } from '../../../shared/ipc';
 
 function rule(name: string, path = `${name}.mdc`): RuleRecord {
-  return { id: path, name, path, kind: 'glob' };
+  const slash = name.lastIndexOf('/');
+  return { id: path, name, title: slash === -1 ? name : name.slice(slash + 1), path, kind: 'glob' };
 }
 
 describe('ruleParentFolder', () => {
@@ -63,5 +64,25 @@ describe('groupRulesByFolder', () => {
 
     expect(groups.map((group) => group.key)).toEqual(['alpha', 'zeta']);
     expect(groups[1]?.rules.map((item) => item.name)).toEqual(['zeta/one', 'zeta/three']);
+  });
+});
+
+describe('groupRulesForPanel', () => {
+  it('does not put shared AGENTS.md sections under a leftover folder heading', () => {
+    const shared: RuleRecord = {
+      id: 'pair-programming/behavior',
+      name: 'pair-programming/behavior',
+      title: 'Pair Programming Behavior',
+      path: 'AGENTS.md',
+      kind: 'shared',
+      enabled: true,
+    };
+    const glob = rule('team/security/auth');
+
+    const groups = groupRulesForPanel([shared, glob]);
+
+    expect(groups.map((group) => group.label)).toEqual([null, 'team/security']);
+    expect(groups[0]?.rules.map((item) => item.title)).toEqual(['Pair Programming Behavior']);
+    expect(groups[1]?.rules.map((item) => item.name)).toEqual(['team/security/auth']);
   });
 });

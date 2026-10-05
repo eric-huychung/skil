@@ -53,6 +53,9 @@ describe('HelpModal', () => {
     expect(screen.getByText('What is Skil?')).toBeInTheDocument();
     expect(screen.getByText(/Do I need an account/i)).toBeInTheDocument();
     expect(screen.getByText(/I turned a skill off/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing phones home/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Vercel Analytics/i)).toBeInTheDocument();
+    expect(screen.getByText(/Discover fetches listings/i)).toBeInTheDocument();
   });
 
   it('keeps landing links, donate, and bug/idea on About', async () => {

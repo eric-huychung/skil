@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowRight,
@@ -10,8 +10,14 @@ import {
 } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
-import { groupInboxSkills, skillPathState } from '../lib/skill-sources';
+import {
+  groupInboxSkills,
+  shortSkillDescription,
+  skillFileName,
+  skillPathState,
+} from '../lib/skill-sources';
 import { findingsForSkill } from '../lib/skill-health';
+import { parseDescription } from '../../../../../src/core/skill-md.js';
 import { loadHealth, invalidateHealth } from '../lib/health-query';
 import type { HealthReport, OriginCheck, OriginStatus, ScanResult, SkillRecord } from '../../../shared/ipc';
 import { StatusNotice, StatusSkeleton } from '../../../../../shared/status';
@@ -25,9 +31,14 @@ function goneMessage(ids: string[]): string {
   return `Gone: ${ids.join(', ')}`;
 }
 
-function matchesQuery(skillId: string, query: string): boolean {
+function matchesQuery(skillId: string, query: string, description = ''): boolean {
   const needle = query.trim().toLowerCase();
-  return needle.length === 0 || skillId.toLowerCase().includes(needle);
+  if (needle.length === 0) return true;
+  return (
+    skillId.toLowerCase().includes(needle) ||
+    skillFileName(skillId).toLowerCase().includes(needle) ||
+    description.toLowerCase().includes(needle)
+  );
 }
 
 const ORIGIN_BADGE: Record<OriginStatus, { label: string; className: string }> = {
@@ -39,6 +50,7 @@ const ORIGIN_BADGE: Record<OriginStatus, { label: string; className: string }> =
 export default function InboxPanel() {
   const bridge = useBridge();
   const [catalog, setCatalog] = useState<SkillRecord[] | null>(null);
+  const [descriptions, setDescriptions] = useState<Record<string, string>>({});
   const [originById, setOriginById] = useState<Record<string, OriginStatus>>({});
   const [healthReport, setHealthReport] = useState<HealthReport>([]);
   const [query, setQuery] = useState('');
@@ -53,13 +65,25 @@ export default function InboxPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [toggleErrorId, setToggleErrorId] = useState<string | null>(null);
+  const refreshId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++refreshId.current;
     const [nextCatalog, nextChecks] = await Promise.all([bridge.listSkills(), bridge.originChecks()]);
+    if (id !== refreshId.current) return;
     setCatalog(nextCatalog);
     const checks: OriginCheck[] = nextChecks.ok ? nextChecks.value : [];
     setOriginById(Object.fromEntries(checks.map((check) => [check.skillId, check.status])));
+    const bodies = await Promise.all(
+      nextCatalog.map(async (skill) => {
+        const result = await bridge.readSkillMd(skill.id);
+        return [skill.id, result.ok ? parseDescription(result.value) : ''] as const;
+      })
+    );
+    if (id !== refreshId.current) return;
+    setDescriptions(Object.fromEntries(bodies));
     void loadHealth(bridge).then((report) => {
+      if (id !== refreshId.current) return;
       setHealthReport(report);
     });
   }, [bridge]);
@@ -87,16 +111,33 @@ export default function InboxPanel() {
   }, [bridge]);
 
   const ids = useMemo(() => (catalog ?? []).map((skill) => skill.id), [catalog]);
-  const matches = useMemo(() => ids.filter((skillId) => matchesQuery(skillId, query)), [ids, query]);
+  const matches = useMemo(
+    () => ids.filter((skillId) => matchesQuery(skillId, query, descriptions[skillId])),
+    [ids, query, descriptions]
+  );
   const groups = useMemo(() => groupInboxSkills(matches, catalog ?? []), [matches, catalog]);
-  const ordered = useMemo(() => groups.flatMap((group) => group.skills), [groups]);
+  const ordered = useMemo(
+    () => groups.flatMap((group) => group.sections?.flatMap((section) => section.skills) ?? group.skills),
+    [groups]
+  );
   const pageCount = ordered.length > 0 ? Math.ceil(ordered.length / PAGE_SIZE) : 0;
   const safePage = pageCount === 0 ? 0 : Math.min(page, pageCount - 1);
   const visibleStart = safePage * PAGE_SIZE;
   const visibleIds = ordered.slice(visibleStart, visibleStart + PAGE_SIZE);
   const visibleSet = new Set(visibleIds);
   const visibleGroups = groups
-    .map((group) => ({ ...group, skills: group.skills.filter((id) => visibleSet.has(id)) }))
+    .map((group) => {
+      const skills = (group.sections?.flatMap((section) => section.skills) ?? group.skills).filter((id) =>
+        visibleSet.has(id)
+      );
+      const sections = group.sections
+        ?.map((section) => ({
+          ...section,
+          skills: section.skills.filter((id) => visibleSet.has(id)),
+        }))
+        .filter((section) => section.skills.length > 0);
+      return { ...group, skills, sections };
+    })
     .filter((group) => group.skills.length > 0);
 
   const pendingRecord = pendingDelete ? (catalog ?? []).find((skill) => skill.id === pendingDelete) : undefined;
@@ -190,6 +231,60 @@ export default function InboxPanel() {
     }
   }
 
+  function renderSkillCard(skillId: string, groupKey: 'market' | 'project') {
+    const record = (catalog ?? []).find((skill) => skill.id === skillId);
+    const originStatus = originById[skillId];
+    const originBadge =
+      record?.source === 'skills.sh' && record.paths.length > 0 && originStatus
+        ? ORIGIN_BADGE[originStatus]
+        : null;
+    const displayName = groupKey === 'project' ? skillFileName(skillId) : skillId;
+    const blurb = shortSkillDescription(descriptions[skillId] ?? '');
+    return (
+      <li
+        className={`library-skill library-skill-interactive${originBadge ? ` origin-row origin-row-${originStatus}` : ''}`}
+        key={skillId}
+        aria-label={`Skill ${skillId}`}
+        onClick={() => setSelectedId(skillId)}
+      >
+        <button
+          type="button"
+          className={`library-skill-hit ${FOCUS_RING}`}
+          onClick={() => setSelectedId(skillId)}
+          aria-haspopup="dialog"
+          aria-label={`Details for ${skillId}`}
+        />
+        <HealthMark name={skillId} findings={findingsForSkill(healthReport, skillId)} />
+        <div className="skill-name">{displayName}</div>
+        <span className="skill-blurb">{blurb}</span>
+        <div className="skill-actions">
+          {originBadge && <span className={originBadge.className}>{originBadge.label}</span>}
+          {originById[skillId] === 'update' && (
+            <button
+              type="button"
+              aria-label={`Update ${skillId}`}
+              className={`update-card ${FOCUS_RING}`}
+              onClick={(event: MouseEvent<HTMLButtonElement>) => {
+                event.stopPropagation();
+                setUpdateError(false);
+                setPendingUpdate({ id: skillId, replaceEdited: false });
+              }}
+            >
+              <ArrowClockwise size={16} weight="regular" aria-hidden="true" />
+              Update
+            </button>
+          )}
+          {toggleErrorId === skillId && <StatusNotice kind="enable" layout="inline" />}
+          <SkillToggle
+            record={record}
+            busy={togglingId === skillId}
+            onToggle={() => void handleToggle(skillId, skillPathState(record?.paths ?? []) !== 'on')}
+          />
+        </div>
+      </li>
+    );
+  }
+
   return (
     <section className="inbox-panel panel-section">
       <div className="section-heading">
@@ -248,64 +343,23 @@ export default function InboxPanel() {
           <div className="command-stages inbox-groups">
             {visibleGroups.map((group) => (
               <div className="command-stage" key={group.key}>
-                <p className="stage-label">{group.label}</p>
-                <ul className="skill-list">
-                  {group.skills.map((skillId) => {
-                    const rank = visibleStart + visibleIds.indexOf(skillId) + 1;
-                    const record = (catalog ?? []).find((skill) => skill.id === skillId);
-                    const originStatus = originById[skillId];
-                    const originBadge =
-                      record?.source === 'skills.sh' && record.paths.length > 0 && originStatus
-                        ? ORIGIN_BADGE[originStatus]
-                        : null;
-                    return (
-                      <li
-                        className={`library-skill library-skill-interactive${originBadge ? ` origin-row origin-row-${originStatus}` : ''}`}
-                        key={skillId}
-                        onClick={() => setSelectedId(skillId)}
-                      >
-                        <button
-                          type="button"
-                          className={`library-skill-hit ${FOCUS_RING}`}
-                          onClick={() => setSelectedId(skillId)}
-                          aria-haspopup="dialog"
-                          aria-label={`Details for ${skillId}`}
-                        />
-                        <span className="skill-rank">{rank}</span>
-                        <div className="skill-info">
-                          <div className="skill-name">{skillId}</div>
-                          {originBadge && (
-                            <span className={originBadge.className}>{originBadge.label}</span>
-                          )}
-                        </div>
-                        <HealthMark name={skillId} findings={findingsForSkill(healthReport, skillId)} />
-                        {originById[skillId] === 'update' && (
-                          <button
-                            type="button"
-                            aria-label={`Update ${skillId}`}
-                            className={`update-card ${FOCUS_RING}`}
-                            onClick={(event: MouseEvent<HTMLButtonElement>) => {
-                              event.stopPropagation();
-                              setUpdateError(false);
-                              setPendingUpdate({ id: skillId, replaceEdited: false });
-                            }}
-                          >
-                            <ArrowClockwise size={16} weight="regular" aria-hidden="true" />
-                            Update
-                          </button>
-                        )}
-                        {toggleErrorId === skillId && <StatusNotice kind="enable" layout="inline" />}
-                        <SkillToggle
-                          record={record}
-                          busy={togglingId === skillId}
-                          onToggle={() =>
-                            void handleToggle(skillId, skillPathState(record?.paths ?? []) !== 'on')
-                          }
-                        />
-                      </li>
-                    );
-                  })}
-                </ul>
+                <p className="stage-label inbox-source-label">{group.label}</p>
+                {group.sections && group.sections.length > 0 ? (
+                  <div className="inbox-folders">
+                    {group.sections.map((section) => (
+                      <div className="command-stage" key={section.key || 'root'}>
+                        {section.label && <p className="stage-label">{section.label}</p>}
+                        <ul className="skill-list">
+                          {section.skills.map((skillId) => renderSkillCard(skillId, group.key))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <ul className="skill-list">
+                    {group.skills.map((skillId) => renderSkillCard(skillId, group.key))}
+                  </ul>
+                )}
               </div>
             ))}
           </div>

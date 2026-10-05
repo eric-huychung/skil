@@ -58,6 +58,8 @@ describe('InboxPanel', () => {
 
     expect(await screen.findByText('design')).toBeInTheDocument();
     fs.removeFile('.cursor/skills/design/SKILL.md');
+    fs.removeFile('.agents/skills/design/SKILL.md');
+    fs.removeFile('.claude/skills/design/SKILL.md');
 
     await bridge.scan();
 
@@ -127,14 +129,67 @@ describe('InboxPanel', () => {
 
     renderWithProviders(<InboxPanel />, { bridge });
 
-    expect(await screen.findByText('Market')).toBeInTheDocument();
-    expect(screen.getByText('Project')).toBeInTheDocument();
+    expect(await screen.findByText('Market')).toHaveClass('inbox-source-label');
+    expect(screen.getByText('Project')).toHaveClass('inbox-source-label');
     const market = screen.getByText('Market').closest('.command-stage');
     const project = screen.getByText('Project').closest('.command-stage');
     if (!market || !project) throw new Error('expected inbox groups');
     expect(within(market as HTMLElement).getByText('obra/react-patterns')).toBeInTheDocument();
     expect(within(project as HTMLElement).getByText('tdd')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Install / })).not.toBeInTheDocument();
+  });
+
+  it('groups nested project skills under parent-folder headings, cards show name and short description', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
+    fs.writeFile('.cursor/skills/build/SKILL.md', '# build\n');
+    fs.writeFile(
+      '.cursor/skills/build/increment/SKILL.md',
+      '---\ndescription: One slice at a time.\n---\n# increment\n'
+    );
+    fs.writeFile('.cursor/skills/build/ui/shadcn/SKILL.md', '# shadcn\n');
+    await engine.scan();
+    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+
+    renderWithProviders(<InboxPanel />, { bridge });
+
+    const project = (await screen.findByText('Project')).closest('.command-stage');
+    if (!project) throw new Error('expected project group');
+    const projectEl = project as HTMLElement;
+
+    expect(within(projectEl).getByText('build', { selector: '.stage-label' })).toBeInTheDocument();
+    expect(within(projectEl).getByText('build/ui', { selector: '.stage-label' })).toBeInTheDocument();
+    expect(within(projectEl).getByText('Other', { selector: '.stage-label' })).toBeInTheDocument();
+
+    const buildFolder = within(projectEl).getByText('build', { selector: '.stage-label' }).closest('.command-stage');
+    const uiFolder = within(projectEl).getByText('build/ui', { selector: '.stage-label' }).closest('.command-stage');
+    const otherFolder = within(projectEl).getByText('Other', { selector: '.stage-label' }).closest('.command-stage');
+    if (!buildFolder || !uiFolder || !otherFolder) throw new Error('expected folder sections');
+
+    expect(within(buildFolder as HTMLElement).getByRole('listitem', { name: 'Skill build' })).toBeInTheDocument();
+    const incrementCard = within(buildFolder as HTMLElement).getByRole('listitem', { name: 'Skill build/increment' });
+    expect(within(incrementCard).getByText('increment')).toBeInTheDocument();
+    expect(within(incrementCard).getByText('One slice at a time.')).toBeInTheDocument();
+    expect(within(projectEl).queryByText('build/increment')).not.toBeInTheDocument();
+
+    expect(within(uiFolder as HTMLElement).getByText('shadcn')).toBeInTheDocument();
+    expect(within(projectEl).queryByText('build/ui/shadcn')).not.toBeInTheDocument();
+    expect(within(otherFolder as HTMLElement).getByText('tdd')).toBeInTheDocument();
+  });
+
+  it('cuts a long skill description on the card', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    const long =
+      'Use this skill when you need to do a very long thing that should not all dump onto the card because we only have a little space in the middle.';
+    fs.writeFile('.cursor/skills/tdd/SKILL.md', `---\ndescription: ${long}\n---\n# tdd\n`);
+    await engine.scan();
+    const bridge = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+
+    renderWithProviders(<InboxPanel />, { bridge });
+
+    const card = await screen.findByRole('listitem', { name: 'Skill tdd' });
+    expect(within(card).getByText(/Use this skill when/)).toHaveTextContent('…');
+    expect(within(card).queryByText(long)).not.toBeInTheDocument();
   });
 
   it('keeps a Discover skill under Market after it lands on disk', async () => {
@@ -278,7 +333,8 @@ describe('InboxPanel', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete skill' }));
 
-    expect(await screen.findByText('build/ui/shadcn')).toBeInTheDocument();
+    expect(await screen.findByText('shadcn')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Details for build/ui/shadcn' })).toBeInTheDocument();
     expect(engine.skills().map((skill) => skill.id)).toEqual(['build/ui/shadcn']);
     expect(fs.readFile('.cursor/skills/build/ui/shadcn/SKILL.md')).toEqual({
       ok: true,

@@ -662,7 +662,6 @@
 .rule-card-name {
   position: relative;
   z-index: 0;
-  font-family: var(--font-mono);
   font-size: 0.875rem;
   font-weight: 500;
   line-height: 1.4;
@@ -1109,7 +1108,9 @@ button.always-on-toggle:disabled {
 }
 
 .library-skill-interactive .skill-rank,
-.library-skill-interactive .skill-info {
+.library-skill-interactive .skill-info,
+.library-skill-interactive .skill-name,
+.library-skill-interactive .skill-blurb {
   position: relative;
   z-index: 0;
 }
@@ -1117,6 +1118,7 @@ button.always-on-toggle:disabled {
 .library-skill-interactive .add-icon-button,
 .library-skill-interactive .delete-card,
 .library-skill-interactive .update-card,
+.library-skill-interactive .skill-actions,
 .included-skill.library-skill-interactive .skill-actions {
   position: relative;
   z-index: 2;
@@ -1886,6 +1888,55 @@ button.recent-card:hover {
 
 .inbox-groups {
   margin-top: 28px;
+}
+
+.inbox-source-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.inbox-source-label::before,
+.inbox-source-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--muted-foreground) 28%, transparent);
+}
+
+.inbox-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.inbox-panel .library-skill {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr) auto;
+  column-gap: 1.75rem;
+  align-items: center;
+}
+
+.inbox-panel .library-skill .skill-name {
+  min-width: 0;
+}
+
+.inbox-panel .skill-blurb {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-ink);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.library-skill-interactive:hover .skill-blurb {
+  color: var(--muted-foreground);
 }
 
 .command-stages {

@@ -307,7 +307,8 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument();
     expect(screen.getByText('tdd')).toBeInTheDocument();
-    expect(screen.getByText('ui/styling')).toBeInTheDocument();
+    expect(screen.getByText('styling')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Details for ui/styling' })).toBeInTheDocument();
     expect(engine.skills().map((skill) => skill.id)).toEqual(['tdd', 'ui/styling']);
     expect(engine.list()).toEqual([]);
     expect(screen.queryByRole('button', { name: 'Scan' })).not.toBeInTheDocument();
@@ -546,6 +547,24 @@ describe('App', () => {
     expect(isOk(fs.readFile('.cursor/skills/tdd/SKILL.md'))).toBe(true);
   });
 
+  it('upserts leftover-only rules into AGENTS.md on scan, leftover stays for remove', async () => {
+    const { engine, fs } = createInMemoryWorkspace();
+    fs.writeFile('.cursor/rules/behavior.mdc', '# behavior\n');
+    engine.scan();
+    installTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
+
+    renderWithProviders(<App />);
+    await openSync();
+
+    expect(await screen.findByRole('button', { name: '1 leftover' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '1 leftover' }));
+    expect(await screen.findByRole('heading', { name: 'Cleanup' })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Needs import' })).not.toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Ready to remove' })).toHaveTextContent('.cursor/rules/behavior.mdc');
+    expect(isOk(fs.readFile('AGENTS.md'))).toBe(true);
+    expect(isOk(fs.readFile('.cursor/rules/behavior.mdc'))).toBe(true);
+  });
+
   it('imports leftover commands into the live pair on scan and shows them on Commands', async () => {
     const { engine, fs } = createInMemoryWorkspace();
     fs.writeFile('.cursor/commands/build.md', writeCommandFile('build', ['tdd']));
@@ -666,11 +685,28 @@ describe('App', () => {
   });
 
   it('shows a friendly error when importing leftovers fails, without dropping the list', async () => {
-    const { engine, fs } = createInMemoryWorkspace();
-    fs.writeFile('.cursor/rules/extra.mdc', '---\nglobs: src/**\n---\n# extra\n');
+    const { engine } = createInMemoryWorkspace();
     engine.scan();
     const real = createTestBridge(engine, { projectRoot: DEFAULT_TEST_PROJECT_ROOT });
-    const bridge = { ...real, importToCanonical: async () => err(new Error('EACCES: permission denied')) };
+    const leftoverAudit = {
+      rows: [
+        {
+          kind: 'rule' as const,
+          id: 'extra',
+          path: '.cursor/rules/extra.mdc',
+          status: 'needs-import' as const,
+          hashHere: 'aaa',
+        },
+      ],
+      needsImportCount: 1,
+      readyCount: 0,
+      driftCount: 0,
+    };
+    const bridge = {
+      ...real,
+      auditSync: async () => ok(leftoverAudit),
+      importToCanonical: async () => err(new Error('EACCES: permission denied')),
+    };
 
     renderWithProviders(<App />, { bridge });
     await openSync();

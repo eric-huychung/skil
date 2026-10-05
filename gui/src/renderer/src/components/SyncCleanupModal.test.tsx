@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { syncBannerText } from './SyncCleanupModal';
+import { describe, expect, it, vi } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import SyncCleanupModal, { syncBannerText } from './SyncCleanupModal';
 import type { SyncAudit, SyncRow } from '../../../shared/ipc';
 
 function audit(rows: Partial<SyncRow>[]): SyncAudit {
@@ -43,5 +45,57 @@ describe('syncBannerText', () => {
         ])
       )
     ).toBe('4 leftovers · 2 conflicts');
+  });
+});
+
+describe('SyncCleanupModal remove confirm', () => {
+  it('says why cleanup exists', () => {
+    render(
+      <SyncCleanupModal
+        audit={audit([{ id: 'tdd', status: 'ready-to-remove', path: '.cursor/skills/tdd' }])}
+        busy={false}
+        error={null}
+        onClose={() => {}}
+        onImport={() => {}}
+        onRemove={() => {}}
+        onResolveDrift={() => {}}
+      />
+    );
+
+    expect(screen.getByRole('dialog', { name: 'Cleanup' })).toHaveAccessibleDescription(
+      'Drop extra copies so agents read from .agents and .claude.'
+    );
+  });
+
+  it('asks before remove with deprecated folder hint', async () => {
+    const onRemove = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <SyncCleanupModal
+        audit={audit([{ id: 'tdd', status: 'ready-to-remove', path: '.cursor/skills/tdd' }])}
+        busy={false}
+        error={null}
+        onClose={() => {}}
+        onImport={() => {}}
+        onRemove={onRemove}
+        onResolveDrift={() => {}}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Remove leftovers' }));
+    const confirm = screen.getByRole('dialog', { name: /Remove 1 leftover/ });
+    expect(within(confirm).getByText(/\.skil\/deprecated\//)).toBeInTheDocument();
+    expect(within(confirm).getByText(/check there if you need to restore/i)).toBeInTheDocument();
+
+    await user.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    expect(onRemove).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Remove leftovers' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: /Remove 1 leftover/ })).getByRole('button', {
+        name: 'Remove leftovers',
+      })
+    );
+    expect(onRemove).toHaveBeenCalledWith(['.cursor/skills/tdd']);
   });
 });
