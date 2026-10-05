@@ -3,10 +3,11 @@ import type { MarketSkillsClient } from './market-client.js';
 import type { MarketStore } from './market-store.js';
 import type { LabelPoolRow, MarketClassifyRow, MarketField, SkillScore, TopicQuestion } from './market-types.js';
 import type { SkillClassifier } from './skill-classifier.js';
-import { buildShelves, dedupByName, OWNER_CAP, type ShelfInputRow } from './shelf-assembler.js';
+import { buildShelves, dedupByName, OWNER_CAP, shelfTopics, type ShelfInputRow } from './shelf-assembler.js';
 import { buildLabelState, stateHash } from './label-state.js';
 import {
   MAX_TOPICS_PER_SKILL,
+  REVIEW_BAND,
   TAXONOMY_VERSION,
   TOPIC_QUESTIONS,
   TOPIC_THRESHOLD,
@@ -90,6 +91,42 @@ export class LabelPoolError extends Error {
     super(`MarketSync: ${result.errored} of ${result.needed} rows errored (over ${MAX_ERRORED_SHARE * 100}%)`);
     this.name = 'LabelPoolError';
   }
+}
+
+export interface RebuildShelvesOptions {
+  /** Build and report shelf health as usual, but write no shelves. */
+  dryRun?: boolean;
+}
+
+/** One built shelf's health: how full it is and how much one owner dominates it. */
+export interface ShelfFieldHealth {
+  slug: string;
+  /** Entries on the shelf (a collapsed suite counts once). */
+  count: number;
+  distinctOwners: number;
+  /** Largest single owner's entries / `count`; 0 for an empty shelf. */
+  topOwnerShare: number;
+}
+
+/** Outcome of one shelf rebuild from stored labels, with the shelf-health numbers the script prints. */
+export interface ShelfRunResult {
+  /** True only when `replaceShelves` ran (never on `dryRun` or a failed coverage gate). */
+  written: boolean;
+  reason?: 'incomplete_coverage';
+  /** Active pool rows. */
+  pool: number;
+  /** Pool rows with no current-version label, or one whose `state_hash` no longer matches the row. */
+  missing: number;
+  /** Covered rows whose stored label is `status = 'error'` (they stay unlabeled). */
+  errored: number;
+  /** Covered rows with no active field at or above the threshold, errored rows included. */
+  unlabeled: number;
+  /** `unlabeled / pool`. */
+  unlabeledShare: number;
+  /** Covered rows with any active field's probability in `REVIEW_BAND` (low inclusive, high exclusive). */
+  reviewBand: number;
+  /** Per active field, in field order; empty when the coverage gate fails. */
+  fields: ShelfFieldHealth[];
 }
 
 /**
@@ -275,6 +312,83 @@ export class MarketSync {
   }
 
   /**
+   * Rebuilds every active field's shelf from stored labels (design §4.5).
+   * Coverage gate first: every active pool row needs a `TAXONOMY_VERSION`
+   * label whose `state_hash` matches the row (`ok` or `error`; an errored
+   * row is simply unlabeled). Any gap returns `written: false` with
+   * `reason: 'incomplete_coverage'` and leaves the shelves untouched.
+   * Otherwise `buildShelves` → one `replaceShelves` call stamped with
+   * `TAXONOMY_VERSION`. An empty pool fails closed.
+   */
+  async rebuildShelves(opts: RebuildShelvesOptions = {}): Promise<Result<ShelfRunResult>> {
+    const pool = await this.store.listLabelPool();
+    if (!isOk(pool)) {
+      return pool;
+    }
+    if (pool.value.length === 0) {
+      return err(new Error('MarketSync: label pool is empty'));
+    }
+    const labels = await this.store.listLabels(TAXONOMY_VERSION);
+    if (!isOk(labels)) {
+      return labels;
+    }
+    const fields = await this.store.listActiveFields();
+    if (!isOk(fields)) {
+      return fields;
+    }
+
+    const labelById = new Map(labels.value.map((score) => [score.id, score]));
+    const covered: Array<{ row: LabelPoolRow; score: SkillScore }> = [];
+    for (const row of pool.value) {
+      const score = labelById.get(row.id);
+      if (score && score.stateHash === stateHash(buildLabelState(row))) {
+        covered.push({ row, score });
+      }
+    }
+
+    const known = new Set(fields.value.map((field) => field.slug));
+    const inputs = covered.map(({ row, score }) => toShelfInputRow(row, score));
+    const unlabeled = inputs.filter(
+      (row) => shelfTopics(row.probabilities, known, TOPIC_THRESHOLD, MAX_TOPICS_PER_SKILL).length === 0,
+    ).length;
+    const counts = {
+      pool: pool.value.length,
+      missing: pool.value.length - covered.length,
+      errored: covered.filter(({ score }) => score.status === 'error').length,
+      unlabeled,
+      unlabeledShare: unlabeled / pool.value.length,
+      reviewBand: inputs.filter((row) => inReviewBand(row.probabilities, known)).length,
+    };
+    if (counts.missing > 0) {
+      return ok({ written: false, reason: 'incomplete_coverage', ...counts, fields: [] });
+    }
+
+    const shelves = buildShelves({
+      rows: inputs,
+      fields: fields.value,
+      threshold: TOPIC_THRESHOLD,
+      maxTopics: MAX_TOPICS_PER_SKILL,
+      ownerCap: OWNER_CAP,
+    });
+    const ownerById = new Map(inputs.map((row) => [row.id, row.owner.toLowerCase()]));
+    const health = shelves.map((shelf) =>
+      shelfHealth(
+        shelf.fieldSlug,
+        shelf.entries.map((entry) => ownerById.get(entry.id) ?? ''),
+      ),
+    );
+
+    if (opts.dryRun) {
+      return ok({ written: false, ...counts, fields: health });
+    }
+    const written = await this.store.replaceShelves(shelves, TAXONOMY_VERSION);
+    if (!isOk(written)) {
+      return written;
+    }
+    return ok({ written: true, ...counts, fields: health });
+  }
+
+  /**
    * Incremental labeling (design §4.5). A pool row needs a label when it has
    * no stored label for `TAXONOMY_VERSION`, its stored `state_hash` differs,
    * or its stored status is `error`. Those rows are classified in batches and
@@ -377,5 +491,26 @@ function toShelfInputRow(row: LabelPoolRow, score: SkillScore | undefined): Shel
     owner: row.owner,
     installs: row.installs,
     probabilities: score?.status === 'ok' ? score.probabilities : {},
+  };
+}
+
+/** Any active field's probability in `[REVIEW_BAND.low, REVIEW_BAND.high)`. */
+function inReviewBand(probabilities: Record<string, number>, known: ReadonlySet<string>): boolean {
+  return Object.entries(probabilities).some(
+    ([slug, p]) => known.has(slug) && p >= REVIEW_BAND.low && p < REVIEW_BAND.high,
+  );
+}
+
+function shelfHealth(slug: string, owners: string[]): ShelfFieldHealth {
+  const perOwner = new Map<string, number>();
+  for (const owner of owners) {
+    perOwner.set(owner, (perOwner.get(owner) ?? 0) + 1);
+  }
+  const top = Math.max(0, ...perOwner.values());
+  return {
+    slug,
+    count: owners.length,
+    distinctOwners: perOwner.size,
+    topOwnerShare: owners.length === 0 ? 0 : top / owners.length,
   };
 }
