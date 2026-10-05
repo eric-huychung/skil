@@ -13,7 +13,11 @@
  * Smoke hydrate:
  *   npm run sync-market -- --max-detail=40
  *
- * Every run writes `.sync-market/summary.json` (plus `$GITHUB_STEP_SUMMARY` when set)
+ * Creators report (read-only; needs only the Supabase vars, GITHUB_TOKEN optional):
+ *   npm run sync-market -- --creators-report
+ *   Prints the proposed 30 and a paste-ready block for data/market-creators.yaml. Writes nothing.
+ *
+ * Every other run writes `.sync-market/summary.json` (plus `$GITHUB_STEP_SUMMARY` when set)
  * and exits 0 on success, 1 on any failure.
  *
  * Safe to re-run. Classify fail → last week's shelves stay.
@@ -28,6 +32,8 @@ import { MarketSync } from '../src/backend/market-sync.js';
 import { RealMarketSkillsClient } from '../src/backend/market-skills-client.js';
 import { LlmSkillClassifier } from '../src/backend/llm-skill-classifier.js';
 import { SupabaseMarketStore } from '../src/backend/supabase-market-store.js';
+import { loadMarketCreators } from '../src/backend/market-creators.js';
+import { printCreatorsReport } from '../src/backend/creators-report.js';
 
 import {
   exitCodeFor,
@@ -222,8 +228,36 @@ function writeSummary(outcome: SyncRunOutcome): number {
   return exitCodeFor(summary);
 }
 
+/** `--creators-report`: prints only. No summary file, no store or YAML writes. */
+async function creatorsReport(): Promise<number> {
+  loadEnvFile('.env');
+  loadEnvFile('.env.local');
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error('Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY. Copy .env.example to .env and fill them in.');
+    return 1;
+  }
+  try {
+    const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+    return await printCreatorsReport(
+      {
+        store: new SupabaseMarketStore(supabase),
+        config: loadMarketCreators(),
+        fetchImpl: fetch,
+        githubToken: process.env.GITHUB_TOKEN?.trim() || undefined,
+      },
+      { log: (line) => console.log(line), error: (line) => console.error(line) },
+    );
+  } catch (error) {
+    console.error(`Creators report failed: ${error instanceof Error ? error.message : error}`);
+    return 1;
+  }
+}
+
 /** Never throws: every outcome becomes a summary file and an exit code. */
 async function main(): Promise<number> {
+  if (process.argv.slice(2).includes('--creators-report')) return creatorsReport();
   const state: RunState = { step: 'config', shelvesWritten: false, secrets: [] };
   let outcome: SyncRunOutcome;
   try {
