@@ -373,17 +373,67 @@ export class InMemoryMarketStore implements MarketStore {
 
   // --- T21 search ---
 
+  /**
+   * Mirrors `search_market_skills` (0008 migration). Tier first: exact name,
+   * then name prefix, then typo-close name (pg_trgm similarity >= 0.3), then
+   * a text match (every word in name + description). Within the trigram tier
+   * the most similar name wins; then installs, then id. Postgres orders the
+   * text tier by `ts_rank_cd` before installs; this store treats every text
+   * match as equal rank, so installs decide there.
+   */
   async searchListings(q: string, opts: { limit: number }): Promise<Result<MarketSearchRow[]>> {
-    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    const matches = [...this.skills.values()]
+    const term = q.trim().toLowerCase();
+    if (!term) return ok([]);
+    const words = term.split(/\s+/);
+
+    const ranked = [...this.skills.values()]
       .filter((row) => !row.inactive)
-      .filter((row) => {
-        const haystack = `${row.name} ${row.description ?? ''}`.toLowerCase();
-        return words.every((word) => haystack.includes(word));
+      .map((row) => {
+        const name = row.name.toLowerCase();
+        const sim = InMemoryMarketStore.trigramSimilarity(name, term);
+        const haystack = `${name} ${row.description ?? ''}`.toLowerCase();
+        const tier =
+          name === term ? 0
+          : name.startsWith(term) ? 1
+          : sim >= InMemoryMarketStore.TRIGRAM_THRESHOLD ? 2
+          : words.every((word) => haystack.includes(word)) ? 3
+          : null;
+        return { row, tier, sim };
       })
-      .sort((a, b) => b.installs - a.installs)
+      .filter((hit): hit is { row: SkillRow; tier: number; sim: number } => hit.tier !== null)
+      .sort(
+        (a, b) =>
+          a.tier - b.tier ||
+          (a.tier === 2 ? b.sim - a.sim : 0) ||
+          b.row.installs - a.row.installs ||
+          a.row.id.localeCompare(b.row.id),
+      )
       .slice(0, opts.limit);
 
-    return ok(matches.map((row) => ({ id: row.id, name: row.name, installs: row.installs })));
+    return ok(ranked.map(({ row }) => ({ id: row.id, name: row.name, installs: row.installs })));
+  }
+
+  /** pg_trgm's default `similarity_threshold`, used by the `%` operator. */
+  private static readonly TRIGRAM_THRESHOLD = 0.3;
+
+  /**
+   * pg_trgm `similarity()`: each alphanumeric word padded as "  word ", its
+   * distinct 3-char windows collected, then shared / union.
+   */
+  private static trigramSimilarity(a: string, b: string): number {
+    const trigrams = (text: string) => {
+      const set = new Set<string>();
+      for (const word of text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)) {
+        const padded = `  ${word} `;
+        for (let i = 0; i + 3 <= padded.length; i++) set.add(padded.slice(i, i + 3));
+      }
+      return set;
+    };
+    const left = trigrams(a);
+    const right = trigrams(b);
+    if (left.size === 0 || right.size === 0) return 0;
+    let shared = 0;
+    for (const gram of left) if (right.has(gram)) shared++;
+    return shared / (left.size + right.size - shared);
   }
 }

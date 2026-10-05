@@ -593,22 +593,16 @@ export class SupabaseMarketStore implements MarketStore {
   // --- T21 search ---
 
   /**
-   * `websearch_to_tsquery` against the generated `search_vector` column
-   * (0003 migration) — index-backed via the GIN index, unlike `ilike`.
-   * `websearch` syntax treats space-separated words as AND, matching
-   * `InMemoryMarketStore`'s "every word must appear" behavior.
+   * Calls the `search_market_skills` RPC (0008 migration): exact name >
+   * name prefix > typo-close name (pg_trgm) > text match, then installs.
+   * `InMemoryMarketStore.searchListings` mirrors the same ordering rule.
    */
   async searchListings(q: string, opts: { limit: number }): Promise<Result<MarketSearchRow[]>> {
-    const { data, error } = await this.client
-      .from('market_skills')
-      .select('id, name, installs')
-      .eq('inactive', false)
-      .textSearch('search_vector', q, { type: 'websearch', config: 'english' })
-      .order('installs', { ascending: false })
-      .limit(opts.limit);
+    const { data, error } = await this.client.rpc('search_market_skills', { q, lim: opts.limit });
     if (error) return err(toError(error.message));
 
-    return ok(data.map((row) => ({ id: row.id, name: row.name, installs: row.installs })));
+    const rows = (data ?? []) as Array<{ id: string; name: string; installs: number | string }>;
+    return ok(rows.map((row) => ({ id: row.id, name: row.name, installs: Number(row.installs) })));
   }
 }
 
