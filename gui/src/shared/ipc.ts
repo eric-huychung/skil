@@ -1,13 +1,13 @@
 import type { Result } from '../../../src/core/result.js';
 import type { AdoptResult, BrowseView, Collection, CommandHealth, DriftAction, Finding, HealthReport, IDE, OriginCheck, OriginStatus, RuleRecord, ScanResult, Skill, SkillRecord, SuggestResult, SyncAudit, SyncPreview, SyncRow, UsageRow } from '../../../src/types/index.js';
-import type { MarketSearchRow, MarketSuggestedData, ShelfRole } from '../../../src/backend/market-types.js';
+import type { CreatorCard, CreatorDetail, MarketSearchRow, MarketSuggestedData, ShelfRole } from '../../../src/backend/market-types.js';
 import type { LlmProvider } from '../../../src/llm/llm-chat.js';
 import type { LlmStatus, LlmKeyRow } from './llm-settings.js';
 import type { AppUpdate } from './app-update.js';
 
 export type { AppUpdate };
 
-export type { AdoptResult, BrowseView, Collection, CommandHealth, DriftAction, Finding, HealthReport, IDE, LlmKeyRow, LlmProvider, LlmStatus, MarketSearchRow, MarketSuggestedData, OriginCheck, OriginStatus, Result, RuleRecord, ScanResult, ShelfRole, Skill, SkillRecord, SuggestResult, SyncAudit, SyncPreview, SyncRow, UsageRow };
+export type { AdoptResult, BrowseView, Collection, CommandHealth, CreatorCard, CreatorDetail, DriftAction, Finding, HealthReport, IDE, LlmKeyRow, LlmProvider, LlmStatus, MarketSearchRow, MarketSuggestedData, OriginCheck, OriginStatus, Result, RuleRecord, ScanResult, ShelfRole, Skill, SkillRecord, SuggestResult, SyncAudit, SyncPreview, SyncRow, UsageRow };
 
 /**
  * Client-side shape of `GET /api/market/preview`'s `data` — not exported by
@@ -52,6 +52,8 @@ export const IPC_CHANNELS = {
   usage: 'skil:usage',
   marketShelves: 'skil:market-shelves',
   marketSuggested: 'skil:market-suggested',
+  marketCreators: 'skil:market-creators',
+  marketCreator: 'skil:market-creator',
   marketSearch: 'skil:market-search',
   marketPreview: 'skil:market-preview',
   readSkillMd: 'skil:read-skill-md',
@@ -128,6 +130,10 @@ export interface SkilBridge {
   marketShelves(): Promise<Result<ShelfRole[]>>;
   /** Editorial picks from `GET /api/market/suggested`. No LLM — same payload as the website. */
   marketSuggested(role?: string): Promise<Result<MarketSuggestedData>>;
+  /** Creator cards from `GET /api/market/creators`, in curated order. */
+  marketCreators(): Promise<Result<CreatorCard[]>>;
+  /** One creator's skills grouped by repo. Unknown slug is a `not_found` error. */
+  marketCreator(slug: string): Promise<Result<CreatorDetail>>;
   /** Market index search across the full stored index (not just shelved skills). */
   marketSearch(query: string): Promise<Result<MarketSearchRow[]>>;
   /** Market index preview: stored listing fields plus a live SKILL.md/audit fetch. */

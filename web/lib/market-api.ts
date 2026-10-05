@@ -12,6 +12,8 @@ export interface ShelfSkill {
   name: string
   installs: number
   rank: number
+  /** Collapsed vendor suite: this row leads `moreCount` more. Absent = not collapsed. */
+  moreCount?: number
 }
 
 export interface ShelfField {
@@ -75,4 +77,32 @@ export function searchMarket(query: string, limit = 25): Promise<MarketSearchRow
 export function fetchPreview(id: string): Promise<MarketPreview> {
   const params = new URLSearchParams({ id })
   return getJson<MarketPreview>(`/api/market/preview?${params.toString()}`)
+}
+
+export interface CreatorCard {
+  slug: string
+  label: string
+  official: boolean
+  pinned: boolean
+  skillCount: number
+  totalInstalls: number
+}
+
+export interface CreatorDetail {
+  slug: string
+  label: string
+  official: boolean
+  repos: Array<{
+    source: string
+    skills: Array<{ id: string; name: string; installs: number; topics: string[] }>
+  }>
+}
+
+export function fetchCreators(): Promise<CreatorCard[]> {
+  return getJson<CreatorCard[]>('/api/market/creators')
+}
+
+export function fetchCreator(slug: string): Promise<CreatorDetail> {
+  const params = new URLSearchParams({ slug })
+  return getJson<CreatorDetail>(`/api/market/creators?${params.toString()}`)
 }

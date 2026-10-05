@@ -1,0 +1,54 @@
+# Creators shelf for Discover. Order = display order; pinned entries come first.
+# Exactly 30 entries. Run `npm test -- src/backend/market-creators.test.ts` after edits.
+# Proposals come from: npm run sync-market -- --creators-report (it prints a paste-ready block).
+updatedAt: 2026-10-04
+techCutoff: 0.4                 # used by the report only
+officialFetchedAt: 2026-10-04   # snapshot of https://skills.sh/official
+# Partial snapshot: the owners named in the launch spec. Replace with the full list
+# (about 98 owners) from the next --creators-report run.
+officialOwners:
+  - anthropics
+  - vercel-labs
+  - microsoft
+  - remotion-dev
+  - supabase
+  - prisma
+  - firebase
+  - neondatabase
+  - google
+  - better-auth
+  - getsentry
+  - convex-dev
+blocked: []
+
+creators:
+  - { slug: addyosmani,       label: Addy Osmani,      owners: [addyosmani], pinned: true }
+  - { slug: antfu,            label: Anthony Fu,       owners: [antfu],      pinned: true }
+  - { slug: vercel-labs,      label: Vercel Labs,      owners: [vercel-labs] }
+  - { slug: mattpocock,       label: Matt Pocock,      owners: [mattpocock] }
+  - { slug: anthropics,       label: Anthropic,        owners: [anthropics] }
+  - { slug: microsoft,        label: Microsoft,        owners: [microsoft] }
+  - { slug: uizze-com,        label: uizze.com,        owners: [uizze.com] }
+  - { slug: remotion-dev,     label: Remotion,         owners: [remotion-dev] }
+  - { slug: juliusbrussee,    label: Julius Brussee,   owners: [juliusbrussee] }
+  - { slug: heygen-com,       label: HeyGen,           owners: [heygen-com] }
+  - { slug: lllllllama,       label: lllllllama,       owners: [lllllllama] }
+  - { slug: skills-101,       label: skills-101,       owners: [skills-101] }
+  - { slug: leonxlnx,         label: leonxlnx,         owners: [leonxlnx] }
+  - { slug: supabase,         label: Supabase,         owners: [supabase] }
+  - { slug: obra,             label: obra,             owners: [obra] }
+  - { slug: nextlevelbuilder, label: NextLevelBuilder, owners: [nextlevelbuilder] }
+  - { slug: shadcn,           label: shadcn,           owners: [shadcn] }
+  - { slug: pbakaus,          label: Paul Bakaus,      owners: [pbakaus] }
+  - { slug: prisma,           label: Prisma,           owners: [prisma] }
+  - { slug: scrapegraphai,    label: ScrapeGraphAI,    owners: [scrapegraphai] }
+  - { slug: emilkowalski,     label: Emil Kowalski,    owners: [emilkowalski] }
+  - { slug: stablyai,         label: Stably AI,        owners: [stablyai] }
+  - { slug: firebase,         label: Firebase,         owners: [firebase] }
+  - { slug: sentry,           label: Sentry,           owners: [sentry] }
+  - { slug: arvindrk,         label: arvindrk,         owners: [arvindrk] }
+  - { slug: neondatabase,     label: Neon,             owners: [neondatabase] }
+  - { slug: google,           label: Google,           owners: [google, googleworkspace, google-labs-code] }
+  - { slug: get-convex,       label: Convex,           owners: [get-convex] }
+  - { slug: browser-act,      label: BrowserAct,       owners: [browser-act] }
+  - { slug: better-auth,      label: Better Auth,      owners: [better-auth] }

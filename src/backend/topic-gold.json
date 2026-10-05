@@ -1,0 +1,1893 @@
+{
+  "about": "Gold set for topic labeling (design §6). Drafted by a general-purpose LLM from real market_skills rows, pending human review (gate G-GOLD). `expected` holds SEED_FIELDS slugs; an empty list means no field fits. `stratum` records why the row was sampled: field, vendor[:suite], ambiguous (misleading or generic name), none (off-taxonomy).",
+  "guidelines": [
+    "Label what the skill is mainly for, at most 3 fields, usually 1.",
+    "A topical engineering or PM field wins over integrations when one fits (e.g. Neon -> database, Azure deploy -> devops).",
+    "integrations = operating a third-party SaaS product (Lark, Google Workspace, Stripe, Notion, Zoom) when no topical field fits better.",
+    "workflow = changes how a coding agent plans, asks questions, hands off or finds tools.",
+    "Empty when nothing in the taxonomy fits (media generation, marketing, finance, legal, HR, debugging)."
+  ],
+  "skills": [
+    {
+      "id": "anthropics/skills/frontend-design",
+      "name": "frontend-design",
+      "expected": [
+        "frontend",
+        "product-ui"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "vercel-labs/agent-skills/vercel-react-best-practices",
+      "name": "vercel-react-best-practices",
+      "expected": [
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "leonxlnx/taste-skill/design-taste-frontend",
+      "name": "design-taste-frontend",
+      "expected": [
+        "frontend",
+        "product-ui"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "addyosmani/agent-skills/frontend-ui-engineering",
+      "name": "frontend-ui-engineering",
+      "expected": [
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "leonxlnx/taste-skill/redesign-existing-projects",
+      "name": "redesign-existing-projects",
+      "expected": [
+        "frontend",
+        "product-ui"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "emilkowalski/skills/pick-ui-library",
+      "name": "pick-ui-library",
+      "expected": [
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "addyosmani/web-quality-skills/performance",
+      "name": "performance",
+      "expected": [
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/skills/web-artifacts-builder",
+      "name": "web-artifacts-builder",
+      "expected": [
+        "frontend"
+      ],
+      "stratum": "field",
+      "note": "Builds multi-component HTML artifacts (React/shadcn); matched design-system searches but is UI code."
+    },
+    {
+      "id": "wshobson/agents/nodejs-backend-patterns",
+      "name": "nodejs-backend-patterns",
+      "expected": [
+        "backend",
+        "api"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "mcollina/skills/fastify-best-practices",
+      "name": "fastify-best-practices",
+      "expected": [
+        "backend",
+        "api"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/dotnet-backend-patterns",
+      "name": "dotnet-backend-patterns",
+      "expected": [
+        "backend",
+        "api"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/fastapi-templates",
+      "name": "fastapi-templates",
+      "expected": [
+        "backend",
+        "api"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "get-convex/agent-skills/convex",
+      "name": "convex",
+      "expected": [
+        "backend",
+        "database"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "firebase/agent-skills/firebase-data-connect",
+      "name": "firebase-data-connect",
+      "expected": [
+        "backend",
+        "database"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "supabase/agent-skills/supabase",
+      "name": "supabase",
+      "expected": [
+        "backend",
+        "database"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/api-design-principles",
+      "name": "api-design-principles",
+      "expected": [
+        "api"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "samber/cc-skills-golang/golang-swagger",
+      "name": "golang-swagger",
+      "expected": [
+        "api"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "samber/cc-skills-golang/golang-graphql",
+      "name": "golang-graphql",
+      "expected": [
+        "api",
+        "backend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "supabase/agent-skills/supabase-postgres-best-practices",
+      "name": "supabase-postgres-best-practices",
+      "expected": [
+        "database"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "prisma/skills/prisma-database-setup",
+      "name": "prisma-database-setup",
+      "expected": [
+        "database"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "prisma/skills/prisma-client-api",
+      "name": "prisma-client-api",
+      "expected": [
+        "database"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/postgresql-table-design",
+      "name": "postgresql-table-design",
+      "expected": [
+        "database"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/sql-optimization-patterns",
+      "name": "sql-optimization-patterns",
+      "expected": [
+        "database"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "neondatabase/agent-skills/neon",
+      "name": "neon",
+      "expected": [
+        "database"
+      ],
+      "stratum": "field",
+      "note": "Vendor (Neon) but the product is a database; topical field wins over integrations."
+    },
+    {
+      "id": "google/skills/bigquery-basics",
+      "name": "bigquery-basics",
+      "expected": [
+        "database"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/skills/webapp-testing",
+      "name": "webapp-testing",
+      "expected": [
+        "testing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "mattpocock/skills/tdd",
+      "name": "tdd",
+      "expected": [
+        "testing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "obra/superpowers/test-driven-development",
+      "name": "test-driven-development",
+      "expected": [
+        "testing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "addyosmani/agent-skills/test-driven-development",
+      "name": "test-driven-development",
+      "expected": [
+        "testing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "currents-dev/playwright-best-practices-skill/playwright-best-practices",
+      "name": "playwright-best-practices",
+      "expected": [
+        "testing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/python-testing-patterns",
+      "name": "python-testing-patterns",
+      "expected": [
+        "testing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/e2e-testing-patterns",
+      "name": "e2e-testing-patterns",
+      "expected": [
+        "testing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "momentic-ai/skills/momentic-test",
+      "name": "momentic-test",
+      "expected": [
+        "testing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/testing-strategy",
+      "name": "testing-strategy",
+      "expected": [
+        "testing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "microsoft/playwright-cli/playwright-cli",
+      "name": "playwright-cli",
+      "expected": [
+        "testing"
+      ],
+      "stratum": "ambiguous",
+      "note": "Browser automation CLI that also covers Playwright tests; testing is the clearest field."
+    },
+    {
+      "id": "addyosmani/agent-skills/security-and-hardening",
+      "name": "security-and-hardening",
+      "expected": [
+        "security"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "samber/cc-skills-golang/golang-security",
+      "name": "golang-security",
+      "expected": [
+        "security"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "firebase/agent-skills/firebase-security-rules-auditor",
+      "name": "firebase-security-rules-auditor",
+      "expected": [
+        "security"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "better-auth/skills/better-auth-security-best-practices",
+      "name": "better-auth-security-best-practices",
+      "expected": [
+        "security"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "affaan-m/ecc/security-review",
+      "name": "security-review",
+      "expected": [
+        "security",
+        "review"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/security-requirement-extraction",
+      "name": "security-requirement-extraction",
+      "expected": [
+        "security"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/k8s-security-policies",
+      "name": "k8s-security-policies",
+      "expected": [
+        "security",
+        "devops"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/attack-tree-construction",
+      "name": "attack-tree-construction",
+      "expected": [
+        "security"
+      ],
+      "stratum": "ambiguous",
+      "note": "Says \"visualize threat paths\"; it is threat modeling, not data viz."
+    },
+    {
+      "id": "wshobson/agents/threat-mitigation-mapping",
+      "name": "threat-mitigation-mapping",
+      "expected": [
+        "security"
+      ],
+      "stratum": "ambiguous",
+      "note": "Mentions mapping/prioritizing; not a roadmap skill."
+    },
+    {
+      "id": "wshobson/agents/github-actions-templates",
+      "name": "github-actions-templates",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/terraform-module-library",
+      "name": "terraform-module-library",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "samber/cc-skills-golang/golang-continuous-integration",
+      "name": "golang-continuous-integration",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "expo/skills/expo-cicd-workflows",
+      "name": "expo-cicd-workflows",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "firebase/agent-skills/firebase-app-hosting-basics",
+      "name": "firebase-app-hosting-basics",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "cloudflare/skills/cloudflare",
+      "name": "cloudflare",
+      "expected": [
+        "devops",
+        "backend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/deploy-checklist",
+      "name": "deploy-checklist",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/incident-response",
+      "name": "incident-response",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/runbook",
+      "name": "runbook",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/grafana-dashboards",
+      "name": "grafana-dashboards",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "ambiguous",
+      "note": "Ops monitoring dashboards; \"dashboard\" should not pull it onto viz."
+    },
+    {
+      "id": "jimliu/baoyu-skills/release-skills",
+      "name": "release-skills",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "mattpocock/skills/code-review",
+      "name": "code-review",
+      "expected": [
+        "review"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "addyosmani/agent-skills/code-review-and-quality",
+      "name": "code-review-and-quality",
+      "expected": [
+        "review"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/code-review-excellence",
+      "name": "code-review-excellence",
+      "expected": [
+        "review"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "juliusbrussee/caveman/caveman-review",
+      "name": "caveman-review",
+      "expected": [
+        "review"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/code-review",
+      "name": "code-review",
+      "expected": [
+        "review"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "obra/superpowers/requesting-code-review",
+      "name": "requesting-code-review",
+      "expected": [
+        "review",
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "obra/superpowers/receiving-code-review",
+      "name": "receiving-code-review",
+      "expected": [
+        "review",
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "warpdotdev/common-skills/check-impl-against-spec",
+      "name": "check-impl-against-spec",
+      "expected": [
+        "review"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "emilkowalski/skills/review-animations",
+      "name": "review-animations",
+      "expected": [
+        "review",
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "shadcn/improve/improve",
+      "name": "improve",
+      "expected": [
+        "review"
+      ],
+      "stratum": "ambiguous",
+      "note": "Generic name; surveys a codebase and produces prioritized improvement plans."
+    },
+    {
+      "id": "mattpocock/skills/improve-codebase-architecture",
+      "name": "improve-codebase-architecture",
+      "expected": [
+        "review"
+      ],
+      "stratum": "ambiguous",
+      "note": "Architecture review of a codebase; no architecture field."
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/tech-debt",
+      "name": "tech-debt",
+      "expected": [
+        "review"
+      ],
+      "stratum": "ambiguous",
+      "note": "Says \"prioritize\"; about code quality, not product roadmap."
+    },
+    {
+      "id": "nextlevelbuilder/ui-ux-pro-max-skill/ui-ux-pro-max",
+      "name": "ui-ux-pro-max",
+      "expected": [
+        "product-ui",
+        "design-system"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "uizze.com/anti-ui-slop",
+      "name": "anti-ui-slop",
+      "expected": [
+        "product-ui",
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "uizze.com/ui-radar",
+      "name": "ui-radar",
+      "expected": [
+        "product-ui"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "pbakaus/impeccable/impeccable",
+      "name": "impeccable",
+      "expected": [
+        "product-ui",
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "pbakaus/impeccable/bolder",
+      "name": "bolder",
+      "expected": [
+        "product-ui"
+      ],
+      "stratum": "ambiguous",
+      "note": "Short unusual name; visual design amplification."
+    },
+    {
+      "id": "pbakaus/impeccable/colorize",
+      "name": "colorize",
+      "expected": [
+        "product-ui"
+      ],
+      "stratum": "ambiguous",
+      "note": "Short unusual name; adds color to UI."
+    },
+    {
+      "id": "pbakaus/impeccable/animate",
+      "name": "animate",
+      "expected": [
+        "product-ui",
+        "frontend"
+      ],
+      "stratum": "ambiguous",
+      "note": "Short generic name; UI micro-interactions."
+    },
+    {
+      "id": "vercel-labs/agent-skills/web-design-guidelines",
+      "name": "web-design-guidelines",
+      "expected": [
+        "product-ui",
+        "usability",
+        "review"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "google-labs-code/stitch-skills/enhance-prompt",
+      "name": "enhance-prompt",
+      "expected": [
+        "product-ui"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "leonxlnx/taste-skill/gpt-taste",
+      "name": "gpt-taste",
+      "expected": [
+        "product-ui",
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/design-critique",
+      "name": "design-critique",
+      "expected": [
+        "product-ui",
+        "usability"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/ux-copy",
+      "name": "ux-copy",
+      "expected": [
+        "product-ui"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/design-handoff",
+      "name": "design-handoff",
+      "expected": [
+        "product-ui",
+        "design-system"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "mattpocock/skills/prototype",
+      "name": "prototype",
+      "expected": [
+        "product-ui"
+      ],
+      "stratum": "ambiguous",
+      "note": "\"Design question\" can mean UI or code design; reviewer may prefer []."
+    },
+    {
+      "id": "shadcn/ui/shadcn",
+      "name": "shadcn",
+      "expected": [
+        "design-system",
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/tailwind-design-system",
+      "name": "tailwind-design-system",
+      "expected": [
+        "design-system",
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "google-labs-code/stitch-skills/design-md",
+      "name": "design-md",
+      "expected": [
+        "design-system"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "pbakaus/impeccable/normalize",
+      "name": "normalize",
+      "expected": [
+        "design-system"
+      ],
+      "stratum": "ambiguous",
+      "note": "Generic name; realigns UI to design-system tokens."
+    },
+    {
+      "id": "pbakaus/impeccable/extract",
+      "name": "extract",
+      "expected": [
+        "design-system"
+      ],
+      "stratum": "ambiguous",
+      "note": "Generic name; extracts components and design tokens."
+    },
+    {
+      "id": "leonxlnx/taste-skill/stitch-design-taste",
+      "name": "stitch-design-taste",
+      "expected": [
+        "design-system"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "nextlevelbuilder/ui-ux-pro-max-skill/ckm:design",
+      "name": "ckm:design",
+      "expected": [
+        "design-system",
+        "product-ui"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/design-system",
+      "name": "design-system",
+      "expected": [
+        "design-system"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "addyosmani/web-quality-skills/accessibility",
+      "name": "accessibility",
+      "expected": [
+        "usability",
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "ibelick/ui-skills/fixing-accessibility",
+      "name": "fixing-accessibility",
+      "expected": [
+        "usability",
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/accessibility-compliance",
+      "name": "accessibility-compliance",
+      "expected": [
+        "usability",
+        "frontend"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "jakubkrehel/skills/better-accessibility",
+      "name": "better-accessibility",
+      "expected": [
+        "usability"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/accessibility-review",
+      "name": "accessibility-review",
+      "expected": [
+        "usability"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "pbakaus/impeccable/audit",
+      "name": "audit",
+      "expected": [
+        "usability",
+        "frontend"
+      ],
+      "stratum": "ambiguous",
+      "note": "Generic name; technical UI quality audit (a11y, perf, theming)."
+    },
+    {
+      "id": "phuryn/pm-skills/create-prd",
+      "name": "create-prd",
+      "expected": [
+        "prd"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "github/awesome-copilot/prd",
+      "name": "prd",
+      "expected": [
+        "prd"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "mattpocock/skills/to-prd",
+      "name": "to-prd",
+      "expected": [
+        "prd"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "mattpocock/skills/to-spec",
+      "name": "to-spec",
+      "expected": [
+        "prd"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "warpdotdev/common-skills/write-product-spec",
+      "name": "write-product-spec",
+      "expected": [
+        "prd"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "warpdotdev/common-skills/write-tech-spec",
+      "name": "write-tech-spec",
+      "expected": [
+        "prd"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/write-spec",
+      "name": "write-spec",
+      "expected": [
+        "prd"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "addyosmani/agent-skills/spec-driven-development",
+      "name": "spec-driven-development",
+      "expected": [
+        "prd",
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/user-stories",
+      "name": "user-stories",
+      "expected": [
+        "prd"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/pre-mortem",
+      "name": "pre-mortem",
+      "expected": [
+        "prd"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/outcome-roadmap",
+      "name": "outcome-roadmap",
+      "expected": [
+        "roadmap"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/prioritization-frameworks",
+      "name": "prioritization-frameworks",
+      "expected": [
+        "roadmap"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/strategy-red-team",
+      "name": "strategy-red-team",
+      "expected": [
+        "roadmap",
+        "prd"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/product-strategy",
+      "name": "product-strategy",
+      "expected": [
+        "roadmap"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/roadmap-update",
+      "name": "roadmap-update",
+      "expected": [
+        "roadmap"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/sprint-planning",
+      "name": "sprint-planning",
+      "expected": [
+        "roadmap"
+      ],
+      "stratum": "ambiguous",
+      "note": "Sprint planning is near-term execution; roadmap is the closest PM field."
+    },
+    {
+      "id": "coreyhaines31/marketingskills/customer-research",
+      "name": "customer-research",
+      "expected": [
+        "user-research"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/user-personas",
+      "name": "user-personas",
+      "expected": [
+        "user-research"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/customer-journey-map",
+      "name": "customer-journey-map",
+      "expected": [
+        "user-research"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/ideal-customer-profile",
+      "name": "ideal-customer-profile",
+      "expected": [
+        "user-research"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/sentiment-analysis",
+      "name": "sentiment-analysis",
+      "expected": [
+        "user-research",
+        "analysis"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/user-research",
+      "name": "user-research",
+      "expected": [
+        "user-research"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/research-synthesis",
+      "name": "research-synthesis",
+      "expected": [
+        "user-research"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/competitor-analysis",
+      "name": "competitor-analysis",
+      "expected": [
+        "competitive"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "coreyhaines31/marketingskills/competitor-profiling",
+      "name": "competitor-profiling",
+      "expected": [
+        "competitive"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "firecrawl/firecrawl-workflows/firecrawl-competitive-intel",
+      "name": "firecrawl-competitive-intel",
+      "expected": [
+        "competitive"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "skills-101/superpowers/competitor-teardown",
+      "name": "competitor-teardown",
+      "expected": [
+        "competitive"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/swot-analysis",
+      "name": "swot-analysis",
+      "expected": [
+        "competitive"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/competitive-intelligence",
+      "name": "competitive-intelligence",
+      "expected": [
+        "competitive"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "coreyhaines31/marketingskills/competitor-alternatives",
+      "name": "competitor-alternatives",
+      "expected": [
+        "competitive"
+      ],
+      "stratum": "ambiguous",
+      "note": "Writes competitor comparison pages for marketing/SEO; reviewer may prefer []."
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/standup",
+      "name": "standup",
+      "expected": [
+        "pm-writing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/stakeholder-update",
+      "name": "stakeholder-update",
+      "expected": [
+        "pm-writing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/status-report",
+      "name": "status-report",
+      "expected": [
+        "pm-writing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/summarize-meeting",
+      "name": "summarize-meeting",
+      "expected": [
+        "pm-writing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/changelog-automation",
+      "name": "changelog-automation",
+      "expected": [
+        "pm-writing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "composiohq/awesome-claude-skills/changelog-generator",
+      "name": "changelog-generator",
+      "expected": [
+        "pm-writing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/grammar-check",
+      "name": "grammar-check",
+      "expected": [
+        "pm-writing"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "tw93/waza/write",
+      "name": "write",
+      "expected": [
+        "pm-writing"
+      ],
+      "stratum": "ambiguous",
+      "note": "Generic name; general prose polishing, closest to the Writing field."
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/explore-data",
+      "name": "explore-data",
+      "expected": [
+        "analysis"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/analyze",
+      "name": "analyze",
+      "expected": [
+        "analysis"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/statistical-analysis",
+      "name": "statistical-analysis",
+      "expected": [
+        "analysis"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/sql-queries",
+      "name": "sql-queries",
+      "expected": [
+        "analysis",
+        "database"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/write-query",
+      "name": "write-query",
+      "expected": [
+        "analysis",
+        "database"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/validate-data",
+      "name": "validate-data",
+      "expected": [
+        "analysis"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/skills/xlsx",
+      "name": "xlsx",
+      "expected": [
+        "analysis"
+      ],
+      "stratum": "ambiguous",
+      "note": "Spreadsheet file handling; analysis is the closest field."
+    },
+    {
+      "id": "wshobson/agents/backtesting-frameworks",
+      "name": "backtesting-frameworks",
+      "expected": [
+        "analysis"
+      ],
+      "stratum": "ambiguous",
+      "note": "Name contains \"testing\" but it is trading-strategy backtesting, not software testing."
+    },
+    {
+      "id": "coreyhaines31/marketingskills/ab-test-setup",
+      "name": "ab-test-setup",
+      "expected": [
+        "metrics"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "coreyhaines31/marketingskills/analytics-tracking",
+      "name": "analytics-tracking",
+      "expected": [
+        "metrics"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/metrics-review",
+      "name": "metrics-review",
+      "expected": [
+        "metrics",
+        "analysis"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "phuryn/pm-skills/metrics-dashboard",
+      "name": "metrics-dashboard",
+      "expected": [
+        "metrics",
+        "viz"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/kpi-dashboard-design",
+      "name": "kpi-dashboard-design",
+      "expected": [
+        "metrics",
+        "viz"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "firecrawl/firecrawl-workflows/firecrawl-dashboard-reporting",
+      "name": "firecrawl-dashboard-reporting",
+      "expected": [
+        "metrics"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/data-visualization",
+      "name": "data-visualization",
+      "expected": [
+        "viz"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/create-viz",
+      "name": "create-viz",
+      "expected": [
+        "viz"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/build-dashboard",
+      "name": "build-dashboard",
+      "expected": [
+        "viz"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "wshobson/agents/data-storytelling",
+      "name": "data-storytelling",
+      "expected": [
+        "viz"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "vercel-labs/skills/find-skills",
+      "name": "find-skills",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "mattpocock/skills/grill-me",
+      "name": "grill-me",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "mattpocock/skills/handoff",
+      "name": "handoff",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "mattpocock/skills/wayfinder",
+      "name": "wayfinder",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "mattpocock/skills/to-tickets",
+      "name": "to-tickets",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "ambiguous",
+      "note": "Breaks plans into agent-sized tickets; could read as PM planning."
+    },
+    {
+      "id": "obra/superpowers/brainstorming",
+      "name": "brainstorming",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "obra/superpowers/writing-plans",
+      "name": "writing-plans",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "obra/superpowers/subagent-driven-development",
+      "name": "subagent-driven-development",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "obra/superpowers/verification-before-completion",
+      "name": "verification-before-completion",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "obra/superpowers/writing-skills",
+      "name": "writing-skills",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/skills/skill-creator",
+      "name": "skill-creator",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "addyosmani/agent-skills/planning-and-task-breakdown",
+      "name": "planning-and-task-breakdown",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/memory-management",
+      "name": "memory-management",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "field"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/update",
+      "name": "update",
+      "expected": [
+        "workflow"
+      ],
+      "stratum": "ambiguous",
+      "note": "Generic name; syncs tasks and refreshes agent memory."
+    },
+    {
+      "id": "open.feishu.cn/lark-doc",
+      "name": "lark-doc",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:lark"
+    },
+    {
+      "id": "open.feishu.cn/lark-base",
+      "name": "lark-base",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:lark"
+    },
+    {
+      "id": "open.feishu.cn/lark-im",
+      "name": "lark-im",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:lark"
+    },
+    {
+      "id": "open.feishu.cn/lark-calendar",
+      "name": "lark-calendar",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:lark"
+    },
+    {
+      "id": "open.feishu.cn/lark-okr",
+      "name": "lark-okr",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:lark",
+      "note": "OKR tool inside Lark; vendor product use, not roadmap craft."
+    },
+    {
+      "id": "open.feishu.cn/lark-whiteboard",
+      "name": "lark-whiteboard",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:lark"
+    },
+    {
+      "id": "open.feishu.cn/lark-workflow-meeting-summary",
+      "name": "lark-workflow-meeting-summary",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:lark",
+      "note": "Name contains \"workflow\" but it is a Lark meeting-notes flow, not agent workflow."
+    },
+    {
+      "id": "open.feishu.cn/lark-openapi-explorer",
+      "name": "lark-openapi-explorer",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:lark"
+    },
+    {
+      "id": "open.feishu.cn/lark-minutes",
+      "name": "lark-minutes",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:lark",
+      "note": "Description is only a redirect to lark-meeting."
+    },
+    {
+      "id": "larksuite/cli/lark-doc",
+      "name": "lark-doc",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:lark",
+      "note": "Duplicate of open.feishu.cn/lark-doc under another owner."
+    },
+    {
+      "id": "larksuite/cli/lark-im",
+      "name": "lark-im",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:lark"
+    },
+    {
+      "id": "googleworkspace/cli/gws-gmail",
+      "name": "gws-gmail",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:google-workspace"
+    },
+    {
+      "id": "googleworkspace/cli/gws-drive",
+      "name": "gws-drive",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:google-workspace"
+    },
+    {
+      "id": "googleworkspace/cli/gws-calendar",
+      "name": "gws-calendar",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:google-workspace"
+    },
+    {
+      "id": "googleworkspace/cli/recipe-review-overdue-tasks",
+      "name": "recipe-review-overdue-tasks",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor:google-workspace",
+      "note": "Name contains \"review\" but it is about Google Tasks, not code review."
+    },
+    {
+      "id": "stripe/ai/stripe-best-practices",
+      "name": "stripe-best-practices",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor"
+    },
+    {
+      "id": "intellectronica/agent-skills/notion-api",
+      "name": "notion-api",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor"
+    },
+    {
+      "id": "get-convex/agent-skills/convex-billing",
+      "name": "convex-billing",
+      "expected": [
+        "integrations",
+        "backend"
+      ],
+      "stratum": "vendor"
+    },
+    {
+      "id": "clerk/skills/clerk",
+      "name": "clerk",
+      "expected": [
+        "integrations",
+        "security"
+      ],
+      "stratum": "vendor"
+    },
+    {
+      "id": "apify/agent-skills/apify-ultimate-scraper",
+      "name": "apify-ultimate-scraper",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor"
+    },
+    {
+      "id": "skills-101/superpowers/twitter-automation",
+      "name": "twitter-automation",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/slack-search",
+      "name": "slack-search",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/build-zoom-meeting-app",
+      "name": "build-zoom-meeting-app",
+      "expected": [
+        "integrations"
+      ],
+      "stratum": "vendor"
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/setup-zoom-webhooks",
+      "name": "setup-zoom-webhooks",
+      "expected": [
+        "integrations",
+        "api"
+      ],
+      "stratum": "vendor"
+    },
+    {
+      "id": "microsoft/azure-skills/azure-diagnostics",
+      "name": "azure-diagnostics",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "microsoft/azure-skills/azure-prepare",
+      "name": "azure-prepare",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "microsoft/azure-skills/azure-deploy",
+      "name": "azure-deploy",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "microsoft/azure-skills/azure-compute",
+      "name": "azure-compute",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "microsoft/azure-skills/azure-kubernetes",
+      "name": "azure-kubernetes",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "microsoft/azure-skills/appinsights-instrumentation",
+      "name": "appinsights-instrumentation",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "microsoft/azure-skills/azure-resource-visualizer",
+      "name": "azure-resource-visualizer",
+      "expected": [
+        "devops"
+      ],
+      "stratum": "vendor:azure",
+      "note": "Name says \"visualizer\" but it draws architecture diagrams, not data viz."
+    },
+    {
+      "id": "microsoft/azure-skills/azure-storage",
+      "name": "azure-storage",
+      "expected": [
+        "backend"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "microsoft/azure-skills/azure-messaging",
+      "name": "azure-messaging",
+      "expected": [
+        "backend"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "microsoft/azure-skills/azure-compliance",
+      "name": "azure-compliance",
+      "expected": [
+        "security"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "microsoft/azure-skills/azure-rbac",
+      "name": "azure-rbac",
+      "expected": [
+        "security"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "microsoft/azure-skills/entra-app-registration",
+      "name": "entra-app-registration",
+      "expected": [
+        "security"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "microsoft/azure-skills/azure-kusto",
+      "name": "azure-kusto",
+      "expected": [
+        "analysis"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "microsoft/azure-skills/azure-aigateway",
+      "name": "azure-aigateway",
+      "expected": [
+        "api",
+        "devops"
+      ],
+      "stratum": "vendor:azure"
+    },
+    {
+      "id": "prime-skills/runcomfy-agent-skills/nano-banana-2",
+      "name": "nano-banana-2",
+      "expected": [],
+      "stratum": "none",
+      "note": "Image generation; no field fits."
+    },
+    {
+      "id": "prime-skills/runcomfy-agent-skills/seedance-v2",
+      "name": "seedance-v2",
+      "expected": [],
+      "stratum": "none",
+      "note": "Video generation."
+    },
+    {
+      "id": "prime-skills/runcomfy-agent-skills/ai-music",
+      "name": "ai-music",
+      "expected": [],
+      "stratum": "none",
+      "note": "Music generation."
+    },
+    {
+      "id": "skills-101/superpowers/ai-video-generation",
+      "name": "ai-video-generation",
+      "expected": [],
+      "stratum": "none",
+      "note": "Video generation."
+    },
+    {
+      "id": "heygen-com/hyperframes/hyperframes",
+      "name": "hyperframes",
+      "expected": [],
+      "stratum": "none",
+      "note": "Video composition; HTML-based but not app frontend."
+    },
+    {
+      "id": "higgsfield-ai/skills/higgsfield-soul-id",
+      "name": "higgsfield-soul-id",
+      "expected": [],
+      "stratum": "none",
+      "note": "Image model training."
+    },
+    {
+      "id": "coreyhaines31/marketingskills/public-relations",
+      "name": "public-relations",
+      "expected": [],
+      "stratum": "none",
+      "note": "Marketing/PR; matched \"review\" searches."
+    },
+    {
+      "id": "coreyhaines31/marketingskills/lead-magnets",
+      "name": "lead-magnets",
+      "expected": [],
+      "stratum": "none",
+      "note": "Marketing."
+    },
+    {
+      "id": "coreyhaines31/marketingskills/content-strategy",
+      "name": "content-strategy",
+      "expected": [],
+      "stratum": "none",
+      "note": "Marketing; says \"plan\" but not a product roadmap."
+    },
+    {
+      "id": "skills-101/superpowers/video-ad-specs",
+      "name": "video-ad-specs",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Name says \"specs\" but these are ad format specs, not product specs."
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/financial-statements",
+      "name": "financial-statements",
+      "expected": [],
+      "stratum": "none",
+      "note": "Finance."
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/variance-analysis",
+      "name": "variance-analysis",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Financial variance analysis; name says analysis but it is accounting, not data analysis. Reviewer may prefer analysis."
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/performance-review",
+      "name": "performance-review",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "HR performance reviews, not code review or performance optimization."
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/interview-prep",
+      "name": "interview-prep",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Hiring interviews, not user interviews."
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/review-contract",
+      "name": "review-contract",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Legal contract review, not code review."
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/ticket-triage",
+      "name": "ticket-triage",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Customer support ticket triage."
+    },
+    {
+      "id": "phuryn/pm-skills/privacy-policy",
+      "name": "privacy-policy",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Legal document drafting, not security review."
+    },
+    {
+      "id": "juliusbrussee/caveman/caveman",
+      "name": "caveman",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Changes agent output style only; does not plan, ask, hand off or find tools."
+    },
+    {
+      "id": "mattpocock/skills/teach",
+      "name": "teach",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Generic name; teaching concepts to the user."
+    },
+    {
+      "id": "mattpocock/skills/diagnosing-bugs",
+      "name": "diagnosing-bugs",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Debugging; no debugging field in the seed taxonomy."
+    },
+    {
+      "id": "obra/superpowers/systematic-debugging",
+      "name": "systematic-debugging",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Debugging; no debugging field in the seed taxonomy."
+    },
+    {
+      "id": "anthropics/knowledge-work-plugins/search",
+      "name": "search",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Enterprise search across connected sources; generic name."
+    },
+    {
+      "id": "anthropics/skills/slack-gif-creator",
+      "name": "slack-gif-creator",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Makes GIFs; \"Slack\" is the target format, not a Slack integration."
+    },
+    {
+      "id": "useosint/skills/what-leaked-about-you",
+      "name": "what-leaked-about-you",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "Personal data-breach lookup (OSINT), not software security."
+    },
+    {
+      "id": "vercel-labs/agent-browser/agent-browser",
+      "name": "agent-browser",
+      "expected": [],
+      "stratum": "ambiguous",
+      "note": "General browser automation for agents; not testing-specific."
+    },
+    {
+      "id": "github/awesome-copilot/java-springboot",
+      "name": "java-springboot",
+      "expected": [
+        "backend"
+      ],
+      "stratum": "field"
+    }
+  ]
+}

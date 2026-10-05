@@ -13,6 +13,8 @@ export interface MarketSkillDetail {
   description: string | null;
   /** Content hash from skills.sh (or computed from the fetched SKILL.md). */
   hash: string;
+  /** Label excerpt Jev reads, parsed from the same fetched SKILL.md; `null` if there is none. */
+  labelExcerpt: string | null;
 }
 
 export type AuditStatus = 'pass' | 'warn' | 'fail' | 'none';

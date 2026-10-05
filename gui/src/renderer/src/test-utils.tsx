@@ -6,7 +6,7 @@ import { InMemorySkillsAdapter } from '../../../../src/adapters/in-memory-skills
 import { InMemoryUsageCollector } from '../../../../src/adapters/in-memory-usage.js';
 import type { ICollectionEngine } from '../../../../src/interfaces/engine.js';
 import { err, isOk, ok, type Result } from '../../../../src/core/result.js';
-import type { LlmProvider, MarketPreviewData, MarketSearchRow, MarketSuggestedData, ShelfRole, SkilBridge, ScanResult, SuggestResult } from '../../shared/ipc.js';
+import type { CreatorCard, CreatorDetail, LlmProvider, MarketPreviewData, MarketSearchRow, MarketSuggestedData, ShelfRole, SkilBridge, ScanResult, SuggestResult } from '../../shared/ipc.js';
 import { llmKeyHint, toLlmStatus } from '../../shared/llm-settings.js';
 import { forgetFolder, rememberFolder } from '../../shared/recent-folders.js';
 import { ThemeProvider } from './theme';
@@ -219,6 +219,8 @@ export function createTestBridge(engine: ICollectionEngine, options: TestBridgeO
     // Tests that need shelves override these on the returned bridge.
     marketShelves: async (): Promise<Result<ShelfRole[]>> => ok([]),
     marketSuggested: async (): Promise<Result<MarketSuggestedData>> => ok({ updatedAt: '', roles: [] }),
+    marketCreators: async (): Promise<Result<CreatorCard[]>> => ok([]),
+    marketCreator: async (): Promise<Result<CreatorDetail>> => err(new Error('not_found')),
     marketSearch: async (): Promise<Result<MarketSearchRow[]>> => ok([]),
     marketPreview: async (id: string): Promise<Result<MarketPreviewData>> =>
       ok({

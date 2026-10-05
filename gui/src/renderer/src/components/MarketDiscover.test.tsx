@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import MarketDiscover, { clearDiscoverSuggestCache } from './MarketDiscover';
 import { createInMemoryEngine, createTestBridge, renderWithProviders } from '../test-utils';
 import { err, ok, type Result } from '../../../../../src/core/result.js';
-import type { MarketPreviewData, MarketSearchRow, ShelfRole, Skill, SuggestResult } from '../../../shared/ipc.js';
+import type { CreatorCard, CreatorDetail, MarketPreviewData, MarketSearchRow, ShelfRole, Skill, SuggestResult } from '../../../shared/ipc.js';
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -142,6 +142,52 @@ describe('MarketDiscover', () => {
     );
     expect(engine.skills().map((skill) => skill.id)).toEqual(['obra/react-patterns']);
     expect(engine.skills()[0]?.paths).toEqual(['.agents/skills/obra/react-patterns', '.claude/skills/obra/react-patterns']);
+  });
+
+  it('shows "+N more" on collapsed suite rows and searches the suite prefix on click', async () => {
+    const engine = createInMemoryEngine();
+    const searched: string[] = [];
+    const suiteShelves: ShelfRole[] = [
+      {
+        slug: 'swe',
+        label: 'SWE',
+        fields: [
+          {
+            slug: 'cloud',
+            label: 'Cloud',
+            skills: [
+              { id: 'microsoft/github-copilot-for-azure/azure-deploy', name: 'azure-deploy', installs: 900, rank: 1, moreCount: 4 },
+              { id: 'vercel-labs/agent-skills/vercel-deploy', name: 'vercel-deploy', installs: 500, rank: 2 },
+            ],
+          },
+        ],
+      },
+    ];
+    const bridge = {
+      ...createTestBridge(engine),
+      marketShelves: async (): Promise<Result<ShelfRole[]>> => ok(suiteShelves),
+      marketSearch: async (query: string): Promise<Result<MarketSearchRow[]>> => {
+        searched.push(query);
+        return ok([{ id: 'microsoft/github-copilot-for-azure/azure-rbac', name: 'azure-rbac', installs: 400 }]);
+      },
+    };
+
+    renderWithProviders(<MarketDiscover />, { bridge });
+    await openLeaderboard();
+    await userEvent.click(screen.getByRole('tab', { name: 'SWE' }));
+    await waitFor(() => expect(screen.getByText('azure-deploy')).toBeInTheDocument());
+
+    const suiteRow = screen.getByText('azure-deploy').closest('li') as HTMLElement;
+    expect(suiteRow).toHaveTextContent('azure-deploy, +4 more');
+    const plainRow = screen.getByText('vercel-deploy').closest('li') as HTMLElement;
+    expect(within(plainRow).queryByText(/more/)).not.toBeInTheDocument();
+
+    await userEvent.click(within(suiteRow).getByRole('button', { name: '+4 more' }));
+
+    await waitFor(() => expect(screen.getByText('azure-rbac')).toBeInTheDocument());
+    expect(searched).toEqual(['azure']);
+    expect(screen.getByLabelText('Search skills')).toHaveValue('azure');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('searches the full market index and falls back to skills.sh on error', async () => {
@@ -476,6 +522,171 @@ describe('MarketDiscover', () => {
       await userEvent.click(screen.getByRole('tab', { name: 'Suggested' }));
       await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
       expect(suggest).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Creators tab', () => {
+    const CREATORS: CreatorCard[] = [
+      { slug: 'vercel', label: 'Vercel', official: true, pinned: true, skillCount: 3, totalInstalls: 52000, },
+      { slug: 'obra', label: 'obra', official: false, pinned: false, skillCount: 1, totalInstalls: 1200 },
+    ];
+    const VERCEL: CreatorDetail = {
+      slug: 'vercel',
+      label: 'Vercel',
+      official: true,
+      repos: [
+        {
+          source: 'vercel-labs/agent-skills',
+          skills: [
+            { id: 'vercel-labs/agent-skills/react-best-practices', name: 'react-best-practices', installs: 40000, topics: ['frontend'] },
+            { id: 'vercel-labs/agent-skills/web-design', name: 'web-design', installs: 9000, topics: [] },
+          ],
+        },
+        {
+          source: 'vercel/ai',
+          skills: [{ id: 'vercel/ai/ai-sdk', name: 'ai-sdk', installs: 3000, topics: ['backend'] }],
+        },
+      ],
+    };
+
+    async function openCreators() {
+      await openLeaderboard();
+      await userEvent.click(screen.getByRole('tab', { name: 'Creators' }));
+    }
+
+    it('opens a creator grid, then a detail grouped by repo, then the preview', async () => {
+      const engine = createInMemoryEngine();
+      const marketCreator = vi.fn(async (): Promise<Result<CreatorDetail>> => ok(VERCEL));
+      const marketPreview = vi.fn(
+        async (): Promise<Result<MarketPreviewData>> =>
+          ok({ ...PREVIEW, id: 'vercel-labs/agent-skills/react-best-practices', name: 'react-best-practices' })
+      );
+      const bridge = {
+        ...createTestBridge(engine),
+        marketShelves: async (): Promise<Result<ShelfRole[]>> => ok(SHELVES),
+        marketCreators: async (): Promise<Result<CreatorCard[]>> => ok(CREATORS),
+        marketCreator,
+        marketPreview,
+      };
+
+      renderWithProviders(<MarketDiscover />, { bridge });
+      await openLeaderboard();
+      const tabs = within(screen.getByRole('tablist', { name: 'Leaderboard' })).getAllByRole('tab');
+      expect(tabs.map((tab) => tab.textContent)).toEqual(['Top', 'Trending', 'Creators', 'SWE', 'PM']);
+
+      await userEvent.click(screen.getByRole('tab', { name: 'SWE' }));
+      await waitFor(() => expect(screen.getByRole('tab', { name: 'Frontend' })).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('tab', { name: 'Creators' }));
+      expect(screen.getByRole('tab', { name: 'Creators' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tab', { name: 'SWE' })).toHaveAttribute('aria-selected', 'false');
+      expect(screen.queryByRole('tablist', { name: 'Category' })).not.toBeInTheDocument();
+
+      const grid = await screen.findByRole('list', { name: 'Creators' });
+      const cards = within(grid).getAllByRole('listitem');
+      expect(cards).toHaveLength(2);
+      expect(within(cards[0]).getByText('Vercel')).toBeInTheDocument();
+      expect(within(cards[0]).getByText('Official on skills.sh')).toBeInTheDocument();
+      expect(within(cards[0]).getByText(/3 skills/)).toBeInTheDocument();
+      expect(within(cards[0]).getByText(/52k/)).toBeInTheDocument();
+      expect(within(cards[0]).getByText(/installs, skills\.sh/)).toBeInTheDocument();
+      expect(within(cards[1]).queryByText('Official on skills.sh')).not.toBeInTheDocument();
+      expect(within(cards[1]).getByText(/1 skill\b/)).toBeInTheDocument();
+      expect(document.body.textContent).not.toMatch(/verified/i);
+
+      await userEvent.click(within(cards[0]).getByRole('button', { name: 'Open Vercel' }));
+      expect(marketCreator).toHaveBeenCalledWith('vercel');
+      expect(await screen.findByRole('heading', { name: 'Vercel' })).toBeInTheDocument();
+      expect(screen.getByText('Official on skills.sh')).toBeInTheDocument();
+      const repo = screen.getByRole('list', { name: 'vercel-labs/agent-skills' });
+      expect(within(repo).getAllByRole('listitem', { name: /./ })).toHaveLength(2);
+      expect(screen.getByRole('list', { name: 'vercel/ai' })).toBeInTheDocument();
+      expect(within(repo).getByText('Frontend')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Add vercel/ai/ai-sdk' })).toBeInTheDocument();
+      expect(document.body.textContent).not.toMatch(/verified/i);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Details for react-best-practices' }));
+      expect(await screen.findByRole('dialog', { name: 'react-best-practices' })).toBeInTheDocument();
+      expect(marketPreview).toHaveBeenCalledWith('vercel-labs/agent-skills/react-best-practices');
+      await userEvent.keyboard('{Escape}');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Back to creators' }));
+      expect(await screen.findByRole('list', { name: 'Creators' })).toBeInTheDocument();
+    });
+
+    it('renders no topic chips for a skill with empty topics', async () => {
+      const engine = createInMemoryEngine();
+      const bridge = {
+        ...createTestBridge(engine),
+        marketShelves: async (): Promise<Result<ShelfRole[]>> => ok(SHELVES),
+        marketCreators: async (): Promise<Result<CreatorCard[]>> => ok(CREATORS),
+        marketCreator: async (): Promise<Result<CreatorDetail>> => ok(VERCEL),
+      };
+
+      renderWithProviders(<MarketDiscover />, { bridge });
+      await openCreators();
+      await userEvent.click(await screen.findByRole('button', { name: 'Open Vercel' }));
+      const empty = await screen.findByRole('listitem', { name: 'web-design' });
+      expect(within(empty).queryByRole('list', { name: 'Topics' })).not.toBeInTheDocument();
+      const labeled = screen.getByRole('listitem', { name: 'ai-sdk' });
+      expect(within(within(labeled).getByRole('list', { name: 'Topics' })).getByText('Backend')).toBeInTheDocument();
+    });
+
+    it('shows a retry when creators fail and keeps the other tabs working', async () => {
+      const engine = createInMemoryEngine();
+      const marketCreators = vi
+        .fn<() => Promise<Result<CreatorCard[]>>>()
+        .mockResolvedValueOnce(err(new Error('store_error')))
+        .mockResolvedValueOnce(err(new Error('store_error')))
+        .mockResolvedValue(ok(CREATORS));
+      const bridge = {
+        ...createTestBridge(engine),
+        marketShelves: async (): Promise<Result<ShelfRole[]>> => ok(SHELVES),
+        marketCreators,
+      };
+
+      renderWithProviders(<MarketDiscover />, { bridge });
+      await openCreators();
+      await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Couldn't load/));
+      expect(screen.queryByText(/store_error/)).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('tab', { name: 'Top' }));
+      await waitFor(() => expect(screen.getByText('obra/react-patterns')).toBeInTheDocument());
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('tab', { name: 'SWE' }));
+      await waitFor(() => expect(screen.getByRole('tab', { name: 'Frontend' })).toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('tab', { name: 'Creators' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+      expect(await screen.findByRole('list', { name: 'Creators' })).toBeInTheDocument();
+      expect(marketCreators).toHaveBeenCalledTimes(3);
+    });
+
+    it('shows a retry when one creator fails to load', async () => {
+      const engine = createInMemoryEngine();
+      const marketCreator = vi
+        .fn<(slug: string) => Promise<Result<CreatorDetail>>>()
+        .mockResolvedValueOnce(err(new Error('store_error')))
+        .mockResolvedValue(ok(VERCEL));
+      const bridge = {
+        ...createTestBridge(engine),
+        marketCreators: async (): Promise<Result<CreatorCard[]>> => ok(CREATORS),
+        marketCreator,
+      };
+
+      renderWithProviders(<MarketDiscover />, { bridge });
+      await openCreators();
+      await userEvent.click(await screen.findByRole('button', { name: 'Open Vercel' }));
+      await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Couldn't load/));
+      await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+      expect(await screen.findByRole('heading', { name: 'Vercel' })).toBeInTheDocument();
+      expect(marketCreator).toHaveBeenLastCalledWith('vercel');
+    });
+
+    it('says so when there are no creators', async () => {
+      const engine = createInMemoryEngine();
+      renderWithProviders(<MarketDiscover />, { bridge: createTestBridge(engine) });
+      await openCreators();
+      expect(await screen.findByText(/No creators yet/)).toBeInTheDocument();
     });
   });
 });

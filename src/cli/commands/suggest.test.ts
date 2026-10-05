@@ -30,6 +30,8 @@ function fakeDiscover(shelves = SHELVES): Discover {
     search: async () => ok([]),
     preview: async () => err(new Error('unused')),
     browse: async () => ok([]),
+    creators: async () => ok([]),
+    creator: async () => err(new Error('unused')),
   };
 }
 

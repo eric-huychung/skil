@@ -8,7 +8,7 @@ import type {
   MarketSkillsClient,
 } from './market-client.js';
 import type { MarketListingInput } from './market-types.js';
-import { parseSkillDescription } from './parse-skill-description.js';
+import { parseSkillDescription, parseSkillExcerpt } from './parse-skill-description.js';
 
 const SKILLS_SH_SKILLS_URL = 'https://skills.sh/api/v1/skills';
 /** skills.sh max per page (docs: "Results per page, 1-500"). */
@@ -18,6 +18,14 @@ export interface MarketSkillsClientDeps {
   fetchImpl: typeof fetch;
   /** Mints a short-lived Vercel OIDC token, verified by skills.sh against oidc.vercel.com. */
   getOidcToken: () => Promise<string>;
+}
+
+/**
+ * `getSkill`'s result: the `MarketSkillDetail` contract plus the label
+ * excerpt (design §4.3), parsed from the same already-fetched SKILL.md.
+ */
+export interface MarketSkillDetailWithExcerpt extends MarketSkillDetail {
+  labelExcerpt: string | null;
 }
 
 interface ApiErrorBody {
@@ -111,7 +119,8 @@ function worstAuditStatus(statuses: string[]): AuditStatus {
  * `cursor` is the next page number as a string so it still satisfies
  * `MarketSkillsClient`'s opaque-cursor contract. `getSkill` has no
  * `description` field on the wire — it comes from parsing the `SKILL.md`
- * entry in `files` with `parseSkillDescription`. `hash` is only null when
+ * entry in `files` with `parseSkillDescription`; `labelExcerpt` comes from
+ * the same entry via `parseSkillExcerpt` (no extra request). `hash` is only null when
  * skills.sh has no snapshot; hashing the fetched `SKILL.md` ourselves
  * keeps hydrate's hash-diff working either way.
  */
@@ -133,7 +142,7 @@ export class RealMarketSkillsClient implements MarketSkillsClient {
     });
   }
 
-  async getSkill(id: string): Promise<Result<MarketSkillDetail>> {
+  async getSkill(id: string): Promise<Result<MarketSkillDetailWithExcerpt>> {
     // The id is already "{source}/{slug}", which is the full detail path.
     const result = await this.get<SkillDetailApiResponse>(`${SKILLS_SH_SKILLS_URL}/${id}`);
     if (!isOk(result)) {
@@ -142,9 +151,10 @@ export class RealMarketSkillsClient implements MarketSkillsClient {
 
     const skillMd = result.value.files?.find((file) => file.path === 'SKILL.md');
     const description = skillMd ? parseSkillDescription(skillMd.contents) : null;
+    const labelExcerpt = skillMd ? parseSkillExcerpt(skillMd.contents) : null;
     const hash = result.value.hash ?? sha256Hex(skillMd?.contents ?? id);
 
-    return ok({ description, hash });
+    return ok({ description, hash, labelExcerpt });
   }
 
   /** Same detail endpoint as `getSkill`, but returns the raw SKILL.md text instead of the parsed description — for preview display, never for storage. */

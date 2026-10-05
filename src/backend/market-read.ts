@@ -1,13 +1,18 @@
 import { isOk } from '../core/result.js';
 import type { MarketSkillsClient } from './market-client.js';
+import { type CreatorEntry, type CreatorsConfig, loadMarketCreators } from './market-creators.js';
 import { hydrateSuggestedPicks, loadMarketPicks } from './market-picks.js';
 import type { MarketStore } from './market-store.js';
+import type { CreatorCard, CreatorDetail, CreatorSkillRow } from './market-types.js';
 import { toSkillsAddSource } from './skills-add-source.js';
+import { TAXONOMY_VERSION } from './topic-taxonomy.js';
 
 /** Shelves change on a weekly cron, not per-request — cache for hours, not a day like the live browse proxy. */
 const SHELVES_CACHE_CONTROL = 'public, s-maxage=3600, stale-while-revalidate=1800';
 /** Editorial picks ship with the repo — same cadence as a deploy, not the weekly shelf cron. */
 const SUGGESTED_CACHE_CONTROL = 'public, s-maxage=3600, stale-while-revalidate=1800';
+/** Creators ship with the repo YAML; stats move on the weekly cron — same cadence as shelves. */
+const CREATORS_CACHE_CONTROL = 'public, s-maxage=3600, stale-while-revalidate=1800';
 /** Preview proxies live skills.sh calls (SKILL.md + audit) — short CDN cache, same idea as the live browse proxy but shorter since audits can change. */
 const PREVIEW_CACHE_CONTROL = 'public, s-maxage=300, stale-while-revalidate=60';
 
@@ -15,9 +20,16 @@ const SEARCH_DEFAULT_LIMIT = 25;
 const SEARCH_MAX_LIMIT = 50;
 const STORE_UNAVAILABLE = 'Market index is temporarily unavailable.';
 const SUGGESTED_UNAVAILABLE = 'Suggested picks are temporarily unavailable.';
+const CREATORS_UNAVAILABLE = 'Creators are temporarily unavailable.';
 
 export interface MarketReadDeps {
   store: MarketStore;
+}
+
+export interface MarketCreatorsDeps {
+  store: MarketStore;
+  /** Override `data/market-creators.yaml` in tests. */
+  creatorsPath?: string;
 }
 
 export interface MarketPreviewDeps {
@@ -27,20 +39,25 @@ export interface MarketPreviewDeps {
 
 /**
  * Vercel Function handler for `GET /api/market/shelves`. Grouped by role;
- * each skill is `{ id, name, installs, rank }` only — `listShelves` already
- * omits description/hash/url, so this is a thin pass-through, not a
- * reshape. Empty index (migration applied but no sync run yet) returns
- * `{ data: [] }`, not an error. A new role/field inserted straight into
+ * each skill is `{ id, name, installs, rank }` (plus `moreCount` on a
+ * collapsed suite lead) only — `listShelves` already omits
+ * description/hash/url, so this is a thin pass-through, not a reshape.
+ * `meta.generatedAt` is when shelves were last built (`null` if never).
+ * Empty index (migration applied but no sync run yet) returns
+ * `{ data: [], meta: { generatedAt: null } }`, not an error. A new role/field inserted straight into
  * Supabase shows up here with no handler change — `listShelves` reads the
  * store, not a hardcoded list.
  */
 export async function handleShelvesRequest(_request: Request, deps: MarketReadDeps): Promise<Response> {
-  const result = await deps.store.listShelves();
-  if (!isOk(result)) {
+  const [result, meta] = await Promise.all([deps.store.listShelves(), deps.store.getShelfMeta()]);
+  if (!isOk(result) || !isOk(meta)) {
     return Response.json({ error: 'store_error', message: STORE_UNAVAILABLE }, { status: 500 });
   }
 
-  return Response.json({ data: result.value }, { headers: { 'Cache-Control': SHELVES_CACHE_CONTROL } });
+  return Response.json(
+    { data: result.value, meta: { generatedAt: meta.value?.generatedAt ?? null } },
+    { headers: { 'Cache-Control': SHELVES_CACHE_CONTROL } },
+  );
 }
 
 /**
@@ -63,6 +80,89 @@ export async function handleSuggestedRequest(request: Request, deps: MarketReadD
   }
 
   return Response.json({ data: result.value }, { headers: { 'Cache-Control': SUGGESTED_CACHE_CONTROL } });
+}
+
+/**
+ * Vercel Function handler for `GET /api/market/creators?slug=`. Without
+ * `slug`: one card per `data/market-creators.yaml` entry, in YAML order,
+ * with `market_owner_stats` rows summed across the entry's alias owners
+ * (a creator with no indexed skills shows zeros). With `slug`: that
+ * creator plus every active skill grouped by repo (`source`). Repos and
+ * skills keep the store's installs-descending order. Not deduped by name —
+ * same-named skills in two repos both show. Unknown slug -> 404.
+ */
+export async function handleCreatorsRequest(request: Request, deps: MarketCreatorsDeps): Promise<Response> {
+  const slug = new URL(request.url, 'http://localhost').searchParams.get('slug');
+  let config: CreatorsConfig;
+  try {
+    config = loadMarketCreators(deps.creatorsPath);
+  } catch {
+    return Response.json({ error: 'config_error', message: CREATORS_UNAVAILABLE }, { status: 500 });
+  }
+
+  if (slug === null) {
+    return creatorsListResponse(config, deps.store);
+  }
+  const creator = config.creators.find((entry) => entry.slug === slug);
+  if (creator === undefined) {
+    return Response.json({ error: 'not_found', message: `Unknown creator '${slug}'.` }, { status: 404 });
+  }
+  return creatorDetailResponse(creator, deps.store);
+}
+
+async function creatorsListResponse(config: CreatorsConfig, store: MarketStore): Promise<Response> {
+  const stats = await store.listOwnerStats(config.creators.flatMap((creator) => creator.owners));
+  if (!isOk(stats)) {
+    return Response.json({ error: 'store_error', message: STORE_UNAVAILABLE }, { status: 500 });
+  }
+
+  const byOwner = new Map(stats.value.map((row) => [row.owner, row]));
+  const data = config.creators.map((creator): CreatorCard => {
+    let skillCount = 0;
+    let totalInstalls = 0;
+    for (const owner of creator.owners) {
+      skillCount += byOwner.get(owner)?.skillCount ?? 0;
+      totalInstalls += byOwner.get(owner)?.totalInstalls ?? 0;
+    }
+    return {
+      slug: creator.slug,
+      label: creator.label,
+      official: creator.official,
+      pinned: creator.pinned,
+      skillCount,
+      totalInstalls,
+    };
+  });
+
+  return Response.json(
+    { data, meta: { updatedAt: config.updatedAt, installsSource: 'skills.sh' } },
+    { headers: { 'Cache-Control': CREATORS_CACHE_CONTROL } },
+  );
+}
+
+async function creatorDetailResponse(creator: CreatorEntry, store: MarketStore): Promise<Response> {
+  const rows = await store.listSkillsByOwners(creator.owners, TAXONOMY_VERSION);
+  if (!isOk(rows)) {
+    return Response.json({ error: 'store_error', message: STORE_UNAVAILABLE }, { status: 500 });
+  }
+
+  const data: CreatorDetail = {
+    slug: creator.slug,
+    label: creator.label,
+    official: creator.official,
+    repos: groupByRepo(rows.value),
+  };
+  return Response.json({ data }, { headers: { 'Cache-Control': CREATORS_CACHE_CONTROL } });
+}
+
+function groupByRepo(rows: CreatorSkillRow[]): CreatorDetail['repos'] {
+  const repos = new Map<string, CreatorDetail['repos'][number]>();
+  for (const row of rows) {
+    const repo = repos.get(row.source) ?? { source: row.source, skills: [] };
+    repo.skills.push({ id: row.id, name: row.name, installs: row.installs, topics: row.topics });
+    repos.set(row.source, repo);
+  }
+  return [...repos.values()];
 }
 
 function parseSearchLimit(raw: string | null): number {
