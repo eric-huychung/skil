@@ -13,6 +13,10 @@
  * Smoke hydrate:
  *   npm run sync-market -- --max-detail=40
  *
+ * Backfill label excerpts (once, after the excerpt column lands; needs OIDC like a full run):
+ *   npm run sync-market -- --backfill-excerpt
+ *   hydrate every active row with no label_excerpt, paced like hydrate (8/s). Honors --max-detail.
+ *
  * Creators report (read-only; needs only the Supabase vars, GITHUB_TOKEN optional):
  *   npm run sync-market -- --creators-report
  *   Prints the proposed 30 and a paste-ready block for data/market-creators.yaml. Writes nothing.
@@ -81,6 +85,10 @@ function parseClassifyOnly(argv: string[]): boolean {
   return argv.includes('--classify-only');
 }
 
+function parseBackfillExcerpt(argv: string[]): boolean {
+  return argv.includes('--backfill-excerpt');
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -145,6 +153,7 @@ async function run(state: RunState): Promise<SyncRunOutcome> {
   const flags = process.argv.slice(2);
   const classifyOnly = parseClassifyOnly(flags);
   const maxDetail = parseMaxDetail(flags);
+  const backfillExcerpt = parseBackfillExcerpt(flags);
 
   if (!classifyOnly && !oidcToken) {
     return configError(
@@ -163,6 +172,17 @@ async function run(state: RunState): Promise<SyncRunOutcome> {
     client: new RealMarketSkillsClient({ fetchImpl: fetch, getOidcToken: () => getVercelOidcToken() }),
     classifier: new LlmSkillClassifier({ fetchImpl: fetch, getAccessToken: async () => gatewayKey }),
   });
+
+  if (backfillExcerpt) {
+    state.step = 'hydrate';
+    const missing = await store.listIdsMissingExcerpt();
+    if (!isOk(missing)) return fail(state, 'store', missing.error);
+    console.log(`Backfill: ${missing.value.length} id(s) have no label excerpt.`);
+    const drained = await drainHydrateQueue(sync, missing.value, maxDetail);
+    if (!isOk(drained)) return fail(state, 'unavailable', drained.error);
+    console.log(`Backfill done. Processed ${Math.min(missing.value.length, maxDetail)} id(s).`);
+    return { shelvesWritten: false, secrets: state.secrets };
+  }
 
   state.step = 'seed';
   console.log(`Seeding ${SEED_ROLES.length} roles / ${SEED_FIELDS.length} fields...`);
