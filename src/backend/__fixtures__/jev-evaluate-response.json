@@ -1,15 +1,60 @@
 {
-  "_provisional": "Shaped from the spec's documented gateway response (answers, usage.inputTokens/outputTokens, providerMetadata.gateway.cost). Replace with a real /v1/evaluate capture (no secrets).",
-  "model": "typesafe-ai/jev-1.13.0",
   "answers": {
-    "tech": { "type": "boolean", "probability": 0.97 },
-    "domain": {
-      "type": "choice",
-      "choice": "software_dev",
-      "probabilities": { "software_dev": 0.88, "design_ui": 0.09, "marketing": 0.03 },
-      "confidence": 0.88
+    "frontend": {
+      "type": "boolean",
+      "probability": 0.7
+    },
+    "testing": {
+      "type": "boolean",
+      "probability": 0.96
     }
   },
-  "usage": { "inputTokens": 912, "outputTokens": 4 },
-  "providerMetadata": { "gateway": { "cost": "0.00004" } }
+  "model": "typesafe-ai/jev",
+  "providerMetadata": {
+    "typesafe": {
+      "confidence": {}
+    },
+    "gateway": {
+      "routing": {
+        "originalModelId": "typesafe-ai/jev",
+        "resolvedProvider": "digitalocean",
+        "fallbacksAvailable": [
+          "typesafe-ai"
+        ],
+        "planningReasoning": "System credentials planned for: digitalocean, typesafe-ai. Total execution order: typesafe-ai(system) → digitalocean(system)",
+        "canonicalSlug": "typesafe-ai/jev",
+        "finalProvider": "typesafe-ai",
+        "modelAttemptCount": 1,
+        "modelAttempts": [
+          {
+            "canonicalSlug": "typesafe-ai/jev",
+            "success": true,
+            "providerAttemptCount": 1,
+            "providerAttempts": [
+              {
+                "provider": "typesafe-ai",
+                "credentialType": "system",
+                "success": true,
+                "startTime": 1791224205045,
+                "endTime": 1791224205165,
+                "statusCode": 200
+              }
+            ]
+          }
+        ],
+        "totalProviderAttemptCount": 1
+      },
+      "cost": "0.000014826",
+      "marketCost": "0.000014826",
+      "surchargeCost": "0",
+      "gatewayCost": "0.000014826",
+      "inferenceCost": "0.000014826",
+      "inputInferenceCost": "0.000014826",
+      "outputInferenceCost": "0"
+    }
+  },
+  "usage": {
+    "inputTokens": 353,
+    "outputTokens": 36
+  }
 }

@@ -17,6 +17,13 @@ const QUESTIONS: Record<string, JevQuestion> = {
   },
 };
 
+/** The boolean taxonomy questions the recorded fixture answers, keyed as the real call sent them. */
+const FIXTURE_QUESTIONS: Record<string, JevQuestion> = Object.fromEntries(
+  TOPIC_QUESTIONS.filter(({ fieldSlug }) => fieldSlug === 'frontend' || fieldSlug === 'testing').map(
+    ({ fieldSlug, prompt }) => [fieldSlug, { kind: 'boolean' as const, prompt }]
+  )
+);
+
 interface Call {
   url: string;
   init: RequestInit;
@@ -105,25 +112,21 @@ describe('GatewayJevClient request shape', () => {
   });
 });
 
-describe('GatewayJevClient contract (provisional fixture)', () => {
+describe('GatewayJevClient contract (recorded gateway response)', () => {
   it('parses the recorded response into typed answers', async () => {
     const { client } = makeClient([okFixture]);
 
-    const result = await client.evaluate('name: foo', QUESTIONS);
+    const result = await client.evaluate('name: foo', FIXTURE_QUESTIONS);
 
     expect(isOk(result)).toBe(true);
     if (!isOk(result)) return;
     expect(result.value).toEqual({
       answers: {
-        tech: { kind: 'boolean', probability: 0.97 },
-        domain: {
-          kind: 'choice',
-          option: 'software_dev',
-          probabilities: { software_dev: 0.88, design_ui: 0.09, marketing: 0.03 },
-        },
+        frontend: { kind: 'boolean', probability: 0.7 },
+        testing: { kind: 'boolean', probability: 0.96 },
       },
-      modelVersion: 'typesafe-ai/jev-1.13.0',
-      inputTokens: 912,
+      modelVersion: 'typesafe-ai/jev',
+      inputTokens: 353,
     });
   });
 });
@@ -142,7 +145,7 @@ describe('GatewayJevClient retries', () => {
   it.each([429, 529, 500, 502, 503])('retries %i then succeeds', async (code) => {
     const { client, calls, sleeps } = makeClient([status(code), status(code), okFixture]);
 
-    const result = await client.evaluate('s', QUESTIONS);
+    const result = await client.evaluate('s', FIXTURE_QUESTIONS);
 
     expect(isOk(result)).toBe(true);
     expect(calls).toHaveLength(3);
@@ -152,7 +155,7 @@ describe('GatewayJevClient retries', () => {
   it('retries network errors and timeouts', async () => {
     const { client, calls } = makeClient([new TypeError('fetch failed'), timeoutError(), okFixture]);
 
-    const result = await client.evaluate('s', QUESTIONS);
+    const result = await client.evaluate('s', FIXTURE_QUESTIONS);
 
     expect(isOk(result)).toBe(true);
     expect(calls).toHaveLength(3);
@@ -161,7 +164,7 @@ describe('GatewayJevClient retries', () => {
   it('gives up after 5 tries with an unavailable error carrying the last status', async () => {
     const { client, calls, sleeps } = makeClient([status(529, '{"error":"overloaded"}')]);
 
-    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+    const error = expectJevError(await client.evaluate('s', FIXTURE_QUESTIONS));
 
     expect(calls).toHaveLength(5);
     expect(sleeps).toHaveLength(4);
@@ -183,7 +186,7 @@ describe('GatewayJevClient retries', () => {
       );
     const { client, calls } = makeClient([stalledBody, okFixture]);
 
-    const result = await client.evaluate('s', QUESTIONS);
+    const result = await client.evaluate('s', FIXTURE_QUESTIONS);
 
     expect(isOk(result)).toBe(true);
     expect(calls).toHaveLength(2);
@@ -192,7 +195,7 @@ describe('GatewayJevClient retries', () => {
   it('gives up after 5 timeouts with an unavailable error', async () => {
     const { client, calls } = makeClient([timeoutError()]);
 
-    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+    const error = expectJevError(await client.evaluate('s', FIXTURE_QUESTIONS));
 
     expect(calls).toHaveLength(5);
     expect(error.kind).toBe('unavailable');
@@ -202,7 +205,7 @@ describe('GatewayJevClient retries', () => {
   it('backs off exponentially with full jitter: random() * min(20s, 500ms * 2^n)', async () => {
     const { client, sleeps } = makeClient([status(429)]);
 
-    await client.evaluate('s', QUESTIONS);
+    await client.evaluate('s', FIXTURE_QUESTIONS);
 
     // random() is 0.5 in makeClient
     expect(sleeps).toEqual([250, 500, 1000, 2000]);
@@ -220,7 +223,7 @@ describe('GatewayJevClient retries', () => {
       random: () => 0.999999,
     });
 
-    await client.evaluate('s', QUESTIONS);
+    await client.evaluate('s', FIXTURE_QUESTIONS);
 
     expect(Math.max(...sleeps)).toBeLessThanOrEqual(20_000);
   });
@@ -233,7 +236,7 @@ describe('GatewayJevClient retries', () => {
   ] as const)('does not retry %i (%s)', async (code, kind) => {
     const { client, calls, sleeps } = makeClient([status(code, '{"error":"invalid"}')]);
 
-    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+    const error = expectJevError(await client.evaluate('s', FIXTURE_QUESTIONS));
 
     expect(calls).toHaveLength(1);
     expect(sleeps).toHaveLength(0);
@@ -246,7 +249,7 @@ describe('GatewayJevClient retries', () => {
   it('truncates long error bodies to a short excerpt', async () => {
     const { client } = makeClient([status(422, 'x'.repeat(5000))]);
 
-    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+    const error = expectJevError(await client.evaluate('s', FIXTURE_QUESTIONS));
 
     expect(error.message.length).toBeLessThan(400);
   });
@@ -255,8 +258,13 @@ describe('GatewayJevClient retries', () => {
 describe('GatewayJevClient answer validation', () => {
   const base = JSON.parse(fixture) as { answers: Record<string, Record<string, unknown>> };
   const withAnswers = (answers: Record<string, unknown>) => () => jsonResponse({ ...base, answers });
-  const tech = base.answers.tech!;
-  const domain = base.answers.domain!;
+  // A real boolean answer from the fixture; the choice answer stays hand-written
+  // because no real choice response has been recorded yet.
+  const tech = base.answers.frontend!;
+  const domain = {
+    choice: 'software_dev',
+    probabilities: { software_dev: 0.88, design_ui: 0.09, marketing: 0.03 },
+  };
 
   it.each([
     ['a missing question', { tech }],
