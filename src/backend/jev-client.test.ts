@@ -151,6 +151,24 @@ describe('GatewayJevClient retries', () => {
     expect(error.message).toContain('overloaded');
   });
 
+  it('retries a timeout while reading the response body', async () => {
+    const stalledBody = () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(timeoutError());
+          },
+        }),
+        { status: 200 }
+      );
+    const { client, calls } = makeClient([stalledBody, okFixture]);
+
+    const result = await client.evaluate('s', QUESTIONS);
+
+    expect(isOk(result)).toBe(true);
+    expect(calls).toHaveLength(2);
+  });
+
   it('gives up after 5 timeouts with an unavailable error', async () => {
     const { client, calls } = makeClient([timeoutError()]);
 

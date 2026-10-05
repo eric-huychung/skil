@@ -186,7 +186,10 @@ export class GatewayJevClient implements JevClient {
     let json: unknown;
     try {
       json = await response.json();
-    } catch {
+    } catch (error) {
+      if ((error as Error).name === 'TimeoutError') {
+        return fail(new JevError('unavailable', `Jev request failed: timed out after ${TIMEOUT_MS} ms`), true);
+      }
       return fail(new JevError('bad_answer', `Jev returned a non-JSON response (status ${response.status})`), false);
     }
     return { result: parseResponse(json, questions), retryable: false };
