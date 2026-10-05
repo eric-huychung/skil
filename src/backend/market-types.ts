@@ -82,7 +82,7 @@ export interface MarketSuggestedData {
   roles: SuggestedRole[];
 }
 
-/** One row from the classify pool (`listTopListings`). Description is the stored search excerpt, not SKILL.md. */
+/** A listing row as used by shelf fixtures and shelf-assembler tests. Description is the stored search excerpt, not SKILL.md. */
 export interface MarketClassifyRow {
   id: string;
   name: string;
