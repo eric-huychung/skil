@@ -172,7 +172,8 @@ export class MarketSync {
    * and label excerpt and saves them, unless the fetched hash matches what
    * is already stored and an excerpt is stored too (no-op — the skill body
    * has not changed). A hash-equal row with no excerpt is re-hydrated, so
-   * the excerpt backfill is this same code path. A fetch error for one id is
+   * the excerpt backfill is this same code path, unless the fetched detail
+   * has no excerpt either (null -> null: also a no-op). A fetch error for one id is
    * skipped so the rest of the queue still drains; re-running picks up
    * skipped ids again since their hash stays whatever it was before.
    *
@@ -215,6 +216,12 @@ export class MarketSync {
 
     // `label_excerpt` is capped at 1,000 chars whatever the client returns.
     const labelExcerpt = detail.value.labelExcerpt?.slice(0, 1_000) ?? null;
+
+    // Same hash and still no excerpt on either side: the write would be null -> null.
+    if (isOk(state) && state.value.hash === detail.value.hash && labelExcerpt === null) {
+      return ok({ id, status: 'unchanged' });
+    }
+
     const saved = await this.store.setDetail(id, {
       description: detail.value.description,
       hash: detail.value.hash,

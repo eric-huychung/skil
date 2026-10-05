@@ -204,6 +204,22 @@ describe('MarketSync.hydrateDetails excerpt (T15b)', () => {
     expect(isOk(pool) && pool.value[0]?.labelExcerpt).toBe('Body text.');
   });
 
+  it('reports unchanged and skips the write when hash matches and neither side has an excerpt', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertListing(listingItem('a/no-excerpt'), '2026-01-01T00:00:00.000Z');
+    await store.setDetail('a/no-excerpt', { description: 'Same', hash: 'hash-1' });
+    const setDetail = vi.spyOn(store, 'setDetail');
+    const client = fakeClient([]);
+    client.getSkill = vi.fn(async () => ok({ description: 'Same', hash: 'hash-1' }));
+    const sync = syncOf(store, client);
+
+    const result = await sync.hydrateDetails(['a/no-excerpt']);
+
+    expect(isOk(result) && result.value.hydrated).toEqual([]);
+    expect(isOk(result) && result.value.unchanged).toEqual(['a/no-excerpt']);
+    expect(setDetail).not.toHaveBeenCalled();
+  });
+
   it('is a no-op only when the hash matches and an excerpt is stored', async () => {
     const store = new InMemoryMarketStore();
     await store.upsertListing(listingItem('a/done'), '2026-01-01T00:00:00.000Z');
