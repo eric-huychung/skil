@@ -147,7 +147,8 @@ export interface MarketStore {
    * Searches name + description across the full index (not just shelved
    * skills). Inactive rows are excluded. `opts.limit` is the caller's
    * already-clamped 1-50 cap. Ranked by relevance tier (exact name >
-   * name prefix > typo-close name > text match), then installs.
+   * name prefix > owner or current-version topic > typo-close name > text
+   * match), then installs.
    */
   searchListings(q: string, opts: { limit: number }): Promise<Result<MarketSearchRow[]>>;
 }
