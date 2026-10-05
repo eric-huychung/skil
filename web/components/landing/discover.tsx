@@ -52,7 +52,16 @@ const AUDIT_BADGE_CLASS: Record<MarketPreview['audit']['status'], string> = {
   none: 'bg-secondary text-muted-foreground',
 }
 
-type Row = { id: string; name: string; installs: number; rank?: number }
+type Row = { id: string; name: string; installs: number; rank?: number; moreCount?: number }
+
+/** Collapsed suites share the name part before the first `-` (shelf assembler's suite rule). */
+function suitePrefix(name: string): string {
+  const slug = name.split('/').pop() ?? name
+  return slug.split('-')[0] ?? slug
+}
+
+/** Lets "+N more" sit above the row's full-size preview button (`.library-skill-hit`). */
+const MORE_INFO_STYLE = { zIndex: 'auto' } as const
 
 export function Discover() {
   const [roles, setRoles] = useState<ShelfRole[] | null>(null)
@@ -195,6 +204,12 @@ export function Discover() {
     } finally {
       setIsSearching(false)
     }
+  }
+
+  function searchSuite(name: string) {
+    const prefix = suitePrefix(name)
+    setQuery(prefix)
+    void runSearch(prefix)
   }
 
   async function handleSearch(event: React.FormEvent) {
@@ -368,9 +383,27 @@ export function Discover() {
                     aria-label={`Details for ${skill.name}`}
                   />
                   <span className="skill-rank">{skill.rank ?? visibleStart + index + 1}</span>
-                  <span className="skill-info block">
-                    <span className="skill-name block">{skill.name}</span>
-                  </span>
+                  {(skill.moreCount ?? 0) > 0 ? (
+                    <span className="skill-info block" style={MORE_INFO_STYLE}>
+                      <span className="skill-name block">
+                        <span>{skill.name}</span>,{' '}
+                        <button
+                          type="button"
+                          className="relative z-[2] cursor-pointer underline decoration-muted-foreground/40 underline-offset-4 hover:decoration-foreground"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            searchSuite(skill.name)
+                          }}
+                        >
+                          +{skill.moreCount} more
+                        </button>
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="skill-info block">
+                      <span className="skill-name block">{skill.name}</span>
+                    </span>
+                  )}
                   <span className="skill-actions">
                     <span className="skill-installs">{formatInstalls(skill.installs)}</span>
                   </span>

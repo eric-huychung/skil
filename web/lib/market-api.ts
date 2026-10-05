@@ -12,6 +12,8 @@ export interface ShelfSkill {
   name: string
   installs: number
   rank: number
+  /** Collapsed vendor suite: this row leads `moreCount` more. Absent = not collapsed. */
+  moreCount?: number
 }
 
 export interface ShelfField {
