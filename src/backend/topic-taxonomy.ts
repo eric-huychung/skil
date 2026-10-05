@@ -10,13 +10,16 @@ export type { TopicQuestion };
  */
 export const TOPIC_QUESTIONS: TopicQuestion[] = [
   // SWE
-  q('frontend', 'Is this skill mainly about building web or app frontends (UI components, React, CSS, client-side code)?'),
+  q('frontend', 'Is this skill mainly about building web frontends (UI components, React, CSS, client-side code)?'),
   q('backend', 'Is this skill mainly about building backend services or server-side application code?'),
   q('api', 'Is this skill mainly about designing, building or documenting APIs?'),
   q('database', 'Is this skill mainly about databases, SQL, schemas, queries or migrations?'),
   q('testing', 'Is this skill mainly about writing or running software tests?'),
   q('security', 'Is this skill mainly about software security, vulnerabilities, compliance or security review?'),
-  q('devops', 'Is this skill mainly about CI/CD, deployment, infrastructure, cloud operations or monitoring?'),
+  q(
+    'devops',
+    'Is this skill mainly about CI/CD, deployment, infrastructure, containers, cloud platforms (AWS, Azure, GCP), cloud operations or monitoring?',
+  ),
   q('review', 'Is this skill mainly about reviewing code or pull requests?'),
   // SWE, added in T23 (tech clusters that left skills unlabeled)
   q('mobile', 'Is this skill mainly about building mobile or native apps (iOS and Swift, Android and Kotlin, Flutter, React Native, Expo)?'),
@@ -46,12 +49,12 @@ export const TOPIC_QUESTIONS: TopicQuestion[] = [
   // Agent: reworded concretely (spec: the abstract "agent workflow" question did not fire)
   q(
     'workflow',
-    'Is this a skill that changes how a coding agent itself works: how it plans, asks clarifying questions, breaks down or hands off tasks, uses git safely, finds or manages other skills and tools, or drives a browser or terminal?',
+    'Is this a skill that changes how a coding agent works on a task: how it plans, asks clarifying questions, breaks down or hands off work, communicates, or uses git safely?',
   ),
   // Agent, added in T23
   q(
     'ai-ml',
-    'Is this skill mainly about building AI or machine-learning systems (LLM apps, RAG, embeddings, evals, fine-tuning, model training or inference, computer vision), not using a model to generate images, video or audio, and not writing agent personas, prompts or skills for coding agents?',
+    'Is this skill mainly about building AI or machine-learning systems (LLM apps, RAG, embeddings, prompt engineering for LLM apps, evals, fine-tuning, model training or inference, computer vision), not using a model to generate images, video or audio, and not writing agent personas, or prompts or skills for coding agents?',
   ),
   q(
     'agent-tooling',
@@ -60,7 +63,7 @@ export const TOPIC_QUESTIONS: TopicQuestion[] = [
   // Other: reworded so it means a named vendor, not "anything left over"
   q(
     'integrations',
-    'Is this skill mainly about using one specific third-party product, platform or vendor service (for example a named SaaS app, cloud provider or API such as Slack, Stripe, Azure or Lark)?',
+    'Is this skill mainly about connecting to or operating one named third-party SaaS or vendor service (for example Slack, Stripe, Salesforce, Lark), rather than a programming language, mobile or game platform, cloud platform, AI/ML framework, or a general technique?',
   ),
 ];
 

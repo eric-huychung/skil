@@ -38,10 +38,29 @@ describe('TOPIC_QUESTIONS', () => {
 describe('T23 tech topics', () => {
   const NEW_SLUGS = ['mobile', 'ai-ml', 'languages', 'agent-tooling', 'game-dev', 'docs'];
 
-  it('leaves the 21 earlier questions byte-for-byte unchanged (same hash as the first label run)', () => {
-    const earlier = TOPIC_QUESTIONS.filter((q) => !NEW_SLUGS.includes(q.fieldSlug));
-    expect(earlier).toHaveLength(21);
-    expect(taxonomyVersion(earlier)).toBe('ff85d19cf77d');
+  const REWORDED_SLUGS = ['integrations', 'workflow', 'frontend', 'devops'];
+
+  it('leaves the other 17 earlier questions byte-for-byte unchanged', () => {
+    const untouched = TOPIC_QUESTIONS.filter((q) => ![...NEW_SLUGS, ...REWORDED_SLUGS].includes(q.fieldSlug));
+    expect(untouched).toHaveLength(17);
+    // Hash of those 17 as they stood in the first label run (ff85d19cf77d).
+    expect(taxonomyVersion(untouched)).toBe('8f1d389f9de9');
+  });
+
+  it('narrows the four broad earlier questions word for word', () => {
+    const prompt = (slug: string) => TOPIC_QUESTIONS.find((q) => q.fieldSlug === slug)?.prompt;
+    expect(prompt('integrations')).toBe(
+      'Is this skill mainly about connecting to or operating one named third-party SaaS or vendor service (for example Slack, Stripe, Salesforce, Lark), rather than a programming language, mobile or game platform, cloud platform, AI/ML framework, or a general technique?',
+    );
+    expect(prompt('workflow')).toBe(
+      'Is this a skill that changes how a coding agent works on a task: how it plans, asks clarifying questions, breaks down or hands off work, communicates, or uses git safely?',
+    );
+    expect(prompt('frontend')).toBe(
+      'Is this skill mainly about building web frontends (UI components, React, CSS, client-side code)?',
+    );
+    expect(prompt('devops')).toBe(
+      'Is this skill mainly about CI/CD, deployment, infrastructure, containers, cloud platforms (AWS, Azure, GCP), cloud operations or monitoring?',
+    );
   });
 
   it('asks the six approved questions word for word', () => {
@@ -51,7 +70,7 @@ describe('T23 tech topics', () => {
       'Is this skill mainly about building mobile or native apps (iOS and Swift, Android and Kotlin, Flutter, React Native, Expo)?',
     );
     expect(prompt('ai-ml')).toBe(
-      'Is this skill mainly about building AI or machine-learning systems (LLM apps, RAG, embeddings, evals, fine-tuning, model training or inference, computer vision), not using a model to generate images, video or audio, and not writing agent personas, prompts or skills for coding agents?',
+      'Is this skill mainly about building AI or machine-learning systems (LLM apps, RAG, embeddings, prompt engineering for LLM apps, evals, fine-tuning, model training or inference, computer vision), not using a model to generate images, video or audio, and not writing agent personas, or prompts or skills for coding agents?',
     );
     expect(prompt('languages')).toBe(
       'Is this skill mainly about a programming language itself (its syntax, idioms, type system, compiler or runtime, standard library or package manager, for example Rust, Go, C#, Python, TypeScript, Swift), not a framework, platform, office or file format, config file, or a general dev tool such as a linter or pre-commit hook?',
