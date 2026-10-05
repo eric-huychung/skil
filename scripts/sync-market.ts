@@ -32,6 +32,10 @@
  *   npm run sync-market -- --creators-report
  *   Prints the proposed 30 and a paste-ready block for data/market-creators.yaml. Writes nothing.
  *
+ * Taxonomy review (read-only; needs only the Supabase vars):
+ *   npm run sync-market -- --taxonomy-review
+ *   Prints stored unlabeled and review-band rows. Writes nothing.
+ *
  * Every other run writes `.sync-market/summary.json` (plus `$GITHUB_STEP_SUMMARY` when set)
  * and exits 0 on success, 1 on any failure.
  *
@@ -52,6 +56,7 @@ import { JevCreatorGate, printCreatorsReport } from '../src/backend/creators-rep
 import { GatewayJevClient } from '../src/backend/jev-client.js';
 import { JevSkillClassifier } from '../src/backend/jev-skill-classifier.js';
 import { runJevLabelAndShelves } from '../src/backend/jev-run.js';
+import { formatTaxonomyReview, readTaxonomyReview } from '../src/backend/taxonomy-review.js';
 
 import {
   exitCodeFor,
@@ -341,9 +346,35 @@ async function creatorsReport(): Promise<number> {
   }
 }
 
+/** `--taxonomy-review`: reads stored labels only; no Jev, label, or shelf writes. */
+async function taxonomyReviewReport(): Promise<number> {
+  loadEnvFile('.env');
+  loadEnvFile('.env.local');
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error('Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY.');
+    return 1;
+  }
+  try {
+    const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+    const result = await readTaxonomyReview(new SupabaseMarketStore(supabase));
+    if (!isOk(result)) {
+      console.error(`Taxonomy review failed: ${result.error.message}`);
+      return 1;
+    }
+    console.log(formatTaxonomyReview(result.value));
+    return 0;
+  } catch (error) {
+    console.error(`Taxonomy review failed: ${error instanceof Error ? error.message : error}`);
+    return 1;
+  }
+}
+
 /** Never throws: every outcome becomes a summary file and an exit code. */
 async function main(): Promise<number> {
   if (process.argv.slice(2).includes('--creators-report')) return creatorsReport();
+  if (process.argv.slice(2).includes('--taxonomy-review')) return taxonomyReviewReport();
   const state: RunState = { step: 'config', shelvesWritten: false, secrets: [] };
   let outcome: SyncRunOutcome;
   try {
