@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { isOk } from '../core/result.js';
 import { InMemoryMarketStore } from './in-memory-market-store.js';
 import type { CreatorCheck, SkillScore } from './market-types.js';
+import { TAXONOMY_VERSION, TOPIC_THRESHOLD } from './topic-taxonomy.js';
 
 function listing(id: string, overrides: Partial<{ name: string; installs: number }> = {}) {
   return {
@@ -680,5 +681,97 @@ describe('InMemoryMarketStore.searchListings (T21 relevance-first)', () => {
     expect(await searchIds(store, 'shadcn')).toEqual(['shadcn', 'shadcn-forms']);
     expect(await searchIds(store, 'shadcn', 1)).toEqual(['shadcn']);
     expect(await searchIds(store, '   ')).toEqual([]);
+  });
+});
+
+describe('InMemoryMarketStore.searchListings (T22 owner and topic)', () => {
+  async function seed(rows: Array<{ id: string; source?: string; installs: number; description?: string }>) {
+    const store = new InMemoryMarketStore();
+    for (const row of rows) {
+      const name = row.id.split('/').pop() ?? row.id;
+      await store.upsertListing(
+        { ...listing(row.id, { name, installs: row.installs }), source: row.source ?? 'github.com/example/example' },
+        '2026-01-01T00:00:00.000Z',
+      );
+      if (row.description) await store.setDetail(row.id, { description: row.description, hash: null });
+    }
+    return store;
+  }
+
+  async function searchIds(store: InMemoryMarketStore, q: string, limit = 25) {
+    const result = await store.searchListings(q, { limit });
+    if (!isOk(result)) throw result.error;
+    return result.value.map((row) => row.id);
+  }
+
+  it("returns an owner's skills first when the query is an owner name (vercel-labs)", async () => {
+    const store = await seed([
+      { id: 'acme/tools/deploy', source: 'acme/tools', installs: 9000, description: 'Deploy to vercel-labs style previews' },
+      { id: 'vercel-labs/agent-skills/next', source: 'vercel-labs/agent-skills', installs: 100 },
+      { id: 'vercel-labs/agent-skills/ai', source: 'vercel-labs/agent-skills', installs: 400 },
+      { id: 'vercel/other/edge', source: 'vercel/other', installs: 5000 },
+    ]);
+
+    expect(await searchIds(store, 'vercel-labs')).toEqual([
+      'vercel-labs/agent-skills/ai',
+      'vercel-labs/agent-skills/next',
+      'acme/tools/deploy',
+    ]);
+    expect(await searchIds(store, 'Vercel-Labs')).toEqual([
+      'vercel-labs/agent-skills/ai',
+      'vercel-labs/agent-skills/next',
+      'acme/tools/deploy',
+    ]);
+  });
+
+  it('returns skills labelled with a topic first (testing): current version, topicsFor threshold and cap', async () => {
+    const store = await seed([
+      { id: 'a/x/flaky-hunter', installs: 9000, description: 'Find flaky testing setups' },
+      { id: 'a/x/jest-helper', installs: 200 },
+      { id: 'a/x/pytest-pro', installs: 900 },
+      { id: 'a/x/below-threshold', installs: 8000 },
+      { id: 'a/x/over-cap', installs: 7000 },
+      { id: 'a/x/old-version', installs: 6000 },
+      { id: 'a/x/errored', installs: 5000 },
+    ]);
+    const label = (id: string, probabilities: Record<string, number>, status: 'ok' | 'error' = 'ok') =>
+      score(id, { probabilities, status });
+    await store.saveLabels(TAXONOMY_VERSION, [
+      label('a/x/jest-helper', { testing: 0.95 }),
+      label('a/x/pytest-pro', { testing: 0.8, backend: 0.7 }),
+      label('a/x/below-threshold', { testing: TOPIC_THRESHOLD - 0.01 }),
+      // Fourth-highest field: topicsFor keeps only MAX_TOPICS_PER_SKILL.
+      label('a/x/over-cap', { frontend: 0.99, api: 0.98, backend: 0.97, testing: 0.96 }),
+      label('a/x/errored', { testing: 0.99 }, 'error'),
+    ]);
+    await store.saveLabels('old-version', [label('a/x/old-version', { testing: 0.99 })]);
+
+    expect(await searchIds(store, 'testing')).toEqual(['a/x/pytest-pro', 'a/x/jest-helper', 'a/x/flaky-hunter']);
+  });
+
+  it('matches a multi-word topic query against the hyphenated field slug (design system)', async () => {
+    const store = await seed([{ id: 'a/x/tokens', installs: 10 }, { id: 'a/x/other', installs: 99 }]);
+    await store.saveLabels(TAXONOMY_VERSION, [score('a/x/tokens', { probabilities: { 'design-system': 0.9 } })]);
+
+    expect(await searchIds(store, 'design system')).toEqual(['a/x/tokens']);
+  });
+
+  it('keeps exact name and name prefix above owner and topic hits, and those above typo and text', async () => {
+    const store = await seed([
+      { id: 'a/x/testing', installs: 1 },
+      { id: 'a/x/testing-kit', installs: 2 },
+      { id: 'a/x/labelled', installs: 3 },
+      { id: 'a/x/testin', installs: 10_000 },
+      { id: 'a/x/notes', installs: 20_000, description: 'testing notes' },
+    ]);
+    await store.saveLabels(TAXONOMY_VERSION, [score('a/x/labelled', { probabilities: { testing: 0.9 } })]);
+
+    expect(await searchIds(store, 'testing')).toEqual([
+      'a/x/testing',
+      'a/x/testing-kit',
+      'a/x/labelled',
+      'a/x/testin',
+      'a/x/notes',
+    ]);
   });
 });

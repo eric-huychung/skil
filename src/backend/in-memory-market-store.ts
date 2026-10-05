@@ -20,7 +20,7 @@ import type {
   ShelfSkill,
   SkillScore,
 } from './market-types.js';
-import { MAX_TOPICS_PER_SKILL, TOPIC_THRESHOLD, topicsFor } from './topic-taxonomy.js';
+import { MAX_TOPICS_PER_SKILL, TAXONOMY_VERSION, TOPIC_THRESHOLD, topicsFor } from './topic-taxonomy.js';
 
 interface SkillRow extends MarketListingInput {
   description: string | null;
@@ -375,7 +375,9 @@ export class InMemoryMarketStore implements MarketStore {
 
   /**
    * Mirrors `search_market_skills` (0008 migration). Tier first: exact name,
-   * then name prefix, then typo-close name (pg_trgm similarity >= 0.3), then
+   * then name prefix, then owner or topic (the query is the owner, or a field
+   * slug in the skill's `topicsFor` topics at TAXONOMY_VERSION; spaces in the
+   * query read as `-`), then typo-close name (pg_trgm similarity >= 0.3), then
    * a text match (every word in name + description). Within the trigram tier
    * the most similar name wins; then installs, then id. Postgres orders the
    * text tier by `ts_rank_cd` before installs; this store treats every text
@@ -385,6 +387,12 @@ export class InMemoryMarketStore implements MarketStore {
     const term = q.trim().toLowerCase();
     if (!term) return ok([]);
     const words = term.split(/\s+/);
+    const topic = words.join('-');
+    const labels = this.labels.get(TAXONOMY_VERSION);
+    const hasTopic = (id: string) => {
+      const label = labels?.get(id);
+      return label?.status === 'ok' && topicsFor(label.probabilities, TOPIC_THRESHOLD, MAX_TOPICS_PER_SKILL).includes(topic);
+    };
 
     const ranked = [...this.skills.values()]
       .filter((row) => !row.inactive)
@@ -395,8 +403,9 @@ export class InMemoryMarketStore implements MarketStore {
         const tier =
           name === term ? 0
           : name.startsWith(term) ? 1
-          : sim >= InMemoryMarketStore.TRIGRAM_THRESHOLD ? 2
-          : words.every((word) => haystack.includes(word)) ? 3
+          : this.ownerOf(row.source).toLowerCase() === term || hasTopic(row.id) ? 2
+          : sim >= InMemoryMarketStore.TRIGRAM_THRESHOLD ? 3
+          : words.every((word) => haystack.includes(word)) ? 4
           : null;
         return { row, tier, sim };
       })
@@ -404,7 +413,7 @@ export class InMemoryMarketStore implements MarketStore {
       .sort(
         (a, b) =>
           a.tier - b.tier ||
-          (a.tier === 2 ? b.sim - a.sim : 0) ||
+          (a.tier === 3 ? b.sim - a.sim : 0) ||
           b.row.installs - a.row.installs ||
           a.row.id.localeCompare(b.row.id),
       )

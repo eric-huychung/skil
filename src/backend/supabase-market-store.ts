@@ -20,7 +20,7 @@ import type {
   ShelfSkill,
   SkillScore,
 } from './market-types.js';
-import { MAX_TOPICS_PER_SKILL, TOPIC_THRESHOLD, topicsFor } from './topic-taxonomy.js';
+import { MAX_TOPICS_PER_SKILL, TAXONOMY_VERSION, TOPIC_THRESHOLD, topicsFor } from './topic-taxonomy.js';
 
 interface RoleRow {
   slug: string;
@@ -594,11 +594,18 @@ export class SupabaseMarketStore implements MarketStore {
 
   /**
    * Calls the `search_market_skills` RPC (0008 migration): exact name >
-   * name prefix > typo-close name (pg_trgm) > text match, then installs.
+   * name prefix > owner or topic (TAXONOMY_VERSION labels, `topicsFor` rule)
+   * > typo-close name (pg_trgm) > text match, then installs.
    * `InMemoryMarketStore.searchListings` mirrors the same ordering rule.
    */
   async searchListings(q: string, opts: { limit: number }): Promise<Result<MarketSearchRow[]>> {
-    const { data, error } = await this.client.rpc('search_market_skills', { q, lim: opts.limit });
+    const { data, error } = await this.client.rpc('search_market_skills', {
+      q,
+      lim: opts.limit,
+      taxonomy: TAXONOMY_VERSION,
+      min_prob: TOPIC_THRESHOLD,
+      max_topics: MAX_TOPICS_PER_SKILL,
+    });
     if (error) return err(toError(error.message));
 
     const rows = (data ?? []) as Array<{ id: string; name: string; installs: number | string }>;
