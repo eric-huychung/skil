@@ -22,7 +22,7 @@ describe('runSkillsList', () => {
     expect(outcome.message).toBe('No skills yet');
   });
 
-  it('lists on, off, and leftover rows from the in-memory catalog', () => {
+  it('lists promoted leftover skills as on and parked skills as off', () => {
     const { engine, fs } = buildEngine();
     fs.writeFile('.agents/skills/tdd/SKILL.md', '# tdd\n');
     fs.writeFile('.claude/skills/tdd/SKILL.md', '# tdd\n');
@@ -39,7 +39,6 @@ describe('runSkillsList', () => {
     expect(outcome.message).toContain('local');
     expect(outcome.message).toContain('on');
     expect(outcome.message).toContain('off');
-    expect(outcome.message).toContain('leftover');
     expect(outcome.message).toContain('.agents/skills/tdd');
     expect(outcome.message).toContain('.skil/parked/skills/design');
     expect(outcome.message).toContain('.cursor/skills/react');
