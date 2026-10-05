@@ -213,3 +213,52 @@ describe('GatewayJevClient retries', () => {
     expect(error.message.length).toBeLessThan(400);
   });
 });
+
+describe('GatewayJevClient answer validation', () => {
+  const base = JSON.parse(fixture) as { answers: Record<string, Record<string, unknown>> };
+  const withAnswers = (answers: Record<string, unknown>) => () => jsonResponse({ ...base, answers });
+  const tech = base.answers.tech!;
+  const domain = base.answers.domain!;
+
+  it.each([
+    ['a missing question', { tech }],
+    ['a missing answers object', undefined],
+    ['a boolean probability above 1', { tech: { ...tech, probability: 1.2 }, domain }],
+    ['a negative boolean probability', { tech: { ...tech, probability: -0.1 }, domain }],
+    ['a non-numeric probability', { tech: { ...tech, probability: '0.9' }, domain }],
+    ['a NaN-like probability', { tech: { ...tech, probability: null }, domain }],
+    ['an unknown choice option', { tech, domain: { ...domain, choice: 'cooking' } }],
+    ['a missing choice option', { tech, domain: { ...domain, choice: undefined } }],
+    ['a choice probability out of range', { tech, domain: { ...domain, probabilities: { software_dev: 1.5 } } }],
+    ['a choice probability for an unknown option', { tech, domain: { ...domain, probabilities: { cooking: 0.5 } } }],
+  ])('rejects %s as bad_answer without retrying', async (_label, answers) => {
+    const { client, calls } = makeClient([withAnswers(answers as Record<string, unknown>)]);
+
+    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+
+    expect(error.kind).toBe('bad_answer');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('names the offending question in the message', async () => {
+    const { client } = makeClient([withAnswers({ tech, domain: { ...domain, choice: 'cooking' } })]);
+
+    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+
+    expect(error.message).toContain('domain');
+  });
+
+  it('rejects a non-JSON 200 body as bad_answer', async () => {
+    const { client } = makeClient([() => new Response('<html>oops</html>', { status: 200 })]);
+
+    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+
+    expect(error.kind).toBe('bad_answer');
+  });
+
+  it('accepts boundary probabilities 0 and 1', async () => {
+    const { client } = makeClient([withAnswers({ tech: { ...tech, probability: 0 }, domain: { ...domain, probabilities: { software_dev: 1, design_ui: 0 } } })]);
+
+    expect(isOk(await client.evaluate('s', QUESTIONS))).toBe(true);
+  });
+});

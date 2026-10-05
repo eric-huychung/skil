@@ -53,36 +53,58 @@ type WireQuestion =
   | { type: 'boolean'; question: string }
   | { type: 'choice'; question: string; criteria: Record<string, string> };
 
-interface WireResponse {
-  model?: unknown;
-  answers?: unknown;
-  usage?: { inputTokens?: unknown };
-}
-
 function toWireQuestion(question: JevQuestion): WireQuestion {
   return question.kind === 'boolean'
     ? { type: 'boolean', question: question.prompt }
     : { type: 'choice', question: question.prompt, criteria: question.options };
 }
 
-function parseResponse(body: WireResponse, questions: Record<string, JevQuestion>): Result<JevEvaluation> {
-  const wireAnswers = (body.answers ?? {}) as Record<string, Record<string, unknown>>;
+function isProbability(value: unknown): value is number {
+  return typeof value === 'number' && value >= 0 && value <= 1;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseAnswer(name: string, question: JevQuestion, wire: unknown): JevAnswer | JevError {
+  const bad = (why: string) => new JevError('bad_answer', `Jev answer for "${name}" ${why}`);
+  if (!isRecord(wire)) return bad('is missing');
+
+  if (question.kind === 'boolean') {
+    return isProbability(wire.probability)
+      ? { kind: 'boolean', probability: wire.probability }
+      : bad('has no probability in [0, 1]');
+  }
+
+  const option = wire.choice;
+  if (typeof option !== 'string' || !Object.hasOwn(question.options, option)) {
+    return bad('picked an option outside the given set');
+  }
+  if (!isRecord(wire.probabilities)) return bad('has no probabilities');
+  const probabilities: Record<string, number> = {};
+  for (const [key, value] of Object.entries(wire.probabilities)) {
+    if (!Object.hasOwn(question.options, key)) return bad('has a probability for an unknown option');
+    if (!isProbability(value)) return bad('has a probability outside [0, 1]');
+    probabilities[key] = value;
+  }
+  return { kind: 'choice', option, probabilities };
+}
+
+function parseResponse(body: unknown, questions: Record<string, JevQuestion>): Result<JevEvaluation> {
+  if (!isRecord(body) || !isRecord(body.answers)) {
+    return err(new JevError('bad_answer', 'Jev response has no answers object'));
+  }
   const answers: Record<string, JevAnswer> = {};
   for (const [name, question] of Object.entries(questions)) {
-    const wire = wireAnswers[name]!;
-    answers[name] =
-      question.kind === 'boolean'
-        ? { kind: 'boolean', probability: wire.probability as number }
-        : {
-            kind: 'choice',
-            option: wire.choice as string,
-            probabilities: wire.probabilities as Record<string, number>,
-          };
+    const answer = parseAnswer(name, question, body.answers[name]);
+    if (answer instanceof JevError) return err(answer);
+    answers[name] = answer;
   }
   return ok({
     answers,
     modelVersion: typeof body.model === 'string' ? body.model : MODEL,
-    inputTokens: typeof body.usage?.inputTokens === 'number' ? body.usage.inputTokens : 0,
+    inputTokens: isRecord(body.usage) && typeof body.usage.inputTokens === 'number' ? body.usage.inputTokens : 0,
   });
 }
 
@@ -152,6 +174,12 @@ export class GatewayJevClient implements JevClient {
       return fail(new JevError('request', message, code), false);
     }
 
-    return { result: parseResponse((await response.json()) as WireResponse, questions), retryable: false };
+    let json: unknown;
+    try {
+      json = await response.json();
+    } catch {
+      return fail(new JevError('bad_answer', `Jev returned a non-JSON response (status ${response.status})`), false);
+    }
+    return { result: parseResponse(json, questions), retryable: false };
   }
 }
