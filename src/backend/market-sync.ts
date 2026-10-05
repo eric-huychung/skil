@@ -167,8 +167,9 @@ export class MarketSync {
 
   /**
    * Rebuilds every active field's shelf from the top of our index.
-   * Dedup by name → classify → rank by installs. Classify error writes
-   * no shelves (last week stays). Empty pool is also fail-closed.
+   * Dedup by name → classify → rank by installs → one `replaceShelves`
+   * call, so every shelf changes together or not at all. Classify error
+   * writes no shelves (last week stays). Empty pool is also fail-closed.
    */
   async refreshActiveFields(): Promise<Result<RefreshShelvesResult>> {
     const fields = await this.store.listActiveFields();
@@ -191,11 +192,17 @@ export class MarketSync {
     }
 
     const shelves = buildShelves({ listings: unique, labels: classified.value, fields: fields.value });
-    for (const shelf of shelves) {
-      const written = await this.store.setFieldShelf(shelf.fieldSlug, shelf.skillIds);
-      if (!isOk(written)) {
-        return written;
-      }
+    // Not built from topic labels, so the meta row names the classify path
+    // instead of a TAXONOMY_VERSION it never used.
+    const written = await this.store.replaceShelves(
+      shelves.map((shelf) => ({
+        fieldSlug: shelf.fieldSlug,
+        entries: shelf.skillIds.map((id) => ({ id, moreCount: 0 })),
+      })),
+      'classify',
+    );
+    if (!isOk(written)) {
+      return written;
     }
 
     return ok({

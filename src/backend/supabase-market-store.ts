@@ -38,6 +38,7 @@ interface FieldRow {
 interface FieldSkillRow {
   field_slug: string;
   rank: number;
+  more_count: number;
   market_skills: { id: string; name: string; installs: number; inactive: boolean } | null;
 }
 
@@ -179,26 +180,6 @@ export class SupabaseMarketStore implements MarketStore {
     return ok(undefined);
   }
 
-  /** Replaces the shelf: delete this field's rows, then insert the new ranked list (rank 1..N by array order). */
-  async setFieldShelf(fieldSlug: string, rankedSkillIds: string[]): Promise<Result<void>> {
-    const deleted = await this.client.from('market_field_skills').delete().eq('field_slug', fieldSlug);
-    if (deleted.error) return err(toError(deleted.error.message));
-
-    if (rankedSkillIds.length === 0) {
-      return ok(undefined);
-    }
-
-    const rows = rankedSkillIds.map((skillId, index) => ({
-      field_slug: fieldSlug,
-      skill_id: skillId,
-      rank: index + 1,
-    }));
-    const inserted = await this.client.from('market_field_skills').insert(rows);
-    if (inserted.error) return err(toError(inserted.error.message));
-
-    return ok(undefined);
-  }
-
   /**
    * Three plain queries (roles, active fields, field-skill ranks joined to
    * skills) assembled in JS — the same shape `InMemoryMarketStore` builds —
@@ -229,7 +210,7 @@ export class SupabaseMarketStore implements MarketStore {
     if (fieldSlugs.length > 0) {
       const fieldSkillsRes = await this.client
         .from('market_field_skills')
-        .select('field_slug, rank, market_skills(id, name, installs, inactive)')
+        .select('field_slug, rank, more_count, market_skills(id, name, installs, inactive)')
         .in('field_slug', fieldSlugs)
         .order('rank', { ascending: true });
       if (fieldSkillsRes.error) return err(toError(fieldSkillsRes.error.message));
@@ -279,12 +260,27 @@ export class SupabaseMarketStore implements MarketStore {
 
   // --- T4 shelves ---
 
-  async replaceShelves(_shelves: AssembledShelfEntries[], _taxonomyVersion: string): Promise<Result<void>> {
-    return err(new Error('not implemented: replaceShelves (T4)'));
+  /** One `replace_market_shelves` RPC (migration 0007): every shelf plus the meta row in one transaction. */
+  async replaceShelves(shelves: AssembledShelfEntries[], taxonomyVersion: string): Promise<Result<void>> {
+    const payload = shelves.map((shelf) => ({
+      field_slug: shelf.fieldSlug,
+      skills: shelf.entries.map((entry) => ({ id: entry.id, more_count: entry.moreCount })),
+    }));
+    const { error } = await this.client.rpc('replace_market_shelves', { payload, taxonomy: taxonomyVersion });
+    if (error) return err(toError(error.message));
+
+    return ok(undefined);
   }
 
   async getShelfMeta(): Promise<Result<ShelfMeta | null>> {
-    return err(new Error('not implemented: getShelfMeta (T4)'));
+    const { data, error } = await this.client
+      .from('market_shelf_meta')
+      .select('generated_at, taxonomy_version')
+      .maybeSingle();
+    if (error) return err(toError(error.message));
+    if (!data) return ok(null);
+
+    return ok({ generatedAt: data.generated_at, taxonomyVersion: data.taxonomy_version });
   }
 
   // --- T5 owners (labels join: T19) ---
@@ -370,7 +366,8 @@ function skillsForField(field: FieldRow, rawRows: FieldSkillRow[]): ShelfField['
       if (!skill || skill.inactive) {
         return null;
       }
-      return { id: skill.id, name: skill.name, installs: skill.installs, rank: row.rank };
+      const shelfSkill: ShelfSkill = { id: skill.id, name: skill.name, installs: skill.installs, rank: row.rank };
+      return row.more_count > 0 ? { ...shelfSkill, moreCount: row.more_count } : shelfSkill;
     })
     .filter((row): row is ShelfSkill => row !== null);
 }

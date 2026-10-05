@@ -27,20 +27,25 @@ export interface MarketPreviewDeps {
 
 /**
  * Vercel Function handler for `GET /api/market/shelves`. Grouped by role;
- * each skill is `{ id, name, installs, rank }` only — `listShelves` already
- * omits description/hash/url, so this is a thin pass-through, not a
- * reshape. Empty index (migration applied but no sync run yet) returns
- * `{ data: [] }`, not an error. A new role/field inserted straight into
+ * each skill is `{ id, name, installs, rank }` (plus `moreCount` on a
+ * collapsed suite lead) only — `listShelves` already omits
+ * description/hash/url, so this is a thin pass-through, not a reshape.
+ * `meta.generatedAt` is when shelves were last built (`null` if never).
+ * Empty index (migration applied but no sync run yet) returns
+ * `{ data: [], meta: { generatedAt: null } }`, not an error. A new role/field inserted straight into
  * Supabase shows up here with no handler change — `listShelves` reads the
  * store, not a hardcoded list.
  */
 export async function handleShelvesRequest(_request: Request, deps: MarketReadDeps): Promise<Response> {
-  const result = await deps.store.listShelves();
-  if (!isOk(result)) {
+  const [result, meta] = await Promise.all([deps.store.listShelves(), deps.store.getShelfMeta()]);
+  if (!isOk(result) || !isOk(meta)) {
     return Response.json({ error: 'store_error', message: STORE_UNAVAILABLE }, { status: 500 });
   }
 
-  return Response.json({ data: result.value }, { headers: { 'Cache-Control': SHELVES_CACHE_CONTROL } });
+  return Response.json(
+    { data: result.value, meta: { generatedAt: meta.value?.generatedAt ?? null } },
+    { headers: { 'Cache-Control': SHELVES_CACHE_CONTROL } },
+  );
 }
 
 /**
