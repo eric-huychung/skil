@@ -49,7 +49,7 @@ export const TOPIC_QUESTIONS: TopicQuestion[] = [
   // Agent: reworded concretely (spec: the abstract "agent workflow" question did not fire)
   q(
     'workflow',
-    'Is this a skill that changes how a coding agent works on a task: how it plans, asks clarifying questions, breaks down or hands off work, communicates, or uses git safely?',
+    'Is this a skill that changes how a coding agent itself works: how it plans, asks clarifying questions, breaks down or hands off tasks, or uses git safely?',
   ),
   // Agent, added in T23
   q(
@@ -63,7 +63,7 @@ export const TOPIC_QUESTIONS: TopicQuestion[] = [
   // Other: reworded so it means a named vendor, not "anything left over"
   q(
     'integrations',
-    'Is this skill mainly about connecting to or operating one named third-party SaaS or vendor service (for example Slack, Stripe, Salesforce, Lark), rather than a programming language, mobile or game platform, cloud platform, AI/ML framework, or a general technique?',
+    'Is this skill mainly about connecting to or operating one named third-party SaaS, developer platform or vendor service (for example Slack, Stripe, Salesforce, Lark, Firebase), rather than a programming language, mobile or game platform, cloud platform, AI/ML framework, or a general technique?',
   ),
 ];
 

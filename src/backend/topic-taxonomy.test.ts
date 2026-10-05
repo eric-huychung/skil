@@ -50,10 +50,10 @@ describe('T23 tech topics', () => {
   it('narrows the four broad earlier questions word for word', () => {
     const prompt = (slug: string) => TOPIC_QUESTIONS.find((q) => q.fieldSlug === slug)?.prompt;
     expect(prompt('integrations')).toBe(
-      'Is this skill mainly about connecting to or operating one named third-party SaaS or vendor service (for example Slack, Stripe, Salesforce, Lark), rather than a programming language, mobile or game platform, cloud platform, AI/ML framework, or a general technique?',
+      'Is this skill mainly about connecting to or operating one named third-party SaaS, developer platform or vendor service (for example Slack, Stripe, Salesforce, Lark, Firebase), rather than a programming language, mobile or game platform, cloud platform, AI/ML framework, or a general technique?',
     );
     expect(prompt('workflow')).toBe(
-      'Is this a skill that changes how a coding agent works on a task: how it plans, asks clarifying questions, breaks down or hands off work, communicates, or uses git safely?',
+      'Is this a skill that changes how a coding agent itself works: how it plans, asks clarifying questions, breaks down or hands off tasks, or uses git safely?',
     );
     expect(prompt('frontend')).toBe(
       'Is this skill mainly about building web frontends (UI components, React, CSS, client-side code)?',
