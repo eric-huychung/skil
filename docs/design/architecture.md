@@ -102,7 +102,7 @@ One OpenAI-chat-completions client. Presets: `anthropic` (`claude-haiku-4-5`), `
 
 Both thin. Same engine. Bin is `skil`; `contextkit` is an alias.
 
-**CLI = README verbs** (cwd). The live-pair `SKILL.md` teaches that same loop, including `skil skills`. **GUI = browse + leftovers + preview.** Not feature parity. Catch-up: `tasks/plan.md`.
+**CLI = README verbs** (cwd). The live-pair `SKILL.md` teaches that same loop, including `skil skills`. **GUI = browse + leftovers + preview.** Not feature parity.
 
 ```
 skil search | suggest | install

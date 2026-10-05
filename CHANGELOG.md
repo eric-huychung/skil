@@ -6,6 +6,13 @@ All notable changes to skil are documented here. Versions follow [Semantic Versi
 
 ### Changed
 - Scan copies leftover-only skills, commands, and rules into canonical homes. Parked leftovers stay off.
+- Search results are cached at the edge for a minute, and search queries are capped at 200 characters.
+
+### Fixed
+- Website pages (`/cli`, `/faq`, `/legal`, `/leaderboard`, `/app`, `/about`, `/blog`) returned 404. They now load at clean URLs.
+
+### Security
+- Update Next.js, Electron, axios and other dependencies to patched versions.
 
 ## [0.8.0] - 2026-10-05
 

@@ -8,7 +8,7 @@ A curated Supabase copy of the skills.sh listing (single source, about 9.7k rows
 
 ```typescript
 interface MarketStore {            // src/backend/market-store.ts
-  upsertRole / upsertField / listActiveFields / listTopListings
+  upsertRole / upsertField / listActiveFields
   upsertListing / getHash / setDetail / markInactiveBefore
   listShelves / searchListings / getListing
   replaceShelves / getShelfMeta                        // one RPC, one transaction

@@ -50,7 +50,7 @@ Header shows the bound path and Re-scan only after connect. There is no push con
 
 ## CLI
 
-Same engine. README is the user CLI. Bin `skil`; `contextkit` alias. Catch-up: `tasks/plan.md`.
+Same engine. README is the user CLI. Bin `skil`; `contextkit` alias.
 
 ```
 skil search | suggest | install
