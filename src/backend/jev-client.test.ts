@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { isErr, isOk } from '../core/result.js';
 import { GatewayJevClient, JevError, type JevQuestion } from './jev-client.js';
+import { TOPIC_QUESTIONS } from './topic-taxonomy.js';
 
 const API_KEY = 'sk-test-SECRET-key-123';
 const fixture = readFileSync(join(import.meta.dirname, '__fixtures__/jev-evaluate-response.json'), 'utf8');
@@ -74,14 +75,33 @@ describe('GatewayJevClient request shape', () => {
       model: 'typesafe-ai/jev',
       state: 'name: foo',
       questions: {
-        tech: { type: 'boolean', question: 'Is this tech related?' },
+        tech: { type: 'boolean', instructions: 'Is this tech related?' },
         domain: {
           type: 'choice',
-          question: 'Main domain?',
+          instructions: 'Main domain?',
           criteria: { software_dev: 'Software development', design_ui: 'Design/UI', marketing: 'Marketing/sales' },
         },
       },
     });
+  });
+
+  it('sends every taxonomy boolean question with gateway instructions', async () => {
+    const { client, calls } = makeClient([okFixture]);
+    const questions = Object.fromEntries(
+      TOPIC_QUESTIONS.map(({ fieldSlug, prompt }) => [fieldSlug, { kind: 'boolean' as const, prompt }]),
+    );
+
+    await client.evaluate('name: foo', questions);
+
+    const payload = JSON.parse((calls[0]?.init.body as string) ?? '{}') as {
+      questions?: Record<string, { type?: string; instructions?: string; question?: string }>;
+    };
+    expect(Object.keys(payload.questions ?? {})).toHaveLength(TOPIC_QUESTIONS.length);
+    for (const question of Object.values(payload.questions ?? {})) {
+      expect(question.type).toBe('boolean');
+      expect(question.instructions?.trim()).not.toBe('');
+      expect(question.question).toBeUndefined();
+    }
   });
 });
 

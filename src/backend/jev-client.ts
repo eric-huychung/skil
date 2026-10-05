@@ -50,13 +50,13 @@ const BODY_EXCERPT_CHARS = 200;
 // test call; the field names for prompts and choice answers are confirmed only
 // once a real capture replaces `__fixtures__/jev-evaluate-response.json`.
 type WireQuestion =
-  | { type: 'boolean'; question: string }
-  | { type: 'choice'; question: string; criteria: Record<string, string> };
+  | { type: 'boolean'; instructions: string }
+  | { type: 'choice'; instructions: string; criteria: Record<string, string> };
 
 function toWireQuestion(question: JevQuestion): WireQuestion {
   return question.kind === 'boolean'
-    ? { type: 'boolean', question: question.prompt }
-    : { type: 'choice', question: question.prompt, criteria: question.options };
+    ? { type: 'boolean', instructions: question.prompt }
+    : { type: 'choice', instructions: question.prompt, criteria: question.options };
 }
 
 function isProbability(value: unknown): value is number {
