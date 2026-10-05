@@ -83,13 +83,17 @@ export class SkillsAdapter implements ISkillsAdapter {
   }
 
   async install(skillId: string, opts?: { cwd?: string }): Promise<Result<void>> {
+    const source = toSkillsAddSource(skillId);
+    if (!source) {
+      return err(new Error(`Refusing to install '${skillId}'. That id is not a skills.sh source.`));
+    }
     try {
       await execa(
         'npx',
         [
           'skills',
           'add',
-          toSkillsAddSource(skillId),
+          source,
           '--agent',
           SKILLS_ADD_AGENT,
           '--copy',

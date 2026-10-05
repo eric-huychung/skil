@@ -226,6 +226,7 @@ export async function handleMarketPreviewRequest(request: Request, deps: MarketP
   }
 
   const [skillMdResult, auditResult] = await Promise.all([deps.client.getSkillMd(id), deps.client.getAudit(id)]);
+  const source = toSkillsAddSource(id);
 
   return Response.json(
     {
@@ -235,7 +236,7 @@ export async function handleMarketPreviewRequest(request: Request, deps: MarketP
         installs: listing.value.installs,
         url: listing.value.url,
         installUrl: listing.value.installUrl,
-        installCommand: `npx skills add ${toSkillsAddSource(id)}`,
+        installCommand: source ? `npx skills add ${source}` : '',
         skillMd: isOk(skillMdResult) ? skillMdResult.value : null,
         audit: { status: isOk(auditResult) ? auditResult.value.status : 'none' },
       },

