@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isOk } from '../core/result.js';
 import { InMemoryMarketStore } from './in-memory-market-store.js';
+import type { SkillScore } from './market-types.js';
 
 function listing(id: string, overrides: Partial<{ name: string; installs: number }> = {}) {
   return {
@@ -364,5 +365,118 @@ describe('InMemoryMarketStore owners (T5)', () => {
     expect(new Set(skills.value.map((row) => row.id)).size).toBe(2345);
     expect(skills.value[0]?.installs).toBe(2344);
     expect(skills.value.every((row) => row.owner === 'big')).toBe(true);
+  });
+});
+
+function score(id: string, overrides: Partial<SkillScore> = {}): SkillScore {
+  return {
+    id,
+    status: 'ok',
+    probabilities: { frontend: 0.9 },
+    stateHash: `hash-${id}`,
+    modelVersion: 'jev@1',
+    ...overrides,
+  };
+}
+
+describe('InMemoryMarketStore labels', () => {
+  it('listLabelPool returns active rows with owner from source, ordered by id', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertListing(
+      { ...listing('b/two', { installs: 5 }), source: 'vercel-labs/agent-skills' },
+      '2026-01-02T00:00:00.000Z',
+    );
+    await store.upsertListing(listing('a/one', { installs: 9 }), '2026-01-02T00:00:00.000Z');
+    await store.upsertListing(listing('c/gone'), '2026-01-01T00:00:00.000Z');
+    await store.setDetail('a/one', { description: 'One', hash: 'h1' });
+    await store.markInactiveBefore('2026-01-02T00:00:00.000Z');
+
+    const pool = await store.listLabelPool();
+
+    expect(isOk(pool) && pool.value).toEqual([
+      {
+        id: 'a/one',
+        name: 'a/one',
+        source: 'github.com/example/example',
+        installs: 9,
+        description: 'One',
+        labelExcerpt: null,
+        owner: 'github.com',
+      },
+      {
+        id: 'b/two',
+        name: 'b/two',
+        source: 'vercel-labs/agent-skills',
+        installs: 5,
+        description: null,
+        labelExcerpt: null,
+        owner: 'vercel-labs',
+      },
+    ]);
+  });
+
+  it('list methods page past 1,000 rows', async () => {
+    const store = new InMemoryMarketStore();
+    const ids = Array.from({ length: 2_345 }, (_, i) => `o/s${String(i).padStart(5, '0')}`);
+    for (const id of ids) {
+      await store.upsertListing(listing(id), '2026-01-01T00:00:00.000Z');
+    }
+    await store.saveLabels('v1', ids.map((id) => score(id)));
+
+    const pool = await store.listLabelPool();
+    const keys = await store.listLabelKeys('v1');
+    const labels = await store.listLabels('v1');
+
+    expect(isOk(pool) && pool.value.map((row) => row.id)).toEqual(ids);
+    expect(isOk(keys) && keys.value.size).toBe(2_345);
+    expect(isOk(labels) && labels.value.map((row) => row.id)).toEqual(ids);
+  });
+
+  it.each([4, 5])('pages with a simulated page size of 2 (%i rows)', async (count) => {
+    const store = new InMemoryMarketStore();
+    store.labelPageSize = 2;
+    const ids = Array.from({ length: count }, (_, i) => `o/s${i}`);
+    for (const id of ids) {
+      await store.upsertListing(listing(id), '2026-01-01T00:00:00.000Z');
+    }
+    await store.saveLabels('v1', ids.map((id) => score(id)));
+
+    const pool = await store.listLabelPool();
+    const keys = await store.listLabelKeys('v1');
+    const labels = await store.listLabels('v1');
+
+    expect(isOk(pool) && pool.value.map((row) => row.id)).toEqual(ids);
+    expect(isOk(keys) && [...keys.value.keys()]).toEqual(ids);
+    expect(isOk(labels) && labels.value.map((row) => row.id)).toEqual(ids);
+  });
+
+  it('saveLabels upserts on (skill_id, taxonomy_version)', async () => {
+    const store = new InMemoryMarketStore();
+    await store.saveLabels('v1', [score('a/one'), score('b/two')]);
+    await store.saveLabels('v2', [score('a/one', { stateHash: 'v2-hash' })]);
+
+    await store.saveLabels('v1', [score('a/one', { status: 'error', probabilities: {}, stateHash: 'new-hash' })]);
+
+    const v1 = await store.listLabels('v1');
+    const v1Keys = await store.listLabelKeys('v1');
+    const v2 = await store.listLabels('v2');
+    expect(isOk(v1) && v1.value).toEqual([
+      score('a/one', { status: 'error', probabilities: {}, stateHash: 'new-hash' }),
+      score('b/two'),
+    ]);
+    expect(isOk(v1Keys) && Object.fromEntries(v1Keys.value)).toEqual({
+      'a/one': { stateHash: 'new-hash', status: 'error' },
+      'b/two': { stateHash: 'hash-b/two', status: 'ok' },
+    });
+    expect(isOk(v2) && v2.value).toEqual([score('a/one', { stateHash: 'v2-hash' })]);
+  });
+
+  it('listLabelKeys is empty for an unknown version', async () => {
+    const store = new InMemoryMarketStore();
+    await store.saveLabels('v1', [score('a/one')]);
+
+    const keys = await store.listLabelKeys('v9');
+
+    expect(isOk(keys) && keys.value.size).toBe(0);
   });
 });

@@ -270,20 +270,62 @@ export class InMemoryMarketStore implements MarketStore {
 
   // --- T17b labels ---
 
+  /** Simulated PostgREST page size; tests shrink it to exercise paging. */
+  labelPageSize = 1_000;
+  /** taxonomy version -> skill id -> score */
+  private labels = new Map<string, Map<string, SkillScore>>();
+
+  /** Reads `fetchRange(from, to)` (inclusive, like `.range()`) until a short page. */
+  private pageLabelRows<T>(fetchRange: (from: number, to: number) => T[]): T[] {
+    const rows: T[] = [];
+    for (let from = 0; ; from += this.labelPageSize) {
+      const page = fetchRange(from, from + this.labelPageSize - 1);
+      rows.push(...page);
+      if (page.length < this.labelPageSize) return rows;
+    }
+  }
+
+  private sortedLabels(version: string): SkillScore[] {
+    return [...(this.labels.get(version)?.values() ?? [])].sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  /** `labelExcerpt` is always null: this store doesn't keep excerpts. */
   async listLabelPool(): Promise<Result<LabelPoolRow[]>> {
-    return err(new Error('not implemented: listLabelPool (T17b)'));
+    const active = [...this.skills.values()]
+      .filter((row) => !row.inactive)
+      .sort((a, b) => a.id.localeCompare(b.id));
+    const rows = this.pageLabelRows((from, to) => active.slice(from, to + 1));
+    return ok(
+      rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        source: row.source,
+        installs: row.installs,
+        description: row.description,
+        labelExcerpt: null,
+        owner: row.source.split('/')[0] ?? '',
+      })),
+    );
   }
 
-  async listLabelKeys(_version: string): Promise<Result<Map<string, Pick<SkillScore, 'stateHash' | 'status'>>>> {
-    return err(new Error('not implemented: listLabelKeys (T17b)'));
+  async listLabelKeys(version: string): Promise<Result<Map<string, Pick<SkillScore, 'stateHash' | 'status'>>>> {
+    const sorted = this.sortedLabels(version);
+    const rows = this.pageLabelRows((from, to) => sorted.slice(from, to + 1));
+    return ok(new Map(rows.map((row) => [row.id, { stateHash: row.stateHash, status: row.status }])));
   }
 
-  async saveLabels(_version: string, _scores: SkillScore[]): Promise<Result<void>> {
-    return err(new Error('not implemented: saveLabels (T17b)'));
+  async saveLabels(version: string, scores: SkillScore[]): Promise<Result<void>> {
+    const byId = this.labels.get(version) ?? new Map<string, SkillScore>();
+    for (const score of scores) {
+      byId.set(score.id, { ...score, probabilities: { ...score.probabilities } });
+    }
+    this.labels.set(version, byId);
+    return ok(undefined);
   }
 
-  async listLabels(_version: string): Promise<Result<SkillScore[]>> {
-    return err(new Error('not implemented: listLabels (T17b)'));
+  async listLabels(version: string): Promise<Result<SkillScore[]>> {
+    const sorted = this.sortedLabels(version);
+    return ok(this.pageLabelRows((from, to) => sorted.slice(from, to + 1)).map((row) => ({ ...row })));
   }
 
   // --- T12a creatorChecks ---
