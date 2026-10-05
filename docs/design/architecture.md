@@ -1,108 +1,92 @@
-# skil Architecture
+# skil architecture
 
-Thin CLI + Electron GUI over a connected project folder. Two live trees: `.agents` and `.claude`. On/off is a path, not a flag. No dock picker, no export, no login.
+A thin CLI and an Electron app sitting on one engine. Two live folders (`.agents` and `.claude`). On/off is where a folder sits, not a flag. No login, no dock picker, no export.
 
-Product: `docs/requirements/prd.md`. History: `docs/design/decisions.md`. Discover backend: `docs/design/market-index.md`. Diagram: `docs/design/system-modules.html`.
+Other docs: product `docs/requirements/prd.md` · history `docs/design/decisions.md` · Discover backend `docs/design/market-index.md` · diagram `docs/design/system-modules.html` · manual QA `docs/product_test.md`.
 
-## Vocabulary
+## Words we use
 
 | Term | Means | On disk |
 |---|---|---|
-| **Skill** | folder with `SKILL.md` | one catalog row, many `paths` |
-| **Live pair** | on | `.agents/skills/<id>` **and** `.claude/skills/<id>` |
-| **Parked** | off-but-yours | `.skil/parked/{skills,commands,rules}/<id>` |
-| **Leftover** | other roots we still scan | `.cursor/skills`, `.codex/skills`, `.github/skills`, `.windsurf/skills`, stray always-on rule files |
-| **Deprecated** | leftover already retired | `.skil/deprecated/<original-path>` — never scanned |
-| **Command** | one skill list per project (`/build`) | live = human-only skill folder in both trees |
-| **Rule** | shared law vs path-scoped glob | `AGENTS.md` sections (togglable); `.cursor/rules/*.mdc` etc. (read-only) |
+| **Skill** | a folder with `SKILL.md` | one catalog row, many `paths` |
+| **Live pair** | on | `.agents/skills/<id>` and `.claude/skills/<id>` |
+| **Parked** | off but still yours | `.skil/parked/{skills,commands,rules}/<id>` |
+| **Leftover** | other roots we still scan | `.cursor/skills`, `.codex/skills`, `.github/skills`, `.windsurf/skills`, stray rule files |
+| **Deprecated** | leftover we retired | `.skil/deprecated/<original-path>`, never scanned |
+| **Command** | one skill list per project (`/build`) | a human-only skill folder in both live trees |
+| **Rule** | shared law or path-scoped glob | `AGENTS.md` sections (toggle), `.cursor/rules/*.mdc` etc. (read-only) |
 
-Disk owns skill/rule bodies. We own: the catalog, the one command list, and where each id currently lives. One `.skil/state.json`.
+Disk owns the bodies. We own the catalog, the command list, and where each id lives. All of it is in one `.skil/state.json`.
 
-**Scan** unions live + leftover + parked. Leftover-only skills/commands copy into the live pair; leftover-only rules upsert into `AGENTS.md` (leftover path stays). A missing live half is filled from the live copy that is already there. Parked leftovers stay off. **Toggle** is on → live pair, off → parked. Market `+` writes the live pair directly.
+- **Scan** unions live + leftover + parked. Leftover-only skills and commands get copied into the live pair, leftover-only rules get upserted into `AGENTS.md`. The leftover path stays. Parked leftovers stay off.
+- **Toggle** on = live pair, off = parked. Discover `+` writes the live pair directly.
+- **Filing** a skill onto a command just edits the command's `## Skills` list. It never turns the skill on.
+- `CLAUDE.md` is `@AGENTS.md` plus Claude-only notes.
 
-Filing edits a command's `## Skills` list. It does not install or enable the filed skill. `CLAUDE.md` is `@AGENTS.md` plus Claude-only notes.
-
-The class is still `CollectionEngine` (`ICollectionEngine`). Call it **Command** in product language. Rename the class when it stops lying; do not split the module.
+The class is still called `CollectionEngine` (`ICollectionEngine`). Say "command" in product language. Rename the class when it's worth it, don't split the module.
 
 ## Stack
 
-Node 20+, TypeScript (strict), Vitest. CLI: Commander. GUI: Electron + React. HTTP: axios. Subprocess: execa. YAML: js-yaml.
+Node 20+, TypeScript (strict), Vitest. CLI is Commander, GUI is Electron + React, website is a static Next.js export. HTTP is axios, subprocess is execa, YAML is js-yaml.
 
 ## One deep module
 
-Callers learn `ICollectionEngine` (`src/interfaces/engine.ts`). The implementation hides catalog merge, hashing, live/parked/leftover/deprecated paths, the one command list, doctor, and suggest.
+Callers only learn `ICollectionEngine` (`src/interfaces/engine.ts`). Inside it hides catalog merge, hashing, all the path rules, the command list, doctor and suggest.
 
-Do **not** split into Scanner + Map + Deployer. Do **not** add HealthEngine / SuggestEngine. **Deletion test:** delete the engine and that complexity reappears in both CLI and GUI.
+Don't split it into Scanner + Map + Deployer, and don't add HealthEngine / SuggestEngine. Deletion test: delete the engine and the same mess shows up in both the CLI and the GUI.
 
-Supporting adapters (two implementations each = a real seam): `IFileSystemAdapter`, `ISkillsAdapter`, `IUsageCollector`. Optional `LlmChat` (same pattern as usage — default none).
+Adapters (two implementations each, so they're real seams): `IFileSystemAdapter`, `ISkillsAdapter`, `IUsageCollector`. `LlmChat` is optional.
 
-### Writes
+**Writes:** `setSkillEnabled` / `setCommandEnabled` / `setSharedRuleEnabled` · `create` / `delete` / `addSkill` / `removeSkill` · `install` / `updateFromMarket` · `adoptLeftovers` / `importToCanonical` / `removeLeftovers` / `resolveDrift` · `deleteSkill` (live + parked only).
 
-- Toggle: `setSkillEnabled` / `setCommandEnabled` / `setSharedRuleEnabled`
-- File: `create` / `delete` / `addSkill` / `removeSkill`
-- Market: `install` / `updateFromMarket`
-- Leftovers: `adoptLeftovers` / `importToCanonical` / `removeLeftovers` / `resolveDrift`
-- Hard delete: `deleteSkill` (live + parked only)
+**Reads:** `scan` / `skills` / `list` / `rules` / `leftovers` / `auditSync` / `previewSync` · `readSkillMd` / `readRule` · `usage` / `originChecks` / `health` / `suggest` · `search` / `browse`.
 
-### Reads
-
-- Catalog: `scan` / `skills` / `list` / `rules` / `leftovers` / `auditSync` / `previewSync`
-- Bodies: `readSkillMd` / `readRule`
-- Reports: `usage` / `originChecks` / `health` / `suggest`
-- Market pass-through: `search` / `browse`
-
-`lastWrittenPaths()` is the DiskWatch mute list.
+`lastWrittenPaths()` is the mute list for DiskWatch.
 
 ### Doctor (`health()`)
 
-Read-only over `commands[].skills` — never a folder walk, never persisted. Math + regex always, no key:
+Read-only, runs over `commands[].skills`, never persisted. No key needed for the math and regex checks:
 
-- **idle-cost** — description > 500 chars
-- **fat-body** — `SKILL.md` > 500 lines or 20,000 chars
-- **unused** — Claude reads only; fires after the project has usage **and** a 14-day grace. 0 reads with no logs is not a warning
-- **hash-split** — copies of the same id disagree on disk
-- **secret** — vendor-key-shaped regex hit
+- **idle-cost**: description over 500 chars
+- **fat-body**: `SKILL.md` over 500 lines or 20,000 chars
+- **unused**: Claude reads only. Fires once the project has usage and a 14-day grace has passed
+- **hash-split**: copies of the same id disagree
+- **secret**: looks like a vendor key
 
-With an `LlmChat`: **one batched call** for every command that has filed skills → **conflict** + **vague-trigger**, fanned per command. Prompt is **id + description only** (bodies stay on-machine for math checks). Cached by prompt hash. Failed call degrades silently (`usedLlm: false`). Secrets are redacted before the prompt leaves the machine. A bad key surfaces when you save it, not on every doctor run.
-
-Scoring lives in `src/core/health-checks.ts`. `skil doctor` and the Commands health strip both call `health()`.
+With an `LlmChat` it makes one batched call for **conflict** and **vague-trigger**. The prompt is id + description only, secrets are redacted first, answers are cached by prompt hash, and a failed call quietly falls back (`usedLlm: false`). Scoring lives in `src/core/health-checks.ts`.
 
 ### Suggest (`suggest(shelves, { role })`)
 
-Read-only, never persisted, never installs. No key → editorial picks for `options.role` (default `swe`) from `data/market-picks.yaml` (`usedLlm: false`). With a key → fingerprint `package.json`, LLM-rerank. LLM fail → fingerprint order, not an error.
+Read-only, never installs. No key: editorial picks for the role from `data/market-picks.yaml`. With a key: fingerprint `package.json`, then LLM rerank. If the LLM fails you get fingerprint order, not an error.
 
 ### BYOK (`LlmChat`)
 
-User-owned key, direct to the provider. Never through skil's backend or AI Gateway. (`LlmSkillClassifier` is our key, weekly shelf classify only.)
+The user's own key, straight to the provider. Never through our backend. One OpenAI-style chat client with three presets: `anthropic` (`claude-haiku-4-5`), `openai` (`gpt-4.1-nano`), `openrouter` (`openai/gpt-4.1-nano`).
 
-One OpenAI-chat-completions client. Presets: `anthropic` (`claude-haiku-4-5`), `openai` (`gpt-4.1-nano`), `openrouter` (`openai/gpt-4.1-nano`). Method: `complete({ system, user })`.
+- CLI: `SKIL_LLM_PROVIDER` + `SKIL_LLM_API_KEY`.
+- GUI: encrypted vault in Electron `userData`. Many keys, one active. The renderer only sees the raw key when you click the eye. Saving pings the provider, then rebinds the engine.
 
-- CLI: `SKIL_LLM_PROVIDER` + `SKIL_LLM_API_KEY` (`src/llm/env-llm-settings.ts`)
-- GUI: encrypted vault under Electron `userData` (`llm-settings.json`). Many keys, one `activeId`. Renderer never sees the raw key until the eye is clicked. Settings is a workspace tab: one row per key (provider, mask, eye, on/off). Saving pings then rebinds the session engine (`rebindLlmChat`).
+(Our own AI Gateway key is separate. It's only used by the weekly Discover labeling, see `market-index.md`.)
 
-### Invariants
+## Rules of the road
 
-- **On/off is a path.** Both live paths → on. Only parked → off. Leftover-only skills/commands become on after scan (leftover path stays until cleanup). `enabled` is never persisted.
-- Scan copies leftover-only skills/commands into the live pair, leftover-only rules into `AGENTS.md`, and fills a missing live half. Never invents a command from an unstamped skill folder. Never writes a leftover or deprecated root. Parked leftovers stay off.
-- Same hash at a new path is a rename (keep the id). Every path gone → drop the id.
-- One catalog, one command list. Market vs Project is a display filter (`source`), not two states.
-- Command names store without `/` (`create('/build')` → `build`). Name collision on enable is an error — no auto-prefix.
-- Filing never enables. A parked command is not rewritten until toggled back on.
-- Glob leftover files stay on disk until cleanup. Leftover-only copies upsert into `AGENTS.md` on scan. Shared sections toggle; leftover glob files do not.
+- On/off is a path. Both live paths = on, only parked = off. `enabled` is never stored.
+- Scan never invents a command from an unstamped skill folder and never writes into a leftover or deprecated root.
+- Same hash at a new path = rename (keep the id). Every path gone = drop the id.
+- One catalog, one command list. Market vs Project is just a filter (`source`).
+- Command names store without the `/`. A name clash on enable is an error, no auto-prefix.
+- Filing never enables. A parked command isn't rewritten until it's toggled back on.
+- Glob rule files stay on disk until cleanup. Shared `AGENTS.md` sections toggle, glob files don't.
 
 ## Adapters
 
-**FileSystemAdapter** — JSON state plus walk/read/write/copy/remove. The real adapter jails every path under the connected project folder. Ids, hashes, and reconcile stay in the engine.
+- **FileSystem**: JSON state plus walk/read/write/copy/remove. The real one jails every path inside the connected folder.
+- **Skills**: `search` / `browse` go through our OIDC backend (no user API key). `install` runs `npx skills add --agent universal --copy -y` into `.agents`, then the engine copies it into `.claude`. API origin is `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `src/config/website.json`.
+- **Usage**: reads Claude JSONL logs. Missing logs = empty.
 
-**SkillsAdapter** — `search` / `browse` via skil's OIDC backend (no user API key). `install` runs `npx skills add --agent universal --copy -y` into `.agents`; the engine `copyDir`s into `.claude`. `skillHash` is the live market SKILL.md hash for Update. Origin: `SKIL_API_URL`, then `CONTEXTKIT_API_URL`, then `website.json`.
+## CLI and GUI
 
-**UsageCollector** — Claude JSONL in prod, in-memory in tests. Missing logs → `[]`.
-
-## CLI / GUI
-
-Both thin. Same engine. Bin is `skil`; `contextkit` is an alias.
-
-**CLI = README verbs** (cwd). The live-pair `SKILL.md` teaches that same loop, including `skil skills`. **GUI = browse + leftovers + preview.** Not feature parity.
+Both thin, same engine. Bin is `skil` (`contextkit` still works as an alias).
 
 ```
 skil search | suggest | install
@@ -112,28 +96,31 @@ skil rules | rules enable|disable <id>
 skil doctor [name] | usage
 ```
 
-No `--to`, `--from`, `copy`, `export`, or `show`. Top-level `enable`/`disable` are **commands**. Skills use `skil skills enable|disable`.
+Top-level `enable`/`disable` are for **commands**. Skills use `skil skills enable|disable`. There's no `copy`, `export`, `show` or `--to`.
 
-**GUI-only:** leftover cleanup, Discover shelves/preview, Update/Reset, DiskWatch, recents, encrypted BYOK. Not a CLI daemon.
+GUI tabs: Sync, Discover, Skills, Commands, Rules, Settings (`window.skil`). GUI-only stuff: leftover cleanup, Discover (shelves, creators, preview), Update/Reset, DiskWatch, recent folders (max 5), encrypted keys. Discover, Skills, Commands and Rules work without a folder, scan needs one.
 
-GUI tabs: Sync, Discover, Skills, Commands, Rules, Settings (`window.skil`). Recents: `recent-folders.json`, max 5. Discover / Skills / Commands / Rules work with no folder; scan needs one.
+DiskWatch (GUI main) watches the live pair, leftover roots, parked, glob rule dirs and root `AGENTS.md` / `CLAUDE.md`. Debounce ~500ms, mutes our own writes for ~1s, skips `.git` and `.skil/deprecated`. A flush is just `scan()`, not a merge.
 
-DiskWatch (GUI main): live pair, leftover roots, parked, glob rule dirs, root `AGENTS.md` / `CLAUDE.md`. Debounce ~500ms, mute our writes ~1s, skip `.git` and `.skil/deprecated`. Flush = `scan()`. Not a 3-way merge.
+## Website and API
 
-## Market index
+`web/` is a static Next.js export (pages: home, about, app, cli, faq, leaderboard, legal, blog). `vercel.json` has `cleanUrls` on so `/cli` works. Server code is Vercel Functions in `api/`, thin wrappers over the compiled `dist/`:
 
-Curated Supabase copy of skills.sh. Feeds Discover only. Not the engine catalog. See `docs/design/market-index.md`.
+- `api/skills/{index,search}.ts`: skills.sh proxy (Top / Trending / search) using our Vercel OIDC token.
+- `api/market/{shelves,search,preview,suggested,creators}.ts`: the Discover read API.
+
+Search `q` is capped at 200 chars and search answers are cached at the edge for 60s. Details in `market-index.md`.
 
 ## Data model
 
-Schema **v6**. Path: `.skil/state.json`. Missing file → empty. Lone `.contextkit/state.json` is an error (move it).
+Schema **v6**, file `.skil/state.json`. Missing file = empty. A lone `.contextkit/state.json` is an error (move it).
 
 ```typescript
 interface State {
   version: string              // "6.0"
   commands: CommandRecord[]    // { name, skills[], createdAt }
-  skills: SkillRecord[]        // we are SoT
-  installedSkills: Skill[]     // leftover, ignored
+  skills: SkillRecord[]        // we are the source of truth
+  installedSkills: Skill[]     // old leftover, ignored
 }
 
 interface SkillRecord {
@@ -141,10 +128,10 @@ interface SkillRecord {
   hash: string                 // sha256 of SKILL.md
   paths: string[]              // live + leftover + parked
   source: 'local' | 'skills.sh'
-  originHash?: string          // market copy-time hash; scan never overwrites
+  originHash?: string          // market hash at copy time; scan never overwrites
 }
 
-interface RuleRecord {         // walked from disk, never persisted
+interface RuleRecord {         // walked from disk, never stored
   id: string
   kind: 'shared' | 'glob'
   path: string
@@ -152,30 +139,23 @@ interface RuleRecord {         // walked from disk, never persisted
 }
 ```
 
-Load: v6 as-is → v5 `membership` unioned → v4 `skills[]` → v3 `collections` renamed. Old `inbox` field dropped on persist. `installedSkills` and `deployedTo` still load/write so old files don't break — ignored as the catalog. No rewrite on read.
+Loading is forgiving: v6 as-is, v5 `membership` unioned, v4 `skills[]`, v3 `collections` renamed. The old `inbox` field is dropped on save. Nothing gets rewritten on read.
 
-Id = path relative to the skills root (`build/tdd`). Hash = `SKILL.md` only.
+A live command is `skills/<name>/SKILL.md` + `agents/openai.yaml` (`disable-model-invocation: true`) in both trees. Off moves it to `.skil/parked/commands/<name>/`. `generated_by: skil` is how enable recognises our own folder during the clash check.
 
-Live command skill: both trees get `skills/<name>/SKILL.md` + `agents/openai.yaml` (`disable-model-invocation: true`). Off moves both to `.skil/parked/commands/<name>/`. `generated_by: skil` is how enable recognizes our folder during the collision check. `addSkill` / `removeSkill` rewrite frontmatter `skills:` and `## Skills` on the live pair only.
+## Secrets
 
-## Secrets & runners
-
-Service role, AI Gateway, and Vercel OIDC live in server env / `.env` (gitignored). Never `NEXT_PUBLIC_` on the service role. Never in `gui/` or the Next client bundle. Market HTTP handlers are thin adapters over `dist/`. Weekly shelf refresh is GitHub Actions `--classify-only` (Supabase + AI Gateway secrets). BYOK keys stay on the user's machine (`safeStorage` / `SKIL_LLM_API_KEY`).
+Service role key, AI Gateway key and Vercel OIDC live in server env or a gitignored `.env`. Never `NEXT_PUBLIC_` on the service role, never in `gui/` or the web bundle. CI greps tracked files for key-shaped strings. BYOK keys stay on the user's machine.
 
 ## Tests
 
-**Unit** — engine with adapter fakes: scan, toggle, file, leftovers, doctor (math + batched LLM + silent degrade), suggest (editorial / fingerprint / fallback), `LlmChat` presets.
+- **Unit**: engine with adapter fakes (scan, toggle, filing, leftovers, doctor, suggest, `LlmChat`), plus the backend (sync, labeling, shelves, read API).
+- **Integration**: CLI on an in-memory engine, temp-dir FS, DiskWatch with a fake clock.
+- **E2E**: GUI with the real engine and fake adapters (connect, scan, toggle, cleanup).
+- `function-imports.test.ts` builds the project and loads every `api/` function under plain Node ESM, so a bad import fails in CI instead of in prod.
 
-**Integration** — CLI against in-memory engine; temp-dir FS; DiskWatch fake clock.
+Test through the engine methods, adapter interfaces, CLI handlers, GUI bridge and DiskWatch timing. Don't test persist helpers or `createEngine` wiring directly.
 
-**E2E** — GUI with real engine + fake adapters: connect → scan → toggle on/off → leftover cleanup.
-
-Seams: engine public methods, adapter interfaces, CLI handlers, GUI bridge, DiskWatch debounce/mute. Not seams: persist helpers, `createEngine` wiring.
-
-## Not this phase
+## Not building (yet)
 
 Dock picker, five-way export, Inbox, team YAML, login, SQLite, usage parsers besides Claude, auto-install, stamps on ordinary `SKILL.md`, modeling runtime overlap, live 3-way merge.
-
-## References
-
-`docs/design/decisions.md` · `docs/design/market-index.md` · `docs/design/system-modules.html` · `docs/requirements/prd.md` · `README.md`

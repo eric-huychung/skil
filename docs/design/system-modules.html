@@ -238,7 +238,7 @@
 
     <rect class="node process" x="740" y="380" width="136" height="64" rx="6" />
     <text class="label" x="808" y="406" text-anchor="middle">MarketSync</text>
-    <text class="small" x="808" y="424" text-anchor="middle">cron + script</text>
+    <text class="small" x="808" y="424" text-anchor="middle">weekly job + script</text>
 
     <rect class="node storage" x="740" y="520" width="136" height="52" rx="6" />
     <text class="label" x="808" y="542" text-anchor="middle">Supabase</text>
@@ -246,7 +246,7 @@
 
     <!-- key flows -->
     <text class="label" x="24" y="730">Key flows</text>
-    <text class="small" x="24" y="750">scan = pull (union live + leftover + parked, write nothing)</text>
+    <text class="small" x="24" y="750">scan = pull (union live + leftover + parked; copies leftover-only stuff into the live pair)</text>
     <text class="small" x="24" y="768">toggle / Discover + = write (live pair on · parked off)</text>
     <text class="small" x="24" y="786">filing edits command ## Skills only — never enables the skill</text>
 

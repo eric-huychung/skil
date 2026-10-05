@@ -32,11 +32,15 @@ Tick as you go. Note the weird stuff.
 
 ### Discover
 
-- [ ] Top, Trending, search, role shelves all load
-- [ ] Preview a skill
+- [ ] Top, Trending, Creators, search, role shelves all load
+- [ ] Shelves: each topic shows up to 30, one owner takes at most 5 rows, a vendor suite shows as "name, +N more" (click searches it)
+- [ ] Creators: 30 cards, each with skill count + installs. "Official on skills.sh" badge on some. Click one → skills grouped by repo with topic chips
+- [ ] Search finds by name, owner and topic. A typo still lands close
+- [ ] Preview a skill (live SKILL.md + audit)
 - [ ] `+` installs into the live pair (both trees). Row shows up in Skills as on
 - [ ] Suggested: no folder → connect prompt. no key → editorial picks + Settings nudge. with key → ranked for this repo
 - [ ] Leaderboard down → error, not a blank forever-spinner
+- [ ] Shelves empty or failing → falls back to Top, not a blank page
 
 ### Skills
 
@@ -129,6 +133,20 @@ Run from the **project folder**. `skil --help` is source of truth.
 
 ---
 
+## Website (skil.website)
+
+- [ ] `/`, `/about`, `/app`, `/cli`, `/faq`, `/leaderboard`, `/legal`, `/blog` all load (no 404 on clean URLs). Nav and footer links work
+- [ ] Unknown path → 404 page
+- [ ] Discover on the landing: shelves, Creators, search, preview with copy `npx skills add`
+- [ ] Light / dark toggle works
+
+## API (quick curl)
+
+- [ ] `/api/market/shelves`, `/api/market/creators`, `/api/market/suggested` → 200
+- [ ] `/api/market/search?q=react` and `/api/skills/search?q=react` → 200, second hit is a CDN HIT
+- [ ] `q` longer than 200 chars → 400
+- [ ] `/api/market/preview?id=nope` → 404, no `id` → 400
+
 ## App ↔ CLI
 
 - [ ] Install in app, see it in `skil skills`
@@ -147,5 +165,6 @@ Good enough to ship if:
 3. Discover `+` and `skil install` do the same write
 4. Nothing half-writes on a name clash
 5. Unsigned Mac open path is survivable
+6. Website pages and the market API all answer
 
 Write bugs as: **where / what you did / what you saw / what you expected**.

@@ -1,10 +1,10 @@
-# Market Index (Discover backend)
+# Market index (the Discover backend)
 
-Separate from the engine. Feeds Discover only. Never the catalog in `.skil/state.json`. Engine: `docs/design/architecture.md`.
+Separate from the engine. It only feeds Discover and never touches the catalog in `.skil/state.json`. Engine docs: `docs/design/architecture.md`.
 
-A curated Supabase copy of the skills.sh listing (single source, about 9.7k rows), nested **role → topic → top 30**. Every active row gets a topic label from Jev; shelves are built from stored labels. A **Creators** tab sits beside the shelves: 30 owners from a hand-edited YAML. List rows are id / name / source / installs (rank on shelves only). Preview is live SKILL.md + audit — bodies stay off the DB (a 1,000-char `label_excerpt` is stored for labeling only). Landing copies `npx skills add`. GUI `+` calls `engine.install(skillId)` into the live pair.
+It's a Supabase copy of the skills.sh listing (one source, about 9.7k rows), sorted **role → topic → top 30**. Every active skill gets topic labels from Jev, and shelves are built from those stored labels. A **Creators** tab sits next to the shelves with 30 owners from a hand-edited YAML. Preview fetches SKILL.md and the audit live, so bodies never live in the DB (only a 1,000-char `label_excerpt` for labeling). Landing copies `npx skills add`, the GUI `+` calls `engine.install(skillId)`.
 
-## Seams
+## Pieces
 
 ```typescript
 interface MarketStore {            // src/backend/market-store.ts
@@ -19,81 +19,88 @@ interface MarketStore {            // src/backend/market-store.ts
 }
 
 interface MarketSkillsClient {     // src/backend/market-client.ts
-  listPage / getSkill / getAudit / getSkillMd   // live SKILL.md, never stored
+  listPage / getSkill / getAudit / getSkillMd          // SKILL.md is live, never stored
 }
 
 interface SkillClassifier {        // src/backend/skill-classifier.ts
-  classify(rows, questions)        // → SkillScore { probabilities, status: ok | error, stateHash }
+  classify(rows, questions)        // -> { probabilities, status: ok | error, stateHash }
 }
 
 class MarketSync {                 // src/backend/market-sync.ts
-  crawlListing()                   // page the listing; queue ids with no hash
+  crawlListing()                   // page the listing, queue ids with no hash
   hydrateDetails(ids)              // description + hash + label_excerpt
-  syncListing()                    // crawl, then markInactiveBefore (full success only)
-  labelPool(classifier, { dryRun }) // incremental Jev labels, saved per batch of 100
-  rebuildShelves({ dryRun })       // coverage gate → buildShelves → replaceShelves
+  syncListing()                    // crawl, then markInactiveBefore (only on full success)
+  labelPool(classifier, { dryRun })// incremental Jev labels, saved per batch of 100
+  rebuildShelves({ dryRun })       // coverage gate -> buildShelves -> replaceShelves
 }
 ```
 
-Store adapters: `InMemoryMarketStore` (tests), `SupabaseMarketStore` (`supabase/migrations/0001`–`0008`). Seed: roles / fields in `src/backend/market-seed.ts`. Classifier: `JevSkillClassifier` → `GatewayJevClient` (`typesafe-ai/jev` via Vercel AI Gateway `/v1/evaluate`, `AI_GATEWAY_API_KEY`). Tests use `FakeSkillClassifier`. Laptop `scripts/sync-market.ts` constructs `MarketSync` directly; GitHub Actions runs the same `--classify-only` path.
+- **Stores:** `InMemoryMarketStore` (tests) and `SupabaseMarketStore` (migrations `0001`–`0008`).
+- **Seed:** 6 roles / 27 fields in `src/backend/market-seed.ts`.
+- **Classifier:** `JevSkillClassifier` → `GatewayJevClient` (`typesafe-ai/jev` through the Vercel AI Gateway, key is `AI_GATEWAY_API_KEY`). Tests use `FakeSkillClassifier`.
+- **skills.sh client:** 15s timeout, 2 retries with 500ms/1s backoff.
+- `scripts/sync-market.ts` builds `MarketSync` directly. GitHub Actions runs the same script.
 
 ## Labels
 
-- **Taxonomy:** `TOPIC_QUESTIONS` in `src/backend/topic-taxonomy.ts`, one yes/no prompt per field (parity with the seed is tested). `TAXONOMY_VERSION` = first 12 hex of sha256 over the question set. Editing a prompt changes the version, which relabels; never hand-bump it. Reverting a prompt restores the old version's stored labels at zero calls.
-- **State:** `buildLabelState` = name, repo, description, excerpt. `state_hash` = sha256 of that text. Label key is (skill, taxonomy version); a row holds every field's probability in `jsonb` plus `status` (`ok` / `error`). Migration `0007`.
-- **Jev:** one call per skill, one boolean question per field. 8 calls in flight, 600 call starts per minute. Client: 15s timeout, 5 tries with jitter on 429 / 529 / 5xx / network / timeout; 401 and 422 do not retry. A bad answer (missing question, probability outside 0–1) retries once, then the row is saved as `status: 'error'`.
-- **Incremental:** a row needs a label when it has none for this version, its `state_hash` changed, or its status is `error`. Batches of 100 save as they finish, so a failed run keeps its finished batches and the next run **resumes** past them. More than 2% errored rows → `bad_answers`, run fails.
-- **Topics:** `topicsFor` keeps fields ≥ 0.4, highest first, at most 3 (`TOPIC_THRESHOLD`; lowered from 0.6 after the first run). No topic is a valid answer: the row stays off shelves and stays searchable (no `integrations` dumping). 0.4–0.6 is the review band, labeled but low confidence; `--taxonomy-review` prints unlabeled and review-band rows. All probabilities are stored, so a threshold change needs a shelf rebuild, not relabeling.
-- **Excerpt:** first 1,000 chars of the SKILL.md body, cut at a word, written by hydrate. Hydrate treats a row as unchanged only when the hash matches **and** the excerpt is present. `--backfill-excerpt` runs that path for every row missing one.
-- First run (2026-10-05, taxonomy `ff85d19cf77d`, no excerpts yet): 9,692 labeled, 0 errors, 8.66M input tokens. At 0.6, 3,983 skills (41.1%) had no topic; at 0.4, 2,535 (26.2%). Review band 2,879. Every shelf holds 30 skills from 16–22 owners; top owner share ≤ 16.7%. Roughly 40% of the unlabeled skills fit no field (marketing, media, finance, science); `integrations` is broad and noisy at 0.4. Excerpt backfill and the gold-set comparison have not run.
+- **Questions:** `TOPIC_QUESTIONS` in `src/backend/topic-taxonomy.ts`, one yes/no prompt per field (27 now, seed parity is tested). `TAXONOMY_VERSION` (currently `6df5d25974d4`) is a hash of the questions. Edit a prompt and the version changes, which relabels. Never bump it by hand. Revert a prompt and the old labels come back for free.
+- **What Jev reads:** name, repo, description, excerpt. `state_hash` is the sha256 of that text. A label row is keyed by (skill, taxonomy version) and holds every field's probability as `jsonb` plus `status` (`ok` / `error`).
+- **Calls:** one per skill, one boolean question per field. 8 in flight, 600 call starts a minute. 15s timeout, up to 5 tries with jitter on 429/529/5xx/network/timeout (401 and 422 don't retry). A bad answer retries once, then the row is saved as `error`.
+- **Incremental:** a row needs a label if it has none for this version, its `state_hash` changed, or it's in `error`. Batches of 100 save as they finish, so a failed run keeps its progress and the next one resumes. More than 2% errored rows = `bad_answers`, run fails.
+- **Topics:** fields with probability ≥ 0.4 (`TOPIC_THRESHOLD`), best first, max 3. No topic is a fine answer: the skill stays off shelves but stays searchable. 0.4–0.6 is the review band (labeled, low confidence). `--taxonomy-review` prints unlabeled and review-band rows. Probabilities are stored, so changing the threshold means a shelf rebuild, not a relabel.
+- **Excerpt:** first 1,000 chars of the SKILL.md body, cut at a word, written during hydrate. A row counts as unchanged only if the hash matches **and** the excerpt exists. `--backfill-excerpt` fills the gaps.
+- **Last full run** (2026-10-05, 27 fields): 9,692 labeled, 0 errors, about 27% with no topic. `integrations` is now strictly one named vendor/platform, `workflow` and `frontend` are narrower. See `decisions.md` for the tradeoff.
 
 ## Shelves
 
 `rebuildShelves`:
-1. **Coverage gate:** every active row needs a label for `TAXONOMY_VERSION` whose `state_hash` matches (ok or error). Any gap → `{ written: false, reason: 'incomplete_coverage' }`; shelves untouched, run fails.
-2. `buildShelves` (`src/backend/shelf-assembler.ts`, pure), per field: assign topics → dedup by name (highest installs; display only) → **suite collapse** → rank by tier (probability ≥ 0.8 first) then installs → **owner cap** 5 per shelf → cut to `shelfSize`.
-3. `replaceShelves` → `replace_market_shelves` RPC: every shelf plus `market_shelf_meta` (`generated_at`, `taxonomy_version`) in one transaction.
+1. **Coverage gate.** Every active row needs a label for the current version with a matching `state_hash`. Any gap returns `incomplete_coverage`, shelves stay untouched and the run fails.
+2. **`buildShelves`** (`src/backend/shelf-assembler.ts`, pure). Per field: assign topics → dedup by name (highest installs) → suite collapse → rank (probability ≥ 0.8 first, then installs) → owner cap of 5 → cut to shelf size (30).
+3. **`replaceShelves`** calls the `replace_market_shelves` RPC. All shelves plus `market_shelf_meta` (`generated_at`, `taxonomy_version`) land in one transaction.
 
-**Suite collapse:** rows with the same `source` (owner/repo) and the same name prefix before the first `-`, 3 or more, become one entry led by the best-installed row; `more_count` = group size − 1. Both UIs render "name, +N more"; clicking "+N more" searches the prefix in the same view. A collapsed suite counts as one entry toward the owner cap.
+**Suite collapse:** 3 or more rows with the same `source` and the same name prefix (before the first `-`) become one entry led by the best-installed row, with `more_count` = group size − 1. Both UIs show "name, +N more". Clicking it searches the prefix. A suite counts once toward the owner cap.
 
-`--dry-run` prints the label diff and shelf health (unlabeled share, per-shelf count and distinct owners, review band) and writes nothing.
+`--dry-run` prints the label diff and shelf health and writes nothing.
 
 ## Creators
 
-- **List:** `data/market-creators.yaml` — exactly 30 `creators` in display order (pins first: `slug`, `label`, `owners` aliases, `pinned`, optional `tech` override), `blocked`, `techCutoff` (report only), `officialOwners` + `officialFetchedAt`. Validated by `parseMarketCreators`. A human edits it; no job rewrites it.
-- **Owner stats:** `owner` is a generated column (`split_part(source, '/', 1)`) with an index; `market_owner_stats` view (migration `0006`). Cards show skill count and total installs from it.
-- **Official:** a creator is "Official on skills.sh" when any of its owners is in `officialOwners`, a snapshot of `https://skills.sh/official`. Never "verified".
-- **Report:** `npm run sync-market -- --creators-report` (laptop, read-only except the gate cache). Top 100 owners by best single-skill installs, aliases merged → Jev tech gate (yes/no + domain, owner name + top 10 skills; cached in `market_creator_checks` by creator key + `state_hash`) → `tech:` overrides → `blocked` → cutoff → `selectThirty` (pins first). Fetches `/official` (on failure: "official list unchanged", keeps going) and GitHub followers (`GITHUB_TOKEN` optional, else "n/a"). Prints enter/leave against the YAML and a paste-ready YAML block. Writes nothing to the YAML.
+- **The list:** `data/market-creators.yaml`. Exactly 30 entries in display order (pinned first), plus `blocked`, `techCutoff` (report only) and `officialOwners`. `parseMarketCreators` validates it. Humans edit it, no job rewrites it.
+- **Stats:** `owner` is a generated column (`split_part(source, '/', 1)`), and the `market_owner_stats` view (migration `0006`) gives each card its skill count and total installs.
+- **Official badge:** "Official on skills.sh" when an owner is in `officialOwners`, a snapshot of `https://skills.sh/official`. Never say "verified".
+- **Report:** `npm run sync-market -- --creators-report` (read-only). Top 100 owners by best single-skill installs, aliases merged, then a Jev "is this a tech creator" gate (cached in `market_creator_checks`), `tech:` overrides, `blocked`, cutoff, and `selectThirty`. It prints who would enter or leave plus a paste-ready YAML block. It never edits the YAML. `officialOwners` is still a partial snapshot until the next report.
 
-## Sync
+## Running it
 
-- **First fill:** `npm run sync-market` — seed, crawl the skills.sh listing (`per_page=500`, follows `nextCursor` until a page has none; no page cap in our code), hydrate missing details + excerpt, label, rebuild shelves. Resumable. Needs Supabase env, `VERCEL_OIDC_TOKEN` for skills.sh, and `AI_GATEWAY_API_KEY`. Apply migrations first.
-- **Weekly cron:** GitHub Actions (`/.github/workflows/sync-market.yml`) runs `npm run sync-market -- --classify-only` Sunday 00:00 UTC: seed → label (incremental) → shelves. No crawl, no skills.sh call. Talks to Supabase + Vercel AI Gateway directly. Needs `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AI_GATEWAY_API_KEY`; `SLACK_WEBHOOK_URL` optional. Timeout 45 min.
-- Other flags: `--dry-run`, `--backfill-excerpt`, `--creators-report`, `--taxonomy-review`, `--max-detail=N`.
+- **First fill:** `npm run sync-market`. Seed → crawl the listing (`per_page=500`, follows `nextCursor`) → hydrate details + excerpt → label → shelves. Resumable. Needs Supabase env, `VERCEL_OIDC_TOKEN` (for skills.sh) and `AI_GATEWAY_API_KEY`. Apply migrations first.
+- **Weekly:** `.github/workflows/sync-market.yml`, Sundays 00:00 UTC, runs `npm run sync-market -- --classify-only`. Seed → incremental labels → shelves. No crawl, no skills.sh call. Needs `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AI_GATEWAY_API_KEY` (`SLACK_WEBHOOK_URL` optional). 45 min timeout.
+- **Other flags:** `--dry-run`, `--backfill-excerpt`, `--creators-report`, `--taxonomy-review`, `--max-detail=N`.
 
-## Failure handling
+## When it fails
 
-A failed run never changes what users see: shelves stay as they were, finished label batches stay saved.
+A failed run never changes what users see. Shelves stay as they were and finished label batches stay saved.
 
-- **Summary + exit code:** every sync run writes `.sync-market/summary.json` (plus Markdown to `$GITHUB_STEP_SUMMARY` when set): `status`, `failedStep` (`config` / `seed` / `crawl` / `hydrate` / `label` / `shelves`), `failureKind` (`config` / `auth` / `request` / `unavailable` / `bad_answers` / `incomplete_coverage` / `store`), `firstError` (secrets redacted, 300 chars), labeled / needed / errored, `shelvesWritten`, `shelvesGeneratedAt`, `taxonomyVersion`, model calls, input tokens. Exit `0` on ok, `1` otherwise. Laptop and CI behave the same.
-- **Slack:** `scripts/notify-slack.ts` reads the summary. `failure` step (`if: failure()`): run URL, failed step, labeled vs. needed, first error, shelf age. `stale` step (`if: always()`): warns when shelves are older than 10 days. No summary file → "sync-market failed before writing a summary". Empty `SLACK_WEBHOOK_URL` → logs "Slack not configured", exits 0.
-- **Limit:** the stale check can't fire if GitHub disables the scheduled workflow (60 days without repo activity); GitHub emails the owner then.
+- Every run writes `.sync-market/summary.json` (and Markdown to `$GITHUB_STEP_SUMMARY` in CI): status, failed step (`config` / `seed` / `crawl` / `hydrate` / `label` / `shelves`), failure kind (`config` / `auth` / `request` / `unavailable` / `bad_answers` / `incomplete_coverage` / `store`), first error (secrets redacted), label counts, whether shelves were written, tokens used. Exit code is 0 for ok, 1 otherwise.
+- `scripts/notify-slack.ts` reads that file. A `failure` step posts the run URL and details. A `stale` step warns when shelves are older than 10 days. No webhook set = it logs and exits 0.
+- Known gap: the stale check can't run if GitHub turns off the schedule after 60 quiet days (GitHub emails the owner then).
 
 ## Read API
 
-`src/backend/market-read.ts` behind `api/market/{shelves,search,preview,creators}.ts`.
+`src/backend/market-read.ts`, wrapped by `api/market/*.ts`:
 
-- **shelves** — `listShelves()`, entries carry `moreCount`. Empty → `{ data: [] }`. CDN 1h.
-- **search** — full index, not just shelves. `q` required. Limit 1–50. `search_market_skills` RPC (`0008`, `pg_trgm`): exact name > name prefix > owner or topic > typo-close name > text match, then installs.
-- **preview** — stored listing + live SKILL.md + audit. Unknown id → 404. Failed live fetch degrades. CDN 5m.
-- **creators** — no `slug`: 30 cards in YAML order (label, official, pinned, skill count, total installs). `?slug=`: one creator's skills grouped by repo, with topics for the current `TAXONOMY_VERSION` (`[]` until labels exist). Not deduped by name. Unknown slug → 404; bad YAML → 500 `config_error`; store error → 500 `store_error`. CDN 1h. Never calls Jev, GitHub or skills.sh. `vercel.json` ships `data/market-creators.yaml` with the function.
+| Route | What it does | CDN cache |
+|---|---|---|
+| `shelves` | role → field → skills (with `moreCount`). Empty index = `{ data: [] }` | 1h |
+| `search?q=` | whole index (not just shelves) via the `search_market_skills` RPC (`0008`, `pg_trgm`). Exact name > prefix > owner/topic > typo-close > text, then installs. `q` max 200 chars, `limit` 1–50 | 60s |
+| `preview?id=` | stored listing + live SKILL.md + audit. Unknown id = 404, a failed live fetch degrades to `null` | 5m |
+| `suggested?role=` | editorial picks from `data/market-picks.yaml`, filled in from the index | 1h |
+| `creators` / `creators?slug=` | 30 cards in YAML order, or one creator's skills grouped by repo with topics. Unknown slug = 404 | 1h |
 
-Landing (`web/`) fetches same-origin. GUI Discover proxies the same API through Electron main (`marketShelves` / `marketCreators` / `marketCreator` …), plus live Top / Trending via `SkillsAdapter.browse`. Empty shelves stay on that nest and default to Top.
+Search is public, so it has the length cap and the short cache to keep anyone from burning the skills.sh and Supabase budget. Row Level Security lets the public key SELECT only, the label/check/meta tables have no public policy, and writes use the service role.
 
-Why separate: own store, own sync loop, no on/off membership. It does not touch the engine catalog.
+Landing (`web/`) calls the same origin. GUI Discover goes through Electron main (`marketShelves`, `marketCreators`, …) and also shows live Top / Trending via `SkillsAdapter.browse`. Empty shelves fall back to Top.
 
 ## Open items
 
-- Crawl-cap check (spec task 2): confirm on a live run that the skills.sh crawl ends naturally (last page has no `nextCursor`) rather than at a server-side page cap, and record the install floor (about 970 installs today).
-- The crawl stays a laptop job; new skills appear only after a manual crawl. The stale-shelves warning does not cover a stale listing.
-- `officialOwners` is a partial snapshot until the next `--creators-report`.
+- Confirm on a live run that the crawl ends because the last page has no `nextCursor`, not a hidden server cap, and note the install floor (around 970 today).
+- The crawl is still a manual laptop job, so new skills only show up after someone runs it. The stale-shelves warning doesn't cover a stale listing.
+- Excerpt backfill and the gold-set comparison haven't run yet.
