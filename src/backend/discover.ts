@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { err, isOk, ok, type Result } from '../core/result.js';
 import type { BrowseView, Skill } from '../types/index.js';
-import type { MarketSearchRow, MarketSuggestedData, ShelfRole } from './market-types.js';
+import type { CreatorCard, CreatorDetail, MarketSearchRow, MarketSuggestedData, ShelfRole } from './market-types.js';
 
 export interface DiscoverHit {
   id: string;
@@ -26,6 +26,8 @@ export interface Discover {
   search(query: string): Promise<Result<DiscoverHit[]>>;
   preview(id: string): Promise<Result<DiscoverPreview>>;
   browse(view: BrowseView): Promise<Result<DiscoverHit[]>>;
+  creators(): Promise<Result<CreatorCard[]>>;
+  creator(slug: string): Promise<Result<CreatorDetail>>;
 }
 
 type GetJson = (url: string, config?: { params?: Record<string, string> }) => Promise<{ data: { data: unknown } }>;
@@ -90,6 +92,23 @@ export function createDiscover(opts: {
         }))
       );
     },
+    async creators() {
+      try {
+        const response = await get(`${base}/api/market/creators`);
+        return ok(response.data.data as CreatorCard[]);
+      } catch {
+        return err(new Error('store_error'));
+      }
+    },
+    async creator(slug: string) {
+      try {
+        const response = await get(`${base}/api/market/creators`, { params: { slug } });
+        return ok(response.data.data as CreatorDetail);
+      } catch (error) {
+        const status = (error as { response?: { status?: number } }).response?.status;
+        return err(new Error(status === 404 ? 'not_found' : 'store_error'));
+      }
+    },
   };
 }
 
@@ -104,5 +123,7 @@ export function engineAsDiscover(engine: {
     search: (query) => engine.search(query),
     preview: async () => err(new Error('unused')),
     browse: (view) => engine.browse(view),
+    creators: async () => ok([]),
+    creator: async () => err(new Error('unused')),
   };
 }
