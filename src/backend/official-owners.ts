@@ -28,14 +28,12 @@ const OWNER_PATH = /^(?:https?:\/\/(?:www\.)?skills\.sh)?\/([a-z0-9][a-z0-9._-]*
 /** Owner slugs linked from the `/official` page, lowercased, deduped, in page order. */
 export function parseOfficialOwners(html: string): string[] {
   const main = /<main\b[^>]*>([\s\S]*?)<\/main>/i.exec(html);
-  const body = main ? main[1] : html;
+  const body = main?.[1] ?? html;
   const owners: string[] = [];
   const seen = new Set<string>();
   for (const match of body.matchAll(ANCHOR_HREF)) {
-    const path = OWNER_PATH.exec(match[2].trim());
-    if (!path) continue;
-    const owner = path[1].toLowerCase();
-    if (RESERVED.has(owner) || seen.has(owner)) continue;
+    const owner = OWNER_PATH.exec((match[2] ?? '').trim())?.[1]?.toLowerCase();
+    if (!owner || RESERVED.has(owner) || seen.has(owner)) continue;
     seen.add(owner);
     owners.push(owner);
   }
