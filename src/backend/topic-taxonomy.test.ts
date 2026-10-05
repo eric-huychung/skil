@@ -51,10 +51,10 @@ describe('T23 tech topics', () => {
       'Is this skill mainly about building mobile or native apps (iOS and Swift, Android and Kotlin, Flutter, React Native, Expo)?',
     );
     expect(prompt('ai-ml')).toBe(
-      'Is this skill mainly about building AI or machine-learning systems (LLM apps, RAG, prompt engineering, evals, fine-tuning, model training or inference, computer vision)?',
+      'Is this skill mainly about building AI or machine-learning systems (LLM apps, RAG, embeddings, evals, fine-tuning, model training or inference, computer vision), not using a model to generate images, video or audio, and not writing agent personas, prompts or skills for coding agents?',
     );
     expect(prompt('languages')).toBe(
-      'Is this skill mainly about writing code in one specific programming language or its ecosystem (its idioms, types, tooling or libraries, for example Rust, Go, C# and .NET, Python, TypeScript, C++)?',
+      'Is this skill mainly about a programming language itself (its syntax, idioms, type system, compiler or runtime, standard library or package manager, for example Rust, Go, C#, Python, TypeScript, Swift), not a framework, platform, office or file format, config file, or a general dev tool such as a linter or pre-commit hook?',
     );
     expect(prompt('agent-tooling')).toBe(
       'Is this skill mainly about extending or configuring AI coding agents: writing skills, plugins, MCP servers or hooks, AGENTS.md or CLAUDE.md files, agent memory or context?',

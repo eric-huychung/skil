@@ -22,7 +22,7 @@ export const TOPIC_QUESTIONS: TopicQuestion[] = [
   q('mobile', 'Is this skill mainly about building mobile or native apps (iOS and Swift, Android and Kotlin, Flutter, React Native, Expo)?'),
   q(
     'languages',
-    'Is this skill mainly about writing code in one specific programming language or its ecosystem (its idioms, types, tooling or libraries, for example Rust, Go, C# and .NET, Python, TypeScript, C++)?',
+    'Is this skill mainly about a programming language itself (its syntax, idioms, type system, compiler or runtime, standard library or package manager, for example Rust, Go, C#, Python, TypeScript, Swift), not a framework, platform, office or file format, config file, or a general dev tool such as a linter or pre-commit hook?',
   ),
   q('game-dev', 'Is this skill mainly about game development or real-time 3D graphics (Unity, Unreal, Godot, game design, shaders)?'),
   q(
@@ -51,7 +51,7 @@ export const TOPIC_QUESTIONS: TopicQuestion[] = [
   // Agent, added in T23
   q(
     'ai-ml',
-    'Is this skill mainly about building AI or machine-learning systems (LLM apps, RAG, prompt engineering, evals, fine-tuning, model training or inference, computer vision)?',
+    'Is this skill mainly about building AI or machine-learning systems (LLM apps, RAG, embeddings, evals, fine-tuning, model training or inference, computer vision), not using a model to generate images, video or audio, and not writing agent personas, prompts or skills for coding agents?',
   ),
   q(
     'agent-tooling',
