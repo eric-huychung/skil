@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react';
-import { ArrowRight, Check, MagnifyingGlass, Plus } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowRight, Check, MagnifyingGlass, Plus } from '@phosphor-icons/react';
 import { useBridge } from '../bridge-context';
 import { FOCUS_RING } from '../lib/focus-ring';
 import { formatInstalls } from '../lib/format-installs';
-import type { BrowseView, LlmStatus, MarketSearchRow, ShelfRole } from '../../../shared/ipc';
+import type { BrowseView, CreatorCard, CreatorDetail, LlmStatus, MarketSearchRow, ShelfRole } from '../../../shared/ipc';
 import { LeaderboardSourceNote } from '../../../../../shared/leaderboard-source-note';
 import { StatusNotice, StatusSkeleton, type StatusKind } from '../../../../../shared/status';
 import SkillPreviewDialog from './SkillPreviewDialog';
 import WorkspaceWarning from './WorkspaceWarning';
 
 type AddState = { status: 'success' } | { status: 'error' };
-type Row = { id: string; name: string; installs: number; rank?: number };
+type Row = { id: string; name: string; installs: number; rank?: number; topics?: string[] };
 
 /** Survives Discover unmount (Settings toggle) so one LLM rank per project+role. */
 const editorialSuggestCache = new Map<string, Row[]>();
@@ -41,6 +41,22 @@ const SUGGEST_ROLE_TABS = [
   { slug: 'agent', label: 'Agent' },
   { slug: 'other', label: 'Other' },
 ] as const;
+
+type CreatorsGate =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'ready'; cards: CreatorCard[] };
+
+type CreatorGate =
+  | { status: 'loading'; slug: string }
+  | { status: 'error'; slug: string }
+  | { status: 'ready'; slug: string; detail: CreatorDetail };
+
+const OFFICIAL_BADGE = 'Official on skills.sh';
+
+function countSkills(n: number): string {
+  return `${n} ${n === 1 ? 'skill' : 'skills'}`;
+}
 
 type SuggestGate =
   | { status: 'idle' }
@@ -85,6 +101,9 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
   const [addingId, setAddingId] = useState<string | null>(null);
   const [addStates, setAddStates] = useState<Record<string, AddState>>({});
   const browseCache = useRef<Partial<Record<BrowseView, Row[]>>>({});
+  const [creatorsActive, setCreatorsActive] = useState(false);
+  const [creatorsGate, setCreatorsGate] = useState<CreatorsGate>({ status: 'loading' });
+  const [creatorGate, setCreatorGate] = useState<CreatorGate | null>(null);
   const [suggestedActive, setSuggestedActive] = useState(true);
   const [suggestRole, setSuggestRole] = useState<string>(SUGGEST_ROLE_TABS[0].slug);
   const [suggestGate, setSuggestGate] = useState<SuggestGate>({ status: 'idle' });
@@ -131,11 +150,18 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
     () => role?.fields.find((f) => f.slug === activeField) ?? role?.fields[0] ?? null,
     [role, activeField]
   );
+  /** Shelf field slug -> label, for topic chips on creator rows. */
+  const fieldLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const r of shelves ?? []) for (const f of r.fields) if (!labels.has(f.slug)) labels.set(f.slug, f.label);
+    return labels;
+  }, [shelves]);
   const rows: Row[] = searchResults ?? (browseView ? browseRows ?? [] : field?.skills ?? []);
 
   async function loadBrowse(view: BrowseView) {
     clearSearch();
     setSuggestedActive(false);
+    setCreatorsActive(false);
     setBrowseView(view);
     setBrowseError(null);
     const cached = browseCache.current[view];
@@ -167,6 +193,35 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
     }
   }
 
+  async function loadCreators() {
+    setCreatorsGate({ status: 'loading' });
+    try {
+      const result = await bridge.marketCreators();
+      setCreatorsGate(result.ok ? { status: 'ready', cards: result.value } : { status: 'error' });
+    } catch {
+      setCreatorsGate({ status: 'error' });
+    }
+  }
+
+  function handleSelectCreators() {
+    clearSearch();
+    setBrowseView(null);
+    setBrowseError(null);
+    setCreatorsActive(true);
+    setCreatorGate(null);
+    if (creatorsGate.status !== 'ready') void loadCreators();
+  }
+
+  async function openCreator(slug: string) {
+    setCreatorGate({ status: 'loading', slug });
+    try {
+      const result = await bridge.marketCreator(slug);
+      setCreatorGate(result.ok ? { status: 'ready', slug, detail: result.value } : { status: 'error', slug });
+    } catch {
+      setCreatorGate({ status: 'error', slug });
+    }
+  }
+
   function clearSearch() {
     setQuery('');
     setSearchResults(null);
@@ -177,6 +232,7 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
   function handleRoleSelect(r: ShelfRole) {
     clearSearch();
     setSuggestedActive(false);
+    setCreatorsActive(false);
     setBrowseView(null);
     setBrowseError(null);
     setActiveRole(r.slug);
@@ -276,7 +332,7 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
   function handleSelectLeaderboard() {
     clearSearch();
     setSuggestedActive(false);
-    if (browseView === null) {
+    if (browseView === null && !creatorsActive) {
       void loadBrowse('all-time');
     }
   }
@@ -340,8 +396,14 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
     const addState = addStates[skill.id];
     const isAdding = addingId === skill.id;
     const added = !isAdding && addState?.status === 'success';
+    const topics = skill.topics ?? [];
     return (
-      <li className="library-skill library-skill-interactive" key={skill.id} onClick={() => setSelectedId(skill.id)}>
+      <li
+        className="library-skill library-skill-interactive"
+        key={skill.id}
+        aria-label={skill.topics ? skill.name : undefined}
+        onClick={() => setSelectedId(skill.id)}
+      >
         <button
           type="button"
           className={`library-skill-hit ${FOCUS_RING}`}
@@ -352,6 +414,15 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
         <span className="skill-rank">{skill.rank ?? index + 1}</span>
         <div className="skill-info">
           <div className="skill-name">{skill.name}</div>
+          {topics.length > 0 && (
+            <ul aria-label="Topics" className="filter-row skill-meta-row">
+              {topics.map((topic) => (
+                <li key={topic} className="count-pill">
+                  {fieldLabels.get(topic) ?? topic}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="skill-actions">
           {!isAdding && addState?.status === 'error' && <StatusNotice kind="add" layout="inline" />}
@@ -376,6 +447,61 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
           </button>
         </div>
       </li>
+    );
+  }
+
+  function renderCreatorGrid() {
+    if (creatorsGate.status === 'loading') return <StatusSkeleton />;
+    if (creatorsGate.status === 'error') return <StatusNotice kind="load" onRetry={() => void loadCreators()} />;
+    if (creatorsGate.cards.length === 0) return <p className="muted-copy">No creators yet.</p>;
+    return (
+      <ul aria-label="Creators" className="rules-grid">
+        {creatorsGate.cards.map((card) => (
+          <li key={card.slug} className="rule-card">
+            <button
+              type="button"
+              className={`library-skill-hit ${FOCUS_RING}`}
+              onClick={() => void openCreator(card.slug)}
+              aria-label={`Open ${card.label}`}
+            />
+            <div>
+              <div className="rule-card-name">{card.label}</div>
+              {card.official && <span className="count-pill">{OFFICIAL_BADGE}</span>}
+            </div>
+            <div className="skill-count">
+              {countSkills(card.skillCount)} · {formatInstalls(card.totalInstalls)} installs, skills.sh
+            </div>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  function renderCreatorDetail(gate: CreatorGate) {
+    return (
+      <>
+        <button type="button" className={`filter ${FOCUS_RING}`} onClick={() => setCreatorGate(null)}>
+          <ArrowLeft size={14} weight="regular" aria-hidden="true" /> Back to creators
+        </button>
+        {gate.status === 'loading' && <StatusSkeleton />}
+        {gate.status === 'error' && <StatusNotice kind="load" onRetry={() => void openCreator(gate.slug)} />}
+        {gate.status === 'ready' && (
+          <>
+            <div className="card-title">
+              <h2>{gate.detail.label}</h2>
+              {gate.detail.official && <span className="count-pill">{OFFICIAL_BADGE}</span>}
+            </div>
+            {gate.detail.repos.map((repo) => (
+              <div key={repo.source}>
+                <h3 className="skill-count">{repo.source}</h3>
+                <ul aria-label={repo.source} className="skill-list">
+                  {repo.skills.map(renderSkillRow)}
+                </ul>
+              </div>
+            ))}
+          </>
+        )}
+      </>
     );
   }
 
@@ -465,30 +591,39 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
                     key={tab.view}
                     type="button"
                     role="tab"
-                    aria-selected={browseView === tab.view}
+                    aria-selected={!creatorsActive && browseView === tab.view}
                     onClick={() => {
                       void loadBrowse(tab.view);
                     }}
-                    className={`filter ${browseView === tab.view ? 'active-filter' : ''} ${FOCUS_RING}`}
+                    className={`filter ${!creatorsActive && browseView === tab.view ? 'active-filter' : ''} ${FOCUS_RING}`}
                   >
                     {tab.label}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={creatorsActive}
+                  onClick={handleSelectCreators}
+                  className={`filter ${creatorsActive ? 'active-filter' : ''} ${FOCUS_RING}`}
+                >
+                  Creators
+                </button>
                 {shelves.map((r) => (
                   <button
                     key={r.slug}
                     type="button"
                     role="tab"
-                    aria-selected={browseView === null && r.slug === activeRole}
+                    aria-selected={!creatorsActive && browseView === null && r.slug === activeRole}
                     onClick={() => handleRoleSelect(r)}
-                    className={`filter ${browseView === null && r.slug === activeRole ? 'active-filter' : ''} ${FOCUS_RING}`}
+                    className={`filter ${!creatorsActive && browseView === null && r.slug === activeRole ? 'active-filter' : ''} ${FOCUS_RING}`}
                   >
                     {r.label}
                   </button>
                 ))}
               </div>
 
-              {role && browseView === null && (
+              {role && browseView === null && !creatorsActive && (
                 <div role="tablist" aria-label="Category" className="filter-row">
                   {role.fields.map((f) => (
                     <button
@@ -531,6 +666,8 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
             <ul className="skill-list">{suggestGate.rows.map(renderSkillRow)}</ul>
           )}
         </>
+      ) : creatorsActive ? (
+        creatorGate ? renderCreatorDetail(creatorGate) : renderCreatorGrid()
       ) : (
         <>
           {showSkeleton && <StatusSkeleton />}
