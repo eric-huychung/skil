@@ -4,7 +4,14 @@ import type { MarketStore } from './market-store.js';
 import type { LabelPoolRow, MarketClassifyRow, MarketField, SkillScore, TopicQuestion } from './market-types.js';
 import type { SkillClassifier } from './skill-classifier.js';
 import { buildShelves, dedupByName, type SkillLabel } from './shelf-assembler.js';
-import { MAX_TOPICS_PER_SKILL, TOPIC_QUESTIONS, TOPIC_THRESHOLD, topicsFor } from './topic-taxonomy.js';
+import { buildLabelState, stateHash } from './label-state.js';
+import {
+  MAX_TOPICS_PER_SKILL,
+  TAXONOMY_VERSION,
+  TOPIC_QUESTIONS,
+  TOPIC_THRESHOLD,
+  topicsFor,
+} from './topic-taxonomy.js';
 
 /** Classify pool size — not 10k, not “until every shelf has 30.” */
 export const CLASSIFY_POOL_SIZE = 1000;
@@ -40,6 +47,50 @@ export interface RefreshShelvesResult {
   failed: string[];
   /** Deduped pool ids with no stored hash, for the existing hydrate cap. */
   queued: string[];
+}
+
+/** Rows per `classify` call and per `saveLabels` upsert. */
+export const LABEL_BATCH_SIZE = 100;
+
+/** More errored rows than this share of `needed` fails the label run. */
+export const MAX_ERRORED_SHARE = 0.02;
+
+export interface LabelPoolOptions {
+  /** Classify and count as usual, but write no labels. */
+  dryRun?: boolean;
+  batchSize?: number;
+}
+
+/** Which pool rows need a label, against stored labels for the current taxonomy version. */
+export interface LabelDiff {
+  /** No stored label row. */
+  added: string[];
+  /** Stored `state_hash` differs from the row's current label state. */
+  changed: string[];
+  /** Stored row has `status = 'error'`. */
+  retried: string[];
+}
+
+/** Outcome of one incremental label run. */
+export interface LabelRunResult {
+  needed: number;
+  /** Rows scored `ok` (saved, unless `dryRun`). */
+  labeled: number;
+  /** Rows scored `error` (saved, so the next run retries them). */
+  errored: number;
+  skippedUnchanged: number;
+  batches: number;
+  diff: LabelDiff;
+}
+
+/** `labelPool` failed because more than 2% of rows came back errored. Batches already saved stay saved. */
+export class LabelPoolError extends Error {
+  readonly kind = 'bad_answers' as const;
+
+  constructor(readonly result: LabelRunResult) {
+    super(`MarketSync: ${result.errored} of ${result.needed} rows errored (over ${MAX_ERRORED_SHARE * 100}%)`);
+    this.name = 'LabelPoolError';
+  }
 }
 
 /**
@@ -216,6 +267,78 @@ export class MarketSync {
       failed: [],
       queued: unique.filter((row) => row.hash === null).map((row) => row.id),
     });
+  }
+
+  /**
+   * Incremental labeling (design §4.5). A pool row needs a label when it has
+   * no stored label for `TAXONOMY_VERSION`, its stored `state_hash` differs,
+   * or its stored status is `error`. Those rows are classified in batches and
+   * each batch is saved as it completes, so a failed batch returns `Err` with
+   * earlier batches kept, and the next run resumes past them for free.
+   * More than 2% errored rows returns `Err` with kind `bad_answers`.
+   */
+  async labelPool(classifier: SkillClassifier, opts: LabelPoolOptions = {}): Promise<Result<LabelRunResult>> {
+    const batchSize = opts.batchSize ?? LABEL_BATCH_SIZE;
+
+    const pool = await this.store.listLabelPool();
+    if (!isOk(pool)) {
+      return pool;
+    }
+    const keys = await this.store.listLabelKeys(TAXONOMY_VERSION);
+    if (!isOk(keys)) {
+      return keys;
+    }
+
+    const diff: LabelDiff = { added: [], changed: [], retried: [] };
+    const needed: LabelPoolRow[] = [];
+    for (const row of pool.value) {
+      const stored = keys.value.get(row.id);
+      const bucket =
+        stored === undefined
+          ? diff.added
+          : stored.stateHash !== stateHash(buildLabelState(row))
+            ? diff.changed
+            : stored.status === 'error'
+              ? diff.retried
+              : null;
+      if (bucket) {
+        bucket.push(row.id);
+        needed.push(row);
+      }
+    }
+
+    const result: LabelRunResult = {
+      needed: needed.length,
+      labeled: 0,
+      errored: 0,
+      skippedUnchanged: pool.value.length - needed.length,
+      batches: 0,
+      diff,
+    };
+
+    for (let start = 0; start < needed.length; start += batchSize) {
+      const scores = await classifier.classify(needed.slice(start, start + batchSize), TOPIC_QUESTIONS);
+      if (!isOk(scores)) {
+        return scores;
+      }
+      if (!opts.dryRun) {
+        const saved = await this.store.saveLabels(TAXONOMY_VERSION, scores.value);
+        if (!isOk(saved)) {
+          return saved;
+        }
+      }
+
+      result.batches += 1;
+      for (const score of scores.value) {
+        if (score.status === 'ok') result.labeled += 1;
+        else result.errored += 1;
+      }
+      if (result.errored / result.needed > MAX_ERRORED_SHARE) {
+        return err(new LabelPoolError(result));
+      }
+    }
+
+    return ok(result);
   }
 }
 
