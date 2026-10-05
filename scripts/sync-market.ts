@@ -193,7 +193,6 @@ async function run(state: RunState): Promise<SyncRunOutcome> {
   const sync = new MarketSync({
     store,
     client: new RealMarketSkillsClient({ fetchImpl: fetch, getOidcToken: () => getVercelOidcToken() }),
-    classifier,
   });
 
   if (backfillExcerpt) {

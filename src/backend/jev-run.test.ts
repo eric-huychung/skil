@@ -64,7 +64,7 @@ function frontendClassifier(ids: string[], extra: { failIds?: string[] } = {}) {
 }
 
 function setup(store: InMemoryMarketStore) {
-  const sync = new MarketSync({ store, client: unusedClient, classifier: new FakeSkillClassifier() });
+  const sync = new MarketSync({ store, client: unusedClient });
   const lines: string[] = [];
   return { sync, lines, log: (line: string) => lines.push(line) };
 }

@@ -35,17 +35,14 @@ function fakeClient(pages: MarketListingPage[]): MarketSkillsClient {
   };
 }
 
-const noopClassifier = new FakeSkillClassifier();
-
 function syncOf(
   store: InMemoryMarketStore,
   client: MarketSkillsClient,
-  extra: { now?: () => string; classifier?: FakeSkillClassifier } = {},
+  extra: { now?: () => string } = {},
 ) {
   return new MarketSync({
     store,
     client,
-    classifier: extra.classifier ?? noopClassifier,
     now: extra.now,
   });
 }

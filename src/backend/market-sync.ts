@@ -16,7 +16,6 @@ import {
 export interface MarketSyncDeps {
   store: MarketStore;
   client: MarketSkillsClient;
-  classifier: SkillClassifier;
   /** Injected clock so tests control `seenAt`. Defaults to `() => new Date().toISOString()`. */
   now?: () => string;
 }
