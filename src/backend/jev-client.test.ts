@@ -107,3 +107,109 @@ describe('GatewayJevClient contract (provisional fixture)', () => {
     });
   });
 });
+
+function expectJevError(result: Awaited<ReturnType<GatewayJevClient['evaluate']>>): JevError {
+  expect(isErr(result)).toBe(true);
+  if (!isErr(result)) throw new Error('expected Err');
+  expect(result.error).toBeInstanceOf(JevError);
+  return result.error as JevError;
+}
+
+const status = (code: number, body = '{"error":"nope"}') => () => jsonResponse(body, code);
+const timeoutError = () => new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+
+describe('GatewayJevClient retries', () => {
+  it.each([429, 529, 500, 502, 503])('retries %i then succeeds', async (code) => {
+    const { client, calls, sleeps } = makeClient([status(code), status(code), okFixture]);
+
+    const result = await client.evaluate('s', QUESTIONS);
+
+    expect(isOk(result)).toBe(true);
+    expect(calls).toHaveLength(3);
+    expect(sleeps).toHaveLength(2);
+  });
+
+  it('retries network errors and timeouts', async () => {
+    const { client, calls } = makeClient([new TypeError('fetch failed'), timeoutError(), okFixture]);
+
+    const result = await client.evaluate('s', QUESTIONS);
+
+    expect(isOk(result)).toBe(true);
+    expect(calls).toHaveLength(3);
+  });
+
+  it('gives up after 5 tries with an unavailable error carrying the last status', async () => {
+    const { client, calls, sleeps } = makeClient([status(529, '{"error":"overloaded"}')]);
+
+    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+
+    expect(calls).toHaveLength(5);
+    expect(sleeps).toHaveLength(4);
+    expect(error.kind).toBe('unavailable');
+    expect(error.status).toBe(529);
+    expect(error.message).toContain('529');
+    expect(error.message).toContain('overloaded');
+  });
+
+  it('gives up after 5 timeouts with an unavailable error', async () => {
+    const { client, calls } = makeClient([timeoutError()]);
+
+    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+
+    expect(calls).toHaveLength(5);
+    expect(error.kind).toBe('unavailable');
+    expect(error.status).toBeUndefined();
+  });
+
+  it('backs off exponentially with full jitter: random() * min(20s, 500ms * 2^n)', async () => {
+    const { client, sleeps } = makeClient([status(429)]);
+
+    await client.evaluate('s', QUESTIONS);
+
+    // random() is 0.5 in makeClient
+    expect(sleeps).toEqual([250, 500, 1000, 2000]);
+  });
+
+  it('caps the backoff at 20s', async () => {
+    const { fetchImpl } = scriptedFetch([status(429)]);
+    const sleeps: number[] = [];
+    const client = new GatewayJevClient({
+      fetchImpl,
+      apiKey: API_KEY,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+      random: () => 0.999999,
+    });
+
+    await client.evaluate('s', QUESTIONS);
+
+    expect(Math.max(...sleeps)).toBeLessThanOrEqual(20_000);
+  });
+
+  it.each([
+    [401, 'auth'],
+    [403, 'auth'],
+    [422, 'request'],
+    [400, 'request'],
+  ] as const)('does not retry %i (%s)', async (code, kind) => {
+    const { client, calls, sleeps } = makeClient([status(code, '{"error":"invalid"}')]);
+
+    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+
+    expect(calls).toHaveLength(1);
+    expect(sleeps).toHaveLength(0);
+    expect(error.kind).toBe(kind);
+    expect(error.status).toBe(code);
+    expect(error.message).toContain(String(code));
+    expect(error.message).toContain('invalid');
+  });
+
+  it('truncates long error bodies to a short excerpt', async () => {
+    const { client } = makeClient([status(422, 'x'.repeat(5000))]);
+
+    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+
+    expect(error.message.length).toBeLessThan(400);
+  });
+});
