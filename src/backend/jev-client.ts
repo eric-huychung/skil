@@ -108,9 +108,15 @@ function parseResponse(body: unknown, questions: Record<string, JevQuestion>): R
   });
 }
 
-async function bodyExcerpt(response: Response): Promise<string> {
+/** Error text is logged and posted to Slack, so the key must never survive into it. */
+function redact(text: string, apiKey: string): string {
+  return apiKey ? text.split(apiKey).join('[redacted]') : text;
+}
+
+/** Redacts before truncating, so a key cut at the excerpt boundary can't leak a prefix. */
+async function bodyExcerpt(response: Response, apiKey: string): Promise<string> {
   try {
-    const text = (await response.text()).replace(/\s+/g, ' ').trim();
+    const text = redact(await response.text(), apiKey).replace(/\s+/g, ' ').trim();
     return text.length > BODY_EXCERPT_CHARS ? `${text.slice(0, BODY_EXCERPT_CHARS)}…` : text;
   } catch {
     return '(unreadable body)';
@@ -161,12 +167,15 @@ export class GatewayJevClient implements JevClient {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch (error) {
-      const reason = (error as Error).name === 'TimeoutError' ? `timed out after ${TIMEOUT_MS} ms` : (error as Error).message;
+      const reason =
+        (error as Error).name === 'TimeoutError'
+          ? `timed out after ${TIMEOUT_MS} ms`
+          : redact(String((error as Error).message), this.deps.apiKey);
       return fail(new JevError('unavailable', `Jev request failed: ${reason}`), true);
     }
 
     if (!response.ok) {
-      const excerpt = await bodyExcerpt(response);
+      const excerpt = await bodyExcerpt(response, this.deps.apiKey);
       const message = `Jev returned ${response.status}: ${excerpt}`;
       const code = response.status;
       if (code === 401 || code === 403) return fail(new JevError('auth', message, code), false);

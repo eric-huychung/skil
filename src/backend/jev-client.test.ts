@@ -262,3 +262,35 @@ describe('GatewayJevClient answer validation', () => {
     expect(isOk(await client.evaluate('s', QUESTIONS))).toBe(true);
   });
 });
+
+describe('GatewayJevClient never leaks the API key', () => {
+  const echo = `{"error":"invalid key ${API_KEY}","header":"Bearer ${API_KEY}"}`;
+
+  it.each<[string, Array<(() => Response) | Error>]>([
+    ['401 echoing the key', [status(401, echo)]],
+    ['422 echoing the key', [status(422, echo)]],
+    ['exhausted 529 echoing the key', [status(529, echo)]],
+    ['a network error mentioning the key', [new TypeError(`connect failed for Bearer ${API_KEY}`)]],
+    ['a timeout', [timeoutError()]],
+    ['a non-JSON 200', [() => new Response(`oops ${API_KEY}`, { status: 200 })]],
+    ['a bad answer', [() => jsonResponse({ answers: {} })]],
+  ])('on %s', async (_label, steps) => {
+    const { client } = makeClient(steps);
+
+    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+
+    expect(error.message).not.toContain(API_KEY);
+    expect(String(error)).not.toContain(API_KEY);
+    expect(error.stack ?? '').not.toContain(API_KEY);
+    expect(JSON.stringify(error)).not.toContain(API_KEY);
+  });
+
+  it('keeps the rest of the excerpt readable', async () => {
+    const { client } = makeClient([status(401, echo)]);
+
+    const error = expectJevError(await client.evaluate('s', QUESTIONS));
+
+    expect(error.message).toContain('invalid key');
+    expect(error.message).toContain('[redacted]');
+  });
+});
