@@ -95,9 +95,11 @@ export class MarketSync {
   }
 
   /**
-   * Drains the detail-hydrate queue: fetches each id's description + hash
-   * and saves it, unless the fetched hash matches what is already stored
-   * (no-op — the skill body has not changed). A fetch error for one id is
+   * Drains the detail-hydrate queue: fetches each id's description, hash,
+   * and label excerpt and saves them, unless the fetched hash matches what
+   * is already stored and an excerpt is stored too (no-op — the skill body
+   * has not changed). A hash-equal row with no excerpt is re-hydrated, so
+   * the excerpt backfill is this same code path. A fetch error for one id is
    * skipped so the rest of the queue still drains; re-running picks up
    * skipped ids again since their hash stays whatever it was before.
    *
@@ -133,12 +135,18 @@ export class MarketSync {
       return ok({ id, status: 'skipped' });
     }
 
-    const currentHash = await this.store.getHash(id);
-    if (isOk(currentHash) && currentHash.value === detail.value.hash) {
+    const state = await this.store.getDetailState(id);
+    if (isOk(state) && state.value.hash === detail.value.hash && state.value.hasExcerpt) {
       return ok({ id, status: 'unchanged' });
     }
 
-    const saved = await this.store.setDetail(id, detail.value);
+    // `label_excerpt` is capped at 1,000 chars whatever the client returns.
+    const labelExcerpt = detail.value.labelExcerpt?.slice(0, 1_000) ?? null;
+    const saved = await this.store.setDetail(id, {
+      description: detail.value.description,
+      hash: detail.value.hash,
+      labelExcerpt,
+    });
     if (!isOk(saved)) {
       return saved;
     }

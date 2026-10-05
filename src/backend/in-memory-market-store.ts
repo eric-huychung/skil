@@ -24,6 +24,7 @@ import type {
 interface SkillRow extends MarketListingInput {
   description: string | null;
   hash: string | null;
+  labelExcerpt: string | null;
   isDuplicate: boolean;
   lastSeenAt: string;
   inactive: boolean;
@@ -74,6 +75,7 @@ export class InMemoryMarketStore implements MarketStore {
       ...listing,
       description: existing?.description ?? null,
       hash: existing?.hash ?? null,
+      labelExcerpt: existing?.labelExcerpt ?? null,
       isDuplicate: existing?.isDuplicate ?? false,
       lastSeenAt: seenAt,
       inactive: false,
@@ -90,7 +92,12 @@ export class InMemoryMarketStore implements MarketStore {
     if (!existing) {
       return ok(undefined);
     }
-    this.skills.set(id, { ...existing, description: detail.description, hash: detail.hash });
+    this.skills.set(id, {
+      ...existing,
+      description: detail.description,
+      hash: detail.hash,
+      labelExcerpt: detail.labelExcerpt === undefined ? existing.labelExcerpt : detail.labelExcerpt,
+    });
     return ok(undefined);
   }
 
@@ -260,12 +267,19 @@ export class InMemoryMarketStore implements MarketStore {
 
   // --- T15b detail ---
 
-  async getDetailState(_id: string): Promise<Result<{ hash: string | null; hasExcerpt: boolean }>> {
-    return err(new Error('not implemented: getDetailState (T15b)'));
+  async getDetailState(id: string): Promise<Result<{ hash: string | null; hasExcerpt: boolean }>> {
+    const row = this.skills.get(id);
+    return ok({ hash: row?.hash ?? null, hasExcerpt: row?.labelExcerpt != null });
   }
 
+  /** Sorted by id so the backfill walks a stable order. */
   async listIdsMissingExcerpt(): Promise<Result<string[]>> {
-    return err(new Error('not implemented: listIdsMissingExcerpt (T15b)'));
+    return ok(
+      [...this.skills.values()]
+        .filter((row) => !row.inactive && row.labelExcerpt === null)
+        .map((row) => row.id)
+        .sort((a, b) => a.localeCompare(b)),
+    );
   }
 
   // --- T17b labels ---
@@ -289,7 +303,6 @@ export class InMemoryMarketStore implements MarketStore {
     return [...(this.labels.get(version)?.values() ?? [])].sort((a, b) => a.id.localeCompare(b.id));
   }
 
-  /** `labelExcerpt` is always null: this store doesn't keep excerpts. */
   async listLabelPool(): Promise<Result<LabelPoolRow[]>> {
     const active = [...this.skills.values()]
       .filter((row) => !row.inactive)
@@ -302,7 +315,7 @@ export class InMemoryMarketStore implements MarketStore {
         source: row.source,
         installs: row.installs,
         description: row.description,
-        labelExcerpt: null,
+        labelExcerpt: row.labelExcerpt,
         owner: row.source.split('/')[0] ?? '',
       })),
     );

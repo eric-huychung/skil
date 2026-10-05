@@ -480,3 +480,58 @@ describe('InMemoryMarketStore labels', () => {
     expect(isOk(keys) && keys.value.size).toBe(0);
   });
 });
+
+describe('InMemoryMarketStore detail (T15b)', () => {
+  it('getDetailState reports null hash and no excerpt for an unknown or unhydrated id', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertListing(listing('a/new'), '2026-01-01T00:00:00.000Z');
+
+    expect(await store.getDetailState('a/new')).toEqual({ ok: true, value: { hash: null, hasExcerpt: false } });
+    expect(await store.getDetailState('a/missing')).toEqual({ ok: true, value: { hash: null, hasExcerpt: false } });
+  });
+
+  it('setDetail stores the excerpt; omitting it leaves the stored excerpt unchanged', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertListing(listing('a/skill'), '2026-01-01T00:00:00.000Z');
+
+    await store.setDetail('a/skill', { description: 'd', hash: 'hash-1', labelExcerpt: 'Body text.' });
+    expect(await store.getDetailState('a/skill')).toEqual({ ok: true, value: { hash: 'hash-1', hasExcerpt: true } });
+
+    await store.setDetail('a/skill', { description: 'd', hash: 'hash-2' });
+    expect(await store.getDetailState('a/skill')).toEqual({ ok: true, value: { hash: 'hash-2', hasExcerpt: true } });
+
+    await store.setDetail('a/skill', { description: 'd', hash: 'hash-3', labelExcerpt: null });
+    expect(await store.getDetailState('a/skill')).toEqual({ ok: true, value: { hash: 'hash-3', hasExcerpt: false } });
+  });
+
+  it('upsertListing keeps the stored excerpt', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertListing(listing('a/skill'), '2026-01-01T00:00:00.000Z');
+    await store.setDetail('a/skill', { description: 'd', hash: 'hash-1', labelExcerpt: 'Body.' });
+
+    await store.upsertListing(listing('a/skill', { installs: 5 }), '2026-01-02T00:00:00.000Z');
+
+    expect(await store.getDetailState('a/skill')).toEqual({ ok: true, value: { hash: 'hash-1', hasExcerpt: true } });
+  });
+
+  it('listIdsMissingExcerpt returns active rows with no excerpt, sorted by id', async () => {
+    const store = new InMemoryMarketStore();
+    for (const id of ['a/c', 'a/has', 'a/b', 'a/gone']) {
+      await store.upsertListing(listing(id), id === 'a/gone' ? '2026-01-01T00:00:00.000Z' : '2026-01-02T00:00:00.000Z');
+    }
+    await store.setDetail('a/has', { description: null, hash: 'h', labelExcerpt: 'Body.' });
+    await store.markInactiveBefore('2026-01-02T00:00:00.000Z');
+
+    expect(await store.listIdsMissingExcerpt()).toEqual({ ok: true, value: ['a/b', 'a/c'] });
+  });
+
+  it('listLabelPool returns the stored excerpt', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertListing(listing('a/skill'), '2026-01-01T00:00:00.000Z');
+    await store.setDetail('a/skill', { description: 'd', hash: 'h', labelExcerpt: 'Body.' });
+
+    const pool = await store.listLabelPool();
+
+    expect(isOk(pool) && pool.value[0]?.labelExcerpt).toBe('Body.');
+  });
+});
