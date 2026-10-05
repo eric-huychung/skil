@@ -1,10 +1,9 @@
 ---
 name: /deploy
-skills:
-  - productivity/git-guardrail
-  - productivity/git-workflow
+skills: []
+disable-model-invocation: true
 generated_by: skil
-generated_at: 2026-08-26T05:49:28.901Z
+generated_at: 2026-09-24T22:17:07.520Z
 ---
 
 ## Goal
@@ -22,6 +21,4 @@ Cut a shippable release. Keep main deployable.
 - Don't mix formatting with the release.
 
 ## Skills
-When they apply, read and follow:
-- `productivity/git-guardrail`
-- `productivity/git-workflow`
+When they apply, read and follow. None filed yet.

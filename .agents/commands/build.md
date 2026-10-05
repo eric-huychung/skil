@@ -9,19 +9,24 @@ skills:
   - build/ui/slides
   - build/ui/ui-styling
   - build/ui/ui-ux-pro-max
-  - supabase-postgres-best-practices
 generated_by: skil
-generated_at: 2026-08-27T22:05:34.476Z
+generated_at: 2026-08-26T18:56:06.098Z
 ---
 
 ## Goal
-<!-- Describe what this command is for. -->
+Ship one working slice at a time. Each slice leaves the system buildable.
 
 ## Sequence
-<!-- Ordered must-follow steps. Skills below are extras, not extra phases. -->
+1. Pick one vertical slice. Simplest thing that could work.
+2. Implement only what that slice needs.
+3. Test and verify. Stay compilable.
+4. Commit that slice. Then the next one.
 
 ## Rules
-<!-- Constraints the agent must not break. -->
+- One thing per slice. Don't mix refactors with features.
+- Don't write 100+ lines without testing.
+- Don't "just add this too." Note it, don't touch it.
+- UI skills apply only when building UI.
 
 ## Skills
 When they apply, read and follow:
@@ -33,4 +38,3 @@ When they apply, read and follow:
 - `build/ui/slides`
 - `build/ui/ui-styling`
 - `build/ui/ui-ux-pro-max`
-- `supabase-postgres-best-practices`

@@ -1,11 +1,9 @@
 ---
 name: /research
-skills:
-  - planning/idea-refine
-  - analysis/to-prd
-  - productivity/diagram-maker
+skills: []
+disable-model-invocation: true
 generated_by: skil
-generated_at: 2026-08-26T05:49:28.895Z
+generated_at: 2026-09-24T22:17:07.521Z
 ---
 
 ## Goal
@@ -25,7 +23,4 @@ Turn a raw idea into a sharp concept. Write a PRD when the direction is clear.
 - Don't write code. This is research, not build.
 
 ## Skills
-When they apply, read and follow:
-- `planning/idea-refine`
-- `analysis/to-prd`
-- `productivity/diagram-maker`
+When they apply, read and follow. None filed yet.

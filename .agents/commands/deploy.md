@@ -4,17 +4,22 @@ skills:
   - productivity/git-guardrail
   - productivity/git-workflow
 generated_by: skil
-generated_at: 2026-08-27T22:05:34.544Z
+generated_at: 2026-08-26T18:56:06.163Z
 ---
 
 ## Goal
-<!-- Describe what this command is for. -->
+Cut a shippable release. Keep main deployable.
 
 ## Sequence
-<!-- Ordered must-follow steps. Skills below are extras, not extra phases. -->
+1. Confirm tests and build are green. No secrets in the diff.
+2. Version: breaking → major, additive → minor, fix → patch.
+3. Write a human changelog (Added / Fixed / …). Tag the release.
+4. Stop. Don't push unless they say so.
 
 ## Rules
-<!-- Constraints the agent must not break. -->
+- Never force-push, reset --hard, or git clean.
+- Changelog is for consumers, not a git log dump.
+- Don't mix formatting with the release.
 
 ## Skills
 When they apply, read and follow:

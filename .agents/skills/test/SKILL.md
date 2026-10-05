@@ -1,14 +1,9 @@
 ---
 name: /test
-skills:
-  - testing/debug
-  - productivity/git-workflow
-  - productivity/git-guardrail
-  - philosophy/tdd
-  - testing/refactor
-  - improve-codebase-architecture
+skills: []
+disable-model-invocation: true
 generated_by: skil
-generated_at: 2026-08-26T05:49:28.890Z
+generated_at: 2026-09-24T22:17:07.522Z
 ---
 
 ## Goal
@@ -27,10 +22,4 @@ Prove behavior through public seams. Fix what's broken. Deepen only what they pi
 - Don't run destructive git (force-push, reset --hard, clean -f).
 
 ## Skills
-When they apply, read and follow:
-- `testing/debug`
-- `productivity/git-workflow`
-- `productivity/git-guardrail`
-- `philosophy/tdd`
-- `testing/refactor`
-- `improve-codebase-architecture`
+When they apply, read and follow. None filed yet.

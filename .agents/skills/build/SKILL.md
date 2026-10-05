@@ -1,16 +1,9 @@
 ---
 name: /build
-skills:
-  - build/increment
-  - build/ui/banner-design
-  - build/ui/brand
-  - build/ui/design-system
-  - build/ui/migrate-radix-to-base
-  - build/ui/slides
-  - build/ui/ui-styling
-  - build/ui/ui-ux-pro-max
+skills: []
+disable-model-invocation: true
 generated_by: skil
-generated_at: 2026-08-26T05:49:28.897Z
+generated_at: 2026-09-24T22:17:07.517Z
 ---
 
 ## Goal
@@ -29,12 +22,4 @@ Ship one working slice at a time. Each slice leaves the system buildable.
 - UI skills apply only when building UI.
 
 ## Skills
-When they apply, read and follow:
-- `build/increment`
-- `build/ui/banner-design`
-- `build/ui/brand`
-- `build/ui/design-system`
-- `build/ui/migrate-radix-to-base`
-- `build/ui/slides`
-- `build/ui/ui-styling`
-- `build/ui/ui-ux-pro-max`
+When they apply, read and follow. None filed yet.

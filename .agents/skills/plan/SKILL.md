@@ -1,15 +1,10 @@
 ---
-
-## name: /plan
-
-skills:
-
-- productivity/diagram-maker
-- philosophy/tdd
-- design/codebase-design
-- design/to-tasks
+name: /plan
+skills: []
+disable-model-invocation: true
 generated_by: skil
-generated_at: 2026-08-26T05:49:28.896Z
+generated_at: 2026-09-24T22:17:07.521Z
+---
 
 ## Goal
 
@@ -30,14 +25,5 @@ Turn the spec into architecture and a small task list. Don't write product code.
 - Don't skip seam agreement.
 - Tasks stay small. Break anything that needs 5+ files or says "and."
 
-
-
 ## Skills
-
-When they apply, read and follow:
-
-- `productivity/diagram-maker`
-- `philosophy/tdd`
-- `design/codebase-design`
-- `design/to-tasks`
-
+When they apply, read and follow. None filed yet.
