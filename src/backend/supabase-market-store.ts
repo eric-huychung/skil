@@ -382,20 +382,119 @@ export class SupabaseMarketStore implements MarketStore {
 
   // --- T17b labels ---
 
+  private readonly labelPageSize = 1_000;
+
+  /**
+   * Reads every row past PostgREST's 1,000-row cap: `.range()` pages until
+   * a short page. `fetchRange` must apply a stable `.order()` so pages
+   * don't overlap or skip.
+   */
+  private async pageLabelRows<T>(
+    fetchRange: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  ): Promise<Result<T[]>> {
+    const rows: T[] = [];
+    for (let from = 0; ; from += this.labelPageSize) {
+      const { data, error } = await fetchRange(from, from + this.labelPageSize - 1);
+      if (error) return err(toError(error.message));
+      const page = data ?? [];
+      rows.push(...page);
+      if (page.length < this.labelPageSize) return ok(rows);
+    }
+  }
+
   async listLabelPool(): Promise<Result<LabelPoolRow[]>> {
-    return err(new Error('not implemented: listLabelPool (T17b)'));
+    const res = await this.pageLabelRows<{
+      id: string;
+      name: string;
+      source: string;
+      installs: number;
+      description: string | null;
+      label_excerpt: string | null;
+      owner: string;
+    }>((from, to) =>
+      this.client
+        .from('market_skills')
+        .select('id, name, source, installs, description, label_excerpt, owner')
+        .eq('inactive', false)
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    if (!res.ok) return res;
+
+    return ok(
+      res.value.map((row) => ({
+        id: row.id,
+        name: row.name,
+        source: row.source,
+        installs: row.installs,
+        description: row.description,
+        labelExcerpt: row.label_excerpt,
+        owner: row.owner,
+      })),
+    );
   }
 
-  async listLabelKeys(_version: string): Promise<Result<Map<string, Pick<SkillScore, 'stateHash' | 'status'>>>> {
-    return err(new Error('not implemented: listLabelKeys (T17b)'));
+  async listLabelKeys(version: string): Promise<Result<Map<string, Pick<SkillScore, 'stateHash' | 'status'>>>> {
+    const res = await this.pageLabelRows<{ skill_id: string; state_hash: string; status: SkillScore['status'] }>((from, to) =>
+      this.client
+        .from('market_skill_labels')
+        .select('skill_id, state_hash, status')
+        .eq('taxonomy_version', version)
+        .order('skill_id', { ascending: true })
+        .range(from, to),
+    );
+    if (!res.ok) return res;
+
+    return ok(new Map(res.value.map((row) => [row.skill_id, { stateHash: row.state_hash, status: row.status }])));
   }
 
-  async saveLabels(_version: string, _scores: SkillScore[]): Promise<Result<void>> {
-    return err(new Error('not implemented: saveLabels (T17b)'));
+  /** One upsert on (skill_id, taxonomy_version). `labeled_at` is set explicitly so re-labels refresh it. */
+  async saveLabels(version: string, scores: SkillScore[]): Promise<Result<void>> {
+    if (scores.length === 0) return ok(undefined);
+
+    const labeledAt = new Date().toISOString();
+    const { error } = await this.client.from('market_skill_labels').upsert(
+      scores.map((score) => ({
+        skill_id: score.id,
+        taxonomy_version: version,
+        state_hash: score.stateHash,
+        model_version: score.modelVersion,
+        probabilities: score.probabilities,
+        status: score.status,
+        labeled_at: labeledAt,
+      })),
+      { onConflict: 'skill_id,taxonomy_version' },
+    );
+    if (error) return err(toError(error.message));
+    return ok(undefined);
   }
 
-  async listLabels(_version: string): Promise<Result<SkillScore[]>> {
-    return err(new Error('not implemented: listLabels (T17b)'));
+  async listLabels(version: string): Promise<Result<SkillScore[]>> {
+    const res = await this.pageLabelRows<{
+      skill_id: string;
+      state_hash: string;
+      model_version: string;
+      probabilities: Record<string, number>;
+      status: SkillScore['status'];
+    }>((from, to) =>
+      this.client
+        .from('market_skill_labels')
+        .select('skill_id, state_hash, model_version, probabilities, status')
+        .eq('taxonomy_version', version)
+        .order('skill_id', { ascending: true })
+        .range(from, to),
+    );
+    if (!res.ok) return res;
+
+    return ok(
+      res.value.map((row) => ({
+        id: row.skill_id,
+        status: row.status,
+        probabilities: row.probabilities,
+        stateHash: row.state_hash,
+        modelVersion: row.model_version,
+      })),
+    );
   }
 
   // --- T12a creatorChecks ---
