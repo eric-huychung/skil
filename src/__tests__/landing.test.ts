@@ -24,6 +24,7 @@ function readLandingSources(): string {
     'app/about/page.tsx',
     'app/blog/page.tsx',
     'app/faq/page.tsx',
+    'app/legal/page.tsx',
   ];
   return [
     ...routePages.map((path) => readWeb(path)),
@@ -100,6 +101,8 @@ describe('landing page', () => {
     expect(links).toContain("href: '/blog'");
     expect(links).toContain("href: '/faq'");
     expect(links).toContain("label: 'FAQs'");
+    expect(links).toContain("href: '/legal'");
+    expect(links).toContain("label: 'Legal'");
     expect(links).toContain('issues/new?template=bug.yml');
     expect(links).toContain('issues/new?template=feature.yml');
     expect(links).toContain('linkedin.com/in/huychung');
@@ -115,15 +118,17 @@ describe('landing page', () => {
     expect(footerHover.slice(0, 280)).not.toContain('var(--brand)');
   });
 
-  it('ships about, blog, and faq as real pages instead of empty stubs', () => {
+  it('ships about, blog, faq, and legal as real pages instead of empty stubs', () => {
     const about = readWeb('app/about/page.tsx');
     const blog = readWeb('app/blog/page.tsx');
     const faq = readWeb('app/faq/page.tsx');
-    const pages = `${about}\n${blog}\n${faq}`;
+    const legal = readWeb('app/legal/page.tsx');
+    const pages = `${about}\n${blog}\n${faq}\n${legal}`;
 
     expect(existsSync(join(webDir, 'app/about/page.tsx'))).toBe(true);
     expect(existsSync(join(webDir, 'app/blog/page.tsx'))).toBe(true);
     expect(existsSync(join(webDir, 'app/faq/page.tsx'))).toBe(true);
+    expect(existsSync(join(webDir, 'app/legal/page.tsx'))).toBe(true);
     expect(about).toContain('About Skil');
     expect(about).toContain('.skil/state.json');
     expect(blog).toContain('Coming soon');
@@ -131,6 +136,15 @@ describe('landing page', () => {
     expect(faq).toContain('What is Skil?');
     expect(faq).toContain('I turned a skill off');
     expect(faq).toContain('template=bug.yml');
+    expect(faq).not.toContain('Nothing phones home');
+    expect(faq).toContain('Vercel Analytics');
+    expect(faq).toContain('Discover');
+    expect(legal).toContain('MIT');
+    expect(legal).toContain('unsigned');
+    expect(legal).toContain('skills.sh');
+    expect(legal).toContain('No login');
+    expect(legal).toContain('Vercel Analytics');
+    expect(legal).toContain('Discover');
     expect(pages.toLowerCase()).not.toContain('lorem ipsum');
     expect(pages.toLowerCase()).not.toContain('todo');
     expect(pages.toLowerCase()).not.toContain('placeholder text');

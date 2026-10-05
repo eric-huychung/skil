@@ -33,6 +33,7 @@ export const FOOTER_RESOURCES: FooterLinkItem[] = [
   },
   { href: '/blog', label: 'Blog' },
   { href: '/faq', label: 'FAQs' },
+  { href: '/legal', label: 'Legal' },
 ]
 
 export const FOOTER_SOCIAL: FooterSocialItem[] = [
