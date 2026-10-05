@@ -31,13 +31,14 @@ describe('handleShelvesRequest', () => {
     });
     await store.upsertListing(listing('a/one', { name: 'One', installs: 5 }), '2026-01-01T00:00:00.000Z');
     await store.setDetail('a/one', { description: 'Should never appear on a shelf row', hash: 'hash-1' });
-    await store.setFieldShelf('frontend', ['a/one']);
+    await store.replaceShelves([{ fieldSlug: 'frontend', entries: [{ id: 'a/one', moreCount: 0 }] }], 'v1');
 
     const response = await handleShelvesRequest(new Request('http://localhost/api/market/shelves'), { store });
     const body = (await response.json()) as { data: unknown };
 
     expect(response.status).toBe(200);
     expect(body).toEqual({
+      meta: { generatedAt: expect.any(String) },
       data: [
         {
           slug: 'swe',
@@ -61,7 +62,50 @@ describe('handleShelvesRequest', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual({ data: [] });
+    expect(body).toEqual({ data: [], meta: { generatedAt: null } });
+  });
+
+  it('adds meta.generatedAt from the last shelf build', async () => {
+    const store = new InMemoryMarketStore();
+    store.getShelfMeta = async () => ok({ generatedAt: '2026-10-01T06:00:00.000Z', taxonomyVersion: 'v1' });
+
+    const response = await handleShelvesRequest(new Request('http://localhost/api/market/shelves'), { store });
+    const body = (await response.json()) as { meta: unknown };
+
+    expect(body.meta).toEqual({ generatedAt: '2026-10-01T06:00:00.000Z' });
+  });
+
+  it('passes moreCount through on a collapsed lead row', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertRole({ slug: 'swe', label: 'SWE', sortOrder: 1, active: true });
+    await store.upsertField({
+      slug: 'frontend',
+      roleSlug: 'swe',
+      label: 'Frontend',
+      q: 'frontend ui',
+      sortOrder: 1,
+      shelfSize: 30,
+      active: true,
+    });
+    await store.upsertListing(listing('a/lead', { name: 'Lead', installs: 9 }), '2026-01-01T00:00:00.000Z');
+    await store.replaceShelves([{ fieldSlug: 'frontend', entries: [{ id: 'a/lead', moreCount: 3 }] }], 'v1');
+
+    const response = await handleShelvesRequest(new Request('http://localhost/api/market/shelves'), { store });
+    const body = (await response.json()) as { data: Array<{ fields: Array<{ skills: unknown[] }> }> };
+
+    expect(body.data[0]?.fields[0]?.skills).toEqual([{ id: 'a/lead', name: 'Lead', installs: 9, rank: 1, moreCount: 3 }]);
+  });
+
+  it('returns a 500 without the store error text when the shelf meta read fails', async () => {
+    const store = new InMemoryMarketStore();
+    store.getShelfMeta = async () => ({ ok: false, error: new Error('connection lost at db.internal:5432') });
+
+    const response = await handleShelvesRequest(new Request('http://localhost/api/market/shelves'), { store });
+    const body = (await response.json()) as { error: string; message: string };
+
+    expect(response.status).toBe(500);
+    expect(body.error).toBe('store_error');
+    expect(body.message).not.toContain('db.internal');
   });
 
   it('sets a CDN Cache-Control header on success', async () => {

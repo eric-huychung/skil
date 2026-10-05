@@ -182,7 +182,7 @@ describe('MarketSync.syncListing', () => {
       shelfSize: 30,
       active: true,
     });
-    await store.setFieldShelf('frontend', ids);
+    await store.replaceShelves([{ fieldSlug: 'frontend', entries: ids.map((id) => ({ id, moreCount: 0 })) }], 'v1');
     const shelves = await store.listShelves();
     return isOk(shelves) ? shelves.value[0]?.fields[0]?.skills.map((s) => s.id) : [];
   }
@@ -276,6 +276,50 @@ describe('MarketSync.refreshActiveFields', () => {
     expect(client.listPage).not.toHaveBeenCalled();
   });
 
+  it('writes every shelf in one replaceShelves call and stamps the shelf meta', async () => {
+    const store = new InMemoryMarketStore();
+    await seedGold(store);
+    const replaceShelves = vi.spyOn(store, 'replaceShelves');
+    const classifier = new FakeSkillClassifier(new Map(GOLD_LABELS.map((label) => [label.id, label.fieldSlugs])));
+
+    const result = await syncOf(store, fakeClient([]), { classifier }).refreshActiveFields();
+
+    expect(isOk(result)).toBe(true);
+    expect(replaceShelves).toHaveBeenCalledTimes(1);
+    const [shelves] = replaceShelves.mock.calls[0]!;
+    expect(shelves.map((shelf) => shelf.fieldSlug)).toEqual(isOk(result) ? result.value.refreshed : []);
+    expect(shelves.flatMap((shelf) => shelf.entries).every((entry) => entry.moreCount === 0)).toBe(true);
+    const meta = await store.getShelfMeta();
+    expect(isOk(meta) && meta.value?.generatedAt).toEqual(expect.any(String));
+  });
+
+  it('returns the store error and keeps the old shelves when replaceShelves fails', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertRole({ slug: 'swe', label: 'SWE', sortOrder: 1, active: true });
+    await store.upsertField({
+      slug: 'frontend',
+      roleSlug: 'swe',
+      label: 'Frontend',
+      q: 'frontend',
+      sortOrder: 1,
+      shelfSize: 30,
+      active: true,
+    });
+    await store.upsertListing(listingItem('a/keep', 10), '2026-01-01T00:00:00.000Z');
+    await store.upsertListing(listingItem('a/new', 20), '2026-01-01T00:00:00.000Z');
+    await store.replaceShelves([{ fieldSlug: 'frontend', entries: [{ id: 'a/keep', moreCount: 0 }] }], 'v1');
+    vi.spyOn(store, 'replaceShelves').mockResolvedValue(err(new Error('rpc failed')));
+    const sync = syncOf(store, fakeClient([]), {
+      classifier: new FakeSkillClassifier(new Map([['a/new', ['frontend']]])),
+    });
+
+    const result = await sync.refreshActiveFields();
+
+    expect(!isOk(result) && result.error.message).toBe('rpc failed');
+    const shelves = await store.listShelves();
+    expect(isOk(shelves) && shelves.value[0]?.fields[0]?.skills.map((s) => s.id)).toEqual(['a/keep']);
+  });
+
   it('skips an inactive field and still writes the active ones', async () => {
     const store = new InMemoryMarketStore();
     await store.upsertField({
@@ -340,7 +384,7 @@ describe('MarketSync.refreshActiveFields', () => {
       active: true,
     });
     await store.upsertListing(listingItem('a/keep', 10), '2026-01-01T00:00:00.000Z');
-    await store.setFieldShelf('frontend', ['a/keep']);
+    await store.replaceShelves([{ fieldSlug: 'frontend', entries: [{ id: 'a/keep', moreCount: 0 }] }], 'v1');
     const classifier = { classify: async () => err(new Error('gateway down')) };
     const sync = new MarketSync({ store, client: fakeClient([]), classifier });
 

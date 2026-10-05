@@ -83,9 +83,6 @@ export interface MarketStore {
    */
   markInactiveBefore(seenAt: string): Promise<Result<void>>;
 
-  /** Replaces one field's shelf with `rankedSkillIds` in order (rank 1..N). */
-  setFieldShelf(fieldSlug: string, rankedSkillIds: string[]): Promise<Result<void>>;
-
   /** Roles → fields → skills by rank, `skills.length` \<= that field's `shelfSize`. Inactive roles/fields omitted. */
   listShelves(): Promise<Result<ShelfRole[]>>;
 

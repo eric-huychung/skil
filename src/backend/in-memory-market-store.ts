@@ -15,7 +15,9 @@ import type {
   OwnerStats,
   ShelfField,
   ShelfMeta,
+  ShelfEntry,
   ShelfRole,
+  ShelfSkill,
   SkillScore,
 } from './market-types.js';
 
@@ -32,8 +34,9 @@ export class InMemoryMarketStore implements MarketStore {
   private roles = new Map<string, MarketRole>();
   private fields = new Map<string, MarketField>();
   private skills = new Map<string, SkillRow>();
-  /** field slug -> ranked skill ids, index 0 = rank 1 */
-  private shelves = new Map<string, string[]>();
+  /** field slug -> ranked entries, index 0 = rank 1 */
+  private shelves = new Map<string, ShelfEntry[]>();
+  private shelfMeta: ShelfMeta | null = null;
 
   async upsertRole(role: MarketRole): Promise<Result<void>> {
     this.roles.set(role.slug, { ...role });
@@ -98,11 +101,6 @@ export class InMemoryMarketStore implements MarketStore {
     return ok(undefined);
   }
 
-  async setFieldShelf(fieldSlug: string, rankedSkillIds: string[]): Promise<Result<void>> {
-    this.shelves.set(fieldSlug, [...rankedSkillIds]);
-    return ok(undefined);
-  }
-
   async listShelves(): Promise<Result<ShelfRole[]>> {
     const roles = [...this.roles.values()]
       .filter((role) => role.active)
@@ -137,27 +135,55 @@ export class InMemoryMarketStore implements MarketStore {
   }
 
   private skillsForField(field: MarketField): ShelfField['skills'] {
-    const rankedIds = this.shelves.get(field.slug) ?? [];
-    return rankedIds
+    const entries = this.shelves.get(field.slug) ?? [];
+    return entries
       .slice(0, field.shelfSize)
-      .map((id, index) => {
-        const skill = this.skills.get(id);
+      .map((entry, index): ShelfSkill | null => {
+        const skill = this.skills.get(entry.id);
         if (!skill || skill.inactive) {
           return null;
         }
-        return { id: skill.id, name: skill.name, installs: skill.installs, rank: index + 1 };
+        const row: ShelfSkill = { id: skill.id, name: skill.name, installs: skill.installs, rank: index + 1 };
+        return entry.moreCount > 0 ? { ...row, moreCount: entry.moreCount } : row;
       })
-      .filter((row): row is ShelfField['skills'][number] => row !== null);
+      .filter((row): row is ShelfSkill => row !== null);
   }
 
   // --- T4 shelves ---
 
-  async replaceShelves(_shelves: AssembledShelfEntries[], _taxonomyVersion: string): Promise<Result<void>> {
-    return err(new Error('not implemented: replaceShelves (T4)'));
+  /**
+   * Builds the new shelves aside and swaps them in only if every row is
+   * valid, so a failure part-way leaves the old shelves and meta — the
+   * same all-or-nothing the `replace_market_shelves` transaction gives.
+   * Unknown fields/skills and duplicate placements fail like the
+   * Postgres FK/PK constraints would.
+   */
+  async replaceShelves(shelves: AssembledShelfEntries[], taxonomyVersion: string): Promise<Result<void>> {
+    const next = new Map<string, ShelfEntry[]>();
+    for (const shelf of shelves) {
+      if (!this.fields.has(shelf.fieldSlug)) {
+        return err(new Error(`InMemoryMarketStore: unknown field ${shelf.fieldSlug}`));
+      }
+      const placed = next.get(shelf.fieldSlug) ?? [];
+      for (const entry of shelf.entries) {
+        if (!this.skills.has(entry.id)) {
+          return err(new Error(`InMemoryMarketStore: unknown skill ${entry.id}`));
+        }
+        if (placed.some((existing) => existing.id === entry.id)) {
+          return err(new Error(`InMemoryMarketStore: ${entry.id} placed twice on ${shelf.fieldSlug}`));
+        }
+        placed.push({ id: entry.id, moreCount: entry.moreCount });
+      }
+      next.set(shelf.fieldSlug, placed);
+    }
+
+    this.shelves = next;
+    this.shelfMeta = { generatedAt: new Date().toISOString(), taxonomyVersion };
+    return ok(undefined);
   }
 
   async getShelfMeta(): Promise<Result<ShelfMeta | null>> {
-    return err(new Error('not implemented: getShelfMeta (T4)'));
+    return ok(this.shelfMeta === null ? null : { ...this.shelfMeta });
   }
 
   // --- T5 owners (labels join: T19) ---
