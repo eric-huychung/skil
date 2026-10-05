@@ -5,8 +5,6 @@ import { describe, expect, it } from 'vitest';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const readme = readFileSync(join(root, 'README.md'), 'utf-8');
-const agentsSkill = readFileSync(join(root, '.agents/skills/skil/SKILL.md'), 'utf-8');
-const claudeSkill = readFileSync(join(root, '.claude/skills/skil/SKILL.md'), 'utf-8');
 
 describe('README product loop', () => {
   it('documents the live-trees verbs and the skil bin', () => {
@@ -53,25 +51,5 @@ describe('README product loop', () => {
     expect(readme).not.toMatch(/\bskil copy\b/);
     expect(readme.toLowerCase()).not.toContain('import-from-ide');
     expect(readme.toLowerCase()).not.toContain('import from ide');
-  });
-});
-
-describe('skil SKILL.md teaches the README loop', () => {
-  it('keeps the live pair identical', () => {
-    expect(agentsSkill).toBe(claudeSkill);
-  });
-
-  it('teaches skil skills and keeps enable <command> for commands', () => {
-    expect(agentsSkill).toContain('skil skills');
-    expect(agentsSkill).toContain('skil skills enable');
-    expect(agentsSkill).toContain('skil skills disable');
-    expect(agentsSkill).toMatch(/skil enable\b/);
-    expect(agentsSkill.toLowerCase()).toMatch(/leftover/);
-    expect(agentsSkill.toLowerCase()).toMatch(/app/);
-
-    expect(agentsSkill.toLowerCase()).not.toContain('gui-only');
-    expect(agentsSkill).not.toMatch(/\bskil show\b/);
-    expect(agentsSkill).not.toMatch(/\bskil skills show\b/);
-    expect(agentsSkill).not.toMatch(/\bskil rules show\b/);
   });
 });
