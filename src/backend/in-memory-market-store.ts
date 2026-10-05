@@ -162,16 +162,74 @@ export class InMemoryMarketStore implements MarketStore {
 
   // --- T5 owners (labels join: T19) ---
 
-  async listOwnerStats(_owners: string[]): Promise<Result<OwnerStats[]>> {
-    return err(new Error('not implemented: listOwnerStats (T5)'));
+  /** Simulates PostgREST's 1,000-row cap so `listSkillsByOwners` must page like the Supabase adapter. */
+  private readonly ownerPageSize = 1000;
+
+  /** Same rule as the generated `owner` column (0006): `split_part(source, '/', 1)`. */
+  private ownerOf(source: string): string {
+    return source.split('/')[0] ?? '';
   }
 
-  async listTopOwners(_limit: number): Promise<Result<OwnerStats[]>> {
-    return err(new Error('not implemented: listTopOwners (T5)'));
+  private ownerStatsRows(): Map<string, OwnerStats> {
+    const byOwner = new Map<string, OwnerStats>();
+    for (const row of this.skills.values()) {
+      if (row.inactive) continue;
+      const owner = this.ownerOf(row.source);
+      const stats = byOwner.get(owner) ?? { owner, skillCount: 0, totalInstalls: 0, bestInstalls: 0 };
+      byOwner.set(owner, {
+        owner,
+        skillCount: stats.skillCount + 1,
+        totalInstalls: stats.totalInstalls + row.installs,
+        bestInstalls: Math.max(stats.bestInstalls, row.installs),
+      });
+    }
+    return byOwner;
   }
 
-  async listSkillsByOwners(_owners: string[], _taxonomyVersion: string): Promise<Result<CreatorSkillRow[]>> {
-    return err(new Error('not implemented: listSkillsByOwners (T5)'));
+  /** Rows come back in `owners` order (deduped). */
+  async listOwnerStats(owners: string[]): Promise<Result<OwnerStats[]>> {
+    const byOwner = this.ownerStatsRows();
+    return ok(
+      [...new Set(owners)]
+        .map((owner) => byOwner.get(owner))
+        .filter((row): row is OwnerStats => row !== undefined),
+    );
+  }
+
+  /** Ties broken by owner ascending. */
+  async listTopOwners(limit: number): Promise<Result<OwnerStats[]>> {
+    return ok(
+      [...this.ownerStatsRows().values()]
+        .sort((a, b) => b.bestInstalls - a.bestInstalls || a.owner.localeCompare(b.owner))
+        .slice(0, Math.max(0, limit)),
+    );
+  }
+
+  /** Installs descending, then id ascending (a stable order is what makes paging safe). */
+  async listSkillsByOwners(owners: string[], _taxonomyVersion: string): Promise<Result<CreatorSkillRow[]>> {
+    const rows: CreatorSkillRow[] = [];
+    for (let from = 0; ; from += this.ownerPageSize) {
+      const page = this.ownerSkillsPage(owners, from);
+      rows.push(...page);
+      if (page.length < this.ownerPageSize) break;
+    }
+    return ok(rows);
+  }
+
+  private ownerSkillsPage(owners: string[], from: number): CreatorSkillRow[] {
+    const wanted = new Set(owners);
+    return [...this.skills.values()]
+      .filter((row) => !row.inactive && wanted.has(this.ownerOf(row.source)))
+      .sort((a, b) => b.installs - a.installs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .slice(from, from + this.ownerPageSize)
+      .map((row) => ({
+        id: row.id,
+        name: row.name,
+        source: row.source,
+        owner: this.ownerOf(row.source),
+        installs: row.installs,
+        topics: [],
+      }));
   }
 
   // --- T15b detail ---

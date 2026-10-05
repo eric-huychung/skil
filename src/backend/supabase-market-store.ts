@@ -289,16 +289,89 @@ export class SupabaseMarketStore implements MarketStore {
 
   // --- T5 owners (labels join: T19) ---
 
-  async listOwnerStats(_owners: string[]): Promise<Result<OwnerStats[]>> {
-    return err(new Error('not implemented: listOwnerStats (T5)'));
+  /** PostgREST's default max rows per request; `listSkillsByOwners` pages with `.range()` past it. */
+  private static readonly OWNER_PAGE_SIZE = 1000;
+
+  private static toOwnerStats(row: {
+    owner: string;
+    skill_count: number;
+    total_installs: number | string;
+    best_installs: number | string;
+  }): OwnerStats {
+    // `bigint` columns may arrive as strings depending on PostgREST config.
+    return {
+      owner: row.owner,
+      skillCount: Number(row.skill_count),
+      totalInstalls: Number(row.total_installs),
+      bestInstalls: Number(row.best_installs),
+    };
   }
 
-  async listTopOwners(_limit: number): Promise<Result<OwnerStats[]>> {
-    return err(new Error('not implemented: listTopOwners (T5)'));
+  /** From the `market_owner_stats` view (0006). Rows come back in `owners` order (deduped). */
+  async listOwnerStats(owners: string[]): Promise<Result<OwnerStats[]>> {
+    const wanted = [...new Set(owners)];
+    if (wanted.length === 0) return ok([]);
+
+    const { data, error } = await this.client
+      .from('market_owner_stats')
+      .select('owner, skill_count, total_installs, best_installs')
+      .in('owner', wanted);
+    if (error) return err(toError(error.message));
+
+    const byOwner = new Map(data.map((row) => [row.owner as string, SupabaseMarketStore.toOwnerStats(row)]));
+    return ok(wanted.map((owner) => byOwner.get(owner)).filter((row): row is OwnerStats => row !== undefined));
   }
 
-  async listSkillsByOwners(_owners: string[], _taxonomyVersion: string): Promise<Result<CreatorSkillRow[]>> {
-    return err(new Error('not implemented: listSkillsByOwners (T5)'));
+  /** Ties broken by owner ascending. */
+  async listTopOwners(limit: number): Promise<Result<OwnerStats[]>> {
+    if (limit <= 0) return ok([]);
+
+    const { data, error } = await this.client
+      .from('market_owner_stats')
+      .select('owner, skill_count, total_installs, best_installs')
+      .order('best_installs', { ascending: false })
+      .order('owner', { ascending: true })
+      .limit(limit);
+    if (error) return err(toError(error.message));
+
+    return ok(data.map((row) => SupabaseMarketStore.toOwnerStats(row)));
+  }
+
+  /**
+   * Pages with `.range()` until a short page. Installs descending, then id
+   * ascending: a total order, so no row is skipped or repeated across pages.
+   * `topics` is `[]` until T19 joins labels for `taxonomyVersion`.
+   */
+  async listSkillsByOwners(owners: string[], _taxonomyVersion: string): Promise<Result<CreatorSkillRow[]>> {
+    const wanted = [...new Set(owners)];
+    if (wanted.length === 0) return ok([]);
+
+    const pageSize = SupabaseMarketStore.OWNER_PAGE_SIZE;
+    const rows: CreatorSkillRow[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await this.client
+        .from('market_skills')
+        .select('id, name, source, owner, installs')
+        .eq('inactive', false)
+        .in('owner', wanted)
+        .order('installs', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error) return err(toError(error.message));
+
+      for (const row of data) {
+        rows.push({
+          id: row.id,
+          name: row.name,
+          source: row.source,
+          owner: row.owner,
+          installs: row.installs,
+          topics: [],
+        });
+      }
+      if (data.length < pageSize) break;
+    }
+    return ok(rows);
   }
 
   // --- T15b detail ---
