@@ -524,12 +524,49 @@ export class SupabaseMarketStore implements MarketStore {
 
   // --- T12a creatorChecks ---
 
-  async getCreatorChecks(_keys: string[]): Promise<Result<CreatorCheck[]>> {
-    return err(new Error('not implemented: getCreatorChecks (T12a)'));
+  /** One `in` query; the report asks for about 100 keys, well under the 1,000-row page. */
+  async getCreatorChecks(keys: string[]): Promise<Result<CreatorCheck[]>> {
+    const unique = [...new Set(keys)];
+    if (unique.length === 0) return ok([]);
+
+    const { data, error } = await this.client
+      .from('market_creator_checks')
+      .select('creator_key, state_hash, tech_probability, domain, model_version')
+      .in('creator_key', unique);
+    if (error) return err(toError(error.message));
+
+    return ok(
+      ((data ?? []) as {
+        creator_key: string;
+        state_hash: string;
+        tech_probability: number;
+        domain: string;
+        model_version: string;
+      }[]).map((row) => ({
+        creatorKey: row.creator_key,
+        stateHash: row.state_hash,
+        techProbability: Number(row.tech_probability),
+        domain: row.domain,
+        modelVersion: row.model_version,
+      })),
+    );
   }
 
-  async saveCreatorCheck(_check: CreatorCheck): Promise<Result<void>> {
-    return err(new Error('not implemented: saveCreatorCheck (T12a)'));
+  /** Upsert on `creator_key`. `checked_at` is set explicitly so a re-check refreshes it. */
+  async saveCreatorCheck(check: CreatorCheck): Promise<Result<void>> {
+    const { error } = await this.client.from('market_creator_checks').upsert(
+      {
+        creator_key: check.creatorKey,
+        state_hash: check.stateHash,
+        tech_probability: check.techProbability,
+        domain: check.domain,
+        model_version: check.modelVersion,
+        checked_at: new Date().toISOString(),
+      },
+      { onConflict: 'creator_key' },
+    );
+    if (error) return err(toError(error.message));
+    return ok(undefined);
   }
 
   // --- T21 search ---
