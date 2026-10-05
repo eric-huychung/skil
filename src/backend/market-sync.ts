@@ -1,8 +1,10 @@
 import { err, isOk, ok, type Result } from '../core/result.js';
 import type { MarketSkillsClient } from './market-client.js';
 import type { MarketStore } from './market-store.js';
+import type { LabelPoolRow, MarketClassifyRow, MarketField, SkillScore, TopicQuestion } from './market-types.js';
 import type { SkillClassifier } from './skill-classifier.js';
-import { buildShelves, dedupByName } from './shelf-assembler.js';
+import { buildShelves, dedupByName, type SkillLabel } from './shelf-assembler.js';
+import { MAX_TOPICS_PER_SKILL, TOPIC_QUESTIONS, TOPIC_THRESHOLD, topicsFor } from './topic-taxonomy.js';
 
 /** Classify pool size — not 10k, not “until every shelf has 30.” */
 export const CLASSIFY_POOL_SIZE = 1000;
@@ -175,7 +177,8 @@ export class MarketSync {
 
   /**
    * Rebuilds every active field's shelf from the top of our index.
-   * Dedup by name → classify → collapse suites, rank by installs, cap
+   * Dedup by name → score one question per active field → `topicsFor`
+   * slugs (error rows get none) → collapse suites, rank by installs, cap
    * owners (`buildShelves`) → one `replaceShelves` call, so every shelf changes together or not at all. Classify error
    * writes no shelves (last week stays). Empty pool is also fail-closed.
    */
@@ -194,12 +197,13 @@ export class MarketSync {
     }
 
     const unique = dedupByName(pool.value);
-    const classified = await this.classifier.classify(unique, fields.value);
+    const classified = await this.classifier.classify(unique.map(toLabelPoolRow), questionsFor(fields.value));
     if (!isOk(classified)) {
       return classified;
     }
 
-    const shelves = buildShelves({ listings: unique, labels: classified.value, fields: fields.value });
+    const labels = classified.value.map(toSkillLabel);
+    const shelves = buildShelves({ listings: unique, labels, fields: fields.value });
     // Not built from topic labels, so the meta row names the classify path
     // instead of a TAXONOMY_VERSION it never used.
     const written = await this.store.replaceShelves(shelves, 'classify');
@@ -213,4 +217,32 @@ export class MarketSync {
       queued: unique.filter((row) => row.hash === null).map((row) => row.id),
     });
   }
+}
+
+/** skills.sh ids are `owner/repo/skill`. The top-listings pool has no excerpt yet. */
+function toLabelPoolRow(row: MarketClassifyRow): LabelPoolRow {
+  const cut = row.id.lastIndexOf('/');
+  return {
+    id: row.id,
+    name: row.name,
+    source: (cut === -1 ? row.id : row.id.slice(0, cut)).toLowerCase(),
+    installs: row.installs,
+    description: row.description,
+    labelExcerpt: null,
+    owner: (row.id.split('/')[0] ?? row.id).toLowerCase(),
+  };
+}
+
+/** One question per active field: the taxonomy prompt when there is one, else the field's own query. */
+function questionsFor(fields: MarketField[]): TopicQuestion[] {
+  return fields.map(
+    (field) => TOPIC_QUESTIONS.find((q) => q.fieldSlug === field.slug) ?? { fieldSlug: field.slug, prompt: field.q },
+  );
+}
+
+function toSkillLabel(score: SkillScore): SkillLabel {
+  return {
+    id: score.id,
+    fieldSlugs: score.status === 'ok' ? topicsFor(score.probabilities, TOPIC_THRESHOLD, MAX_TOPICS_PER_SKILL) : [],
+  };
 }

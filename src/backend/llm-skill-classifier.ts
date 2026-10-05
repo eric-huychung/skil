@@ -1,7 +1,7 @@
+import { createHash } from 'node:crypto';
 import { err, isOk, ok, type Result } from '../core/result.js';
 import type { SkillClassifier } from './skill-classifier.js';
-import type { MarketClassifyRow, MarketField } from './market-types.js';
-import type { SkillLabel } from './shelf-assembler.js';
+import type { LabelPoolRow, SkillScore, TopicQuestion } from './market-types.js';
 
 export const CLASSIFY_BATCH_SIZE = 20;
 export const CLASSIFY_MODEL = 'openai/gpt-4o-mini';
@@ -21,28 +21,27 @@ interface ChatCompletionBody {
 
 /**
  * Classifies skills through Vercel AI Gateway. One failed batch fails
- * the whole run — no partial label list.
+ * the whole run — no partial score list. Baseline adapter for the
+ * `SkillClassifier` seam: a chosen slug scores 1.0, every other question 0.
  */
 export class LlmSkillClassifier implements SkillClassifier {
   constructor(private readonly deps: LlmSkillClassifierDeps) {}
 
-  async classify(skills: MarketClassifyRow[], fields: MarketField[]): Promise<Result<SkillLabel[]>> {
-    const labels: SkillLabel[] = [];
+  async classify(skills: LabelPoolRow[], questions: TopicQuestion[]): Promise<Result<SkillScore[]>> {
+    const slugs = questions.map((question) => question.fieldSlug);
+    const scores: SkillScore[] = [];
     for (let i = 0; i < skills.length; i += CLASSIFY_BATCH_SIZE) {
       const batch = skills.slice(i, i + CLASSIFY_BATCH_SIZE);
-      const classified = await this.classifyBatch(batch, fields);
+      const classified = await this.classifyBatch(batch, slugs);
       if (!isOk(classified)) {
         return classified;
       }
-      labels.push(...classified.value);
+      scores.push(...batch.map((skill) => toScore(skill, classified.value.get(skill.id) ?? [], slugs)));
     }
-    return ok(labels);
+    return ok(scores);
   }
 
-  private async classifyBatch(
-    skills: MarketClassifyRow[],
-    fields: MarketField[],
-  ): Promise<Result<SkillLabel[]>> {
+  private async classifyBatch(skills: LabelPoolRow[], slugs: string[]): Promise<Result<Map<string, string[]>>> {
     const token = await this.deps.getAccessToken();
     const init: RequestInit = {
       method: 'POST',
@@ -54,7 +53,7 @@ export class LlmSkillClassifier implements SkillClassifier {
         model: CLASSIFY_MODEL,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: systemPrompt(fields) },
+          { role: 'system', content: systemPrompt(slugs) },
           { role: 'user', content: JSON.stringify(skills.map(toPromptSkill)) },
         ],
       }),
@@ -72,7 +71,7 @@ export class LlmSkillClassifier implements SkillClassifier {
       return err(new Error('LlmSkillClassifier: invalid JSON body'));
     }
 
-    return parseLabels(body.choices?.[0]?.message?.content ?? '', skills);
+    return parseLabels(body.choices?.[0]?.message?.content ?? '');
   }
 }
 
@@ -102,11 +101,10 @@ async function postWithRetry(fetchImpl: typeof fetch, init: RequestInit): Promis
   return err(lastError);
 }
 
-function systemPrompt(fields: MarketField[]): string {
-  const slugs = fields.map((field) => field.slug).join(', ');
+function systemPrompt(slugs: string[]): string {
   return [
     'Assign each skill 0-2 category slugs for the job it does, not words that appear.',
-    `Allowed slugs: ${slugs}.`,
+    `Allowed slugs: ${slugs.join(', ')}.`,
     'tdd → testing. grill-me / handoff / find-skills / prototype → workflow.',
     'prisma / neon / supabase app postgres → database.',
     'Lark, Azure, Amazon seller, video-gen suites → integrations. amazon-product-research is NOT prd.',
@@ -114,11 +112,23 @@ function systemPrompt(fields: MarketField[]): string {
   ].join(' ');
 }
 
-function toPromptSkill(skill: MarketClassifyRow): { id: string; name: string; description: string | null } {
+function toPromptSkill(skill: LabelPoolRow): { id: string; name: string; description: string | null } {
   return { id: skill.id, name: skill.name, description: skill.description };
 }
 
-function parseLabels(content: string, skills: MarketClassifyRow[]): Result<SkillLabel[]> {
+/** Every question scored; `stateHash` covers exactly what this skill contributed to the prompt. */
+function toScore(skill: LabelPoolRow, chosen: string[], slugs: string[]): SkillScore {
+  return {
+    id: skill.id,
+    status: 'ok',
+    probabilities: Object.fromEntries(slugs.map((slug) => [slug, chosen.includes(slug) ? 1 : 0])),
+    stateHash: createHash('sha256').update(JSON.stringify(toPromptSkill(skill)), 'utf8').digest('hex'),
+    modelVersion: CLASSIFY_MODEL,
+  };
+}
+
+/** Chosen slugs by id; ids the model skipped are absent (they score 0 everywhere). */
+function parseLabels(content: string): Result<Map<string, string[]>> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
@@ -147,5 +157,5 @@ function parseLabels(content: string, skills: MarketClassifyRow[]): Result<Skill
     );
   }
 
-  return ok(skills.map((skill) => ({ id: skill.id, fieldSlugs: byId.get(skill.id) ?? [] })));
+  return ok(byId);
 }

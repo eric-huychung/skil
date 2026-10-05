@@ -1,13 +1,7 @@
 import { createHash } from 'node:crypto';
+import type { TopicQuestion } from './market-types.js';
 
-/**
- * One yes/no topic question per active field. Defined here until it lands in
- * market-types.ts; the shape matches design §4.2.
- */
-export interface TopicQuestion {
-  fieldSlug: string;
-  prompt: string;
-}
+export type { TopicQuestion };
 
 /**
  * Questions as data. Editing a prompt (or adding a field) changes

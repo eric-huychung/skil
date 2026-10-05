@@ -4,6 +4,7 @@ import { InMemoryMarketStore } from './in-memory-market-store.js';
 import type { MarketListingPage, MarketSkillsClient } from './market-client.js';
 import { MarketSync } from './market-sync.js';
 import { FakeSkillClassifier } from './skill-classifier.js';
+import { TOPIC_QUESTIONS, TOPIC_THRESHOLD } from './topic-taxonomy.js';
 import { GOLD_LABELS, GOLD_LISTINGS } from './shelf-gold.fixture.js';
 import { LARK_LABELS, LARK_LISTINGS } from './shelf-suite.fixture.js';
 
@@ -309,7 +310,7 @@ describe('MarketSync.refreshActiveFields', () => {
     const store = new InMemoryMarketStore();
     await seedGold(store);
     const client = fakeClient([]);
-    const classifier = new FakeSkillClassifier(new Map(GOLD_LABELS.map((label) => [label.id, label.fieldSlugs])));
+    const classifier = FakeSkillClassifier.fromSlugs(new Map(GOLD_LABELS.map((label) => [label.id, label.fieldSlugs])));
     const sync = syncOf(store, client, { classifier });
 
     const result = await sync.refreshActiveFields();
@@ -327,7 +328,7 @@ describe('MarketSync.refreshActiveFields', () => {
     const store = new InMemoryMarketStore();
     await seedGold(store);
     const replaceShelves = vi.spyOn(store, 'replaceShelves');
-    const classifier = new FakeSkillClassifier(new Map(GOLD_LABELS.map((label) => [label.id, label.fieldSlugs])));
+    const classifier = FakeSkillClassifier.fromSlugs(new Map(GOLD_LABELS.map((label) => [label.id, label.fieldSlugs])));
 
     const result = await syncOf(store, fakeClient([]), { classifier }).refreshActiveFields();
 
@@ -359,7 +360,7 @@ describe('MarketSync.refreshActiveFields', () => {
       );
       await store.setDetail(row.id, { description: row.description, hash: row.hash! });
     }
-    const classifier = new FakeSkillClassifier(new Map(LARK_LABELS.map((label) => [label.id, label.fieldSlugs])));
+    const classifier = FakeSkillClassifier.fromSlugs(new Map(LARK_LABELS.map((label) => [label.id, label.fieldSlugs])));
 
     const result = await syncOf(store, fakeClient([]), { classifier }).refreshActiveFields();
 
@@ -391,7 +392,7 @@ describe('MarketSync.refreshActiveFields', () => {
     await store.replaceShelves([{ fieldSlug: 'frontend', entries: [{ id: 'a/keep', moreCount: 0 }] }], 'v1');
     vi.spyOn(store, 'replaceShelves').mockResolvedValue(err(new Error('rpc failed')));
     const sync = syncOf(store, fakeClient([]), {
-      classifier: new FakeSkillClassifier(new Map([['a/new', ['frontend']]])),
+      classifier: FakeSkillClassifier.fromSlugs(new Map([['a/new', ['frontend']]])),
     });
 
     const result = await sync.refreshActiveFields();
@@ -423,7 +424,7 @@ describe('MarketSync.refreshActiveFields', () => {
     });
     await store.upsertListing(listingItem('a/one', 10), '2026-01-01T00:00:00.000Z');
     const sync = syncOf(store, fakeClient([]), {
-      classifier: new FakeSkillClassifier(new Map([['a/one', ['frontend']]])),
+      classifier: FakeSkillClassifier.fromSlugs(new Map([['a/one', ['frontend']]])),
     });
 
     const result = await sync.refreshActiveFields();
@@ -450,6 +451,72 @@ describe('MarketSync.refreshActiveFields', () => {
     const result = await sync.refreshActiveFields();
 
     expect(isOk(result) && result.value.refreshed).toHaveLength(22);
+  });
+
+  it('turns scores into slugs with topicsFor: below-threshold and error rows stay off the shelf', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertRole({ slug: 'swe', label: 'SWE', sortOrder: 1, active: true });
+    await store.upsertField({
+      slug: 'frontend',
+      roleSlug: 'swe',
+      label: 'Frontend',
+      q: 'frontend',
+      sortOrder: 1,
+      shelfSize: 30,
+      active: true,
+    });
+    await store.upsertListing(listingItem('a/high', 30), '2026-01-01T00:00:00.000Z');
+    await store.upsertListing(listingItem('b/low', 20), '2026-01-01T00:00:00.000Z');
+    await store.upsertListing(listingItem('c/bad', 10), '2026-01-01T00:00:00.000Z');
+    const classifier = new FakeSkillClassifier({
+      probabilities: new Map([
+        ['a/high', { frontend: TOPIC_THRESHOLD }],
+        ['b/low', { frontend: TOPIC_THRESHOLD - 0.01 }],
+        ['c/bad', { frontend: 1 }],
+      ]),
+      failIds: ['c/bad'],
+    });
+
+    const result = await syncOf(store, fakeClient([]), { classifier }).refreshActiveFields();
+
+    expect(isOk(result)).toBe(true);
+    const shelves = await store.listShelves();
+    expect(isOk(shelves) && shelves.value[0]?.fields[0]?.skills.map((s) => s.id)).toEqual(['a/high']);
+  });
+
+  it('sends pool rows as label rows with one question per active field', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertField({
+      slug: 'frontend',
+      roleSlug: 'swe',
+      label: 'Frontend',
+      q: 'frontend',
+      sortOrder: 1,
+      shelfSize: 30,
+      active: true,
+    });
+    await store.upsertField({ slug: 'chat', roleSlug: 'swe', label: 'Chat', q: 'chat apps', sortOrder: 2, shelfSize: 30, active: true });
+    await store.upsertListing(listingItem('Acme/repo/one', 10), '2026-01-01T00:00:00.000Z');
+    const classifier = new FakeSkillClassifier();
+
+    await syncOf(store, fakeClient([]), { classifier }).refreshActiveFields();
+
+    const call = classifier.calls[0];
+    expect(call?.rows).toEqual([
+      {
+        id: 'Acme/repo/one',
+        name: 'Acme/repo/one',
+        source: 'acme/repo',
+        installs: 10,
+        description: null,
+        labelExcerpt: null,
+        owner: 'acme',
+      },
+    ]);
+    expect(call?.questions).toEqual([
+      TOPIC_QUESTIONS.find((q) => q.fieldSlug === 'frontend'),
+      { fieldSlug: 'chat', prompt: 'chat apps' },
+    ]);
   });
 
   it('writes no shelves when classify fails', async () => {
