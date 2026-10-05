@@ -20,6 +20,7 @@ import type {
   ShelfSkill,
   SkillScore,
 } from './market-types.js';
+import { MAX_TOPICS_PER_SKILL, TOPIC_THRESHOLD, topicsFor } from './topic-taxonomy.js';
 
 interface SkillRow extends MarketListingInput {
   description: string | null;
@@ -238,11 +239,21 @@ export class InMemoryMarketStore implements MarketStore {
     );
   }
 
-  /** Installs descending, then id ascending (a stable order is what makes paging safe). */
-  async listSkillsByOwners(owners: string[], _taxonomyVersion: string): Promise<Result<CreatorSkillRow[]>> {
+  /**
+   * Installs descending, then id ascending (a stable order is what makes paging safe).
+   * `topics` come from `taxonomyVersion`'s `ok` labels via `topicsFor`; unlabelled or errored rows get `[]`.
+   */
+  async listSkillsByOwners(owners: string[], taxonomyVersion: string): Promise<Result<CreatorSkillRow[]>> {
+    const labels = this.labels.get(taxonomyVersion);
     const rows: CreatorSkillRow[] = [];
     for (let from = 0; ; from += this.ownerPageSize) {
       const page = this.ownerSkillsPage(owners, from);
+      for (const row of page) {
+        const label = labels?.get(row.id);
+        if (label?.status === 'ok') {
+          row.topics = topicsFor(label.probabilities, TOPIC_THRESHOLD, MAX_TOPICS_PER_SKILL);
+        }
+      }
       rows.push(...page);
       if (page.length < this.ownerPageSize) break;
     }

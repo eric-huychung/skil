@@ -13,6 +13,7 @@ import {
   handleShelvesRequest,
   handleSuggestedRequest,
 } from './market-read.js';
+import { TAXONOMY_VERSION } from './topic-taxonomy.js';
 
 function listing(id: string, overrides: Partial<{ name: string; installs: number }> = {}) {
   return {
@@ -505,6 +506,40 @@ describe('handleCreatorsRequest', () => {
           skills: [{ id: 'mattpocock-labs/extra/tdd', name: 'tdd', installs: 50, topics: [] }],
         },
       ],
+    });
+  });
+
+  it('returns topics for rows labelled at the current taxonomy version and [] for the rest', async () => {
+    const store = await creatorsStore();
+    const label = (id: string, probabilities: Record<string, number>, status: 'ok' | 'error' = 'ok') => ({
+      id,
+      status,
+      probabilities,
+      stateHash: `hash-${id}`,
+      modelVersion: 'jev@1',
+    });
+    await store.saveLabels(TAXONOMY_VERSION, [
+      label('mattpocock/skills/tdd', { testing: 0.95, frontend: 0.2, docs: 0.7 }),
+      label('mattpocock/skills/grill', {}, 'error'),
+    ]);
+    await store.saveLabels('old-version', [label('mattpocock-labs/extra/tdd', { testing: 0.99 })]);
+
+    const response = await handleCreatorsRequest(new Request('http://localhost/api/market/creators?slug=matt'), {
+      store,
+      creatorsPath: writeCreatorsYaml(),
+    });
+    const body = (await response.json()) as {
+      data: { repos: Array<{ skills: Array<{ id: string; topics: string[] }> }> };
+    };
+
+    expect(response.status).toBe(200);
+    const topics = Object.fromEntries(
+      body.data.repos.flatMap((repo) => repo.skills).map((skill) => [skill.id, skill.topics]),
+    );
+    expect(topics).toEqual({
+      'mattpocock/skills/tdd': ['testing', 'docs'],
+      'mattpocock/skills/grill': [],
+      'mattpocock-labs/extra/tdd': [],
     });
   });
 

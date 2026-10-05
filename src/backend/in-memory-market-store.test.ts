@@ -350,6 +350,30 @@ describe('InMemoryMarketStore owners (T5)', () => {
     ]);
   });
 
+  it('listSkillsByOwners joins labels of the given version: threshold, max and order from topicsFor', async () => {
+    const store = await seeded();
+    const label = (id: string, probabilities: Record<string, number>, status: 'ok' | 'error' = 'ok') => ({
+      id,
+      status,
+      probabilities,
+      stateHash: `hash-${id}`,
+      modelVersion: 'jev@1',
+    });
+    await store.saveLabels('v1', [
+      label('acme/tools/lint', { testing: 0.7, frontend: 0.9, docs: 0.8, cloud: 0.65, chat: 0.1 }),
+      label('vercel-labs/agent-skills/ai', { frontend: 0.9 }, 'error'),
+    ]);
+    await store.saveLabels('v0', [label('vercel-labs/agent-skills/next', { frontend: 0.99 })]);
+
+    const skills = await store.listSkillsByOwners(['vercel-labs', 'acme'], 'v1');
+
+    expect(isOk(skills) && skills.value.map((row) => [row.id, row.topics])).toEqual([
+      ['acme/tools/lint', ['frontend', 'docs', 'testing']],
+      ['vercel-labs/agent-skills/next', []],
+      ['vercel-labs/agent-skills/ai', []],
+    ]);
+  });
+
   it('listSkillsByOwners pages past the 1,000-row page size', async () => {
     const store = new InMemoryMarketStore();
     for (let i = 0; i < 2345; i += 1) {
