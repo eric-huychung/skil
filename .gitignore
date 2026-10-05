@@ -37,3 +37,6 @@ skills-manager-main/
 .sync-market/
 .env*
 supabase/.temp/
+
+# local agent setup (not shared)
+.claude/
