@@ -70,6 +70,57 @@ describe('createDiscover', () => {
     }
   });
 
+  it('reads creators and one creator by slug from /api/market/creators', async () => {
+    const calls: Array<{ url: string; params?: Record<string, string> }> = [];
+    const card = { slug: 'vercel-labs', label: 'Vercel Labs', official: true, pinned: false, skillCount: 2, totalInstalls: 9 };
+    const detail = {
+      slug: 'vercel-labs',
+      label: 'Vercel Labs',
+      official: true,
+      repos: [{ source: 'vercel-labs/agent-skills', skills: [{ id: 'a', name: 'A', installs: 1, topics: [] }] }],
+    };
+    const discover = createDiscover({
+      apiBaseUrl: 'https://www.skil.website/',
+      browse: async () => ok([]),
+      get: async (url, config) => {
+        calls.push({ url, params: config?.params });
+        return { data: { data: config?.params?.slug ? detail : [card] } };
+      },
+    });
+
+    expect(await discover.creators()).toEqual({ ok: true, value: [card] });
+    expect(await discover.creator('vercel-labs')).toEqual({ ok: true, value: detail });
+    expect(calls).toEqual([
+      { url: 'https://www.skil.website/api/market/creators', params: undefined },
+      { url: 'https://www.skil.website/api/market/creators', params: { slug: 'vercel-labs' } },
+    ]);
+  });
+
+  it('maps an unknown creator slug to not_found and other failures to store_error', async () => {
+    const notFound = createDiscover({
+      apiBaseUrl: 'https://www.skil.website',
+      browse: async () => ok([]),
+      get: async () => {
+        throw Object.assign(new Error('Request failed with status code 404'), { response: { status: 404 } });
+      },
+    });
+    const down = createDiscover({
+      apiBaseUrl: 'https://www.skil.website',
+      browse: async () => ok([]),
+      get: async () => {
+        throw Object.assign(new Error('getaddrinfo ENOTFOUND db.internal'), { response: { status: 500 } });
+      },
+    });
+
+    const missing = await notFound.creator('nobody');
+    const failedList = await down.creators();
+    const failedDetail = await down.creator('vercel-labs');
+
+    expect(!isOk(missing) && missing.error.message).toBe('not_found');
+    expect(!isOk(failedList) && failedList.error.message).toBe('store_error');
+    expect(!isOk(failedDetail) && failedDetail.error.message).toBe('store_error');
+  });
+
   it('maps live browse hits without a second HTTP client', async () => {
     const discover = createDiscover({
       apiBaseUrl: 'https://www.skil.website',
