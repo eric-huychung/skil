@@ -3,14 +3,13 @@ import type { MarketSkillsClient } from './market-client.js';
 import type { MarketStore } from './market-store.js';
 import type { LabelPoolRow, MarketClassifyRow, MarketField, SkillScore, TopicQuestion } from './market-types.js';
 import type { SkillClassifier } from './skill-classifier.js';
-import { buildShelves, dedupByName, type SkillLabel } from './shelf-assembler.js';
+import { buildShelves, dedupByName, OWNER_CAP, type ShelfInputRow } from './shelf-assembler.js';
 import { buildLabelState, stateHash } from './label-state.js';
 import {
   MAX_TOPICS_PER_SKILL,
   TAXONOMY_VERSION,
   TOPIC_QUESTIONS,
   TOPIC_THRESHOLD,
-  topicsFor,
 } from './topic-taxonomy.js';
 
 /** Classify pool size — not 10k, not “until every shelf has 30.” */
@@ -228,9 +227,9 @@ export class MarketSync {
 
   /**
    * Rebuilds every active field's shelf from the top of our index.
-   * Dedup by name → score one question per active field → `topicsFor`
-   * slugs (error rows get none) → collapse suites, rank by installs, cap
-   * owners (`buildShelves`) → one `replaceShelves` call, so every shelf changes together or not at all. Classify error
+   * Dedup by name → score one question per active field → topics, tiers,
+   * suite collapse and owner cap (`buildShelves`; error rows get no topics)
+   * → one `replaceShelves` call, so every shelf changes together or not at all. Classify error
    * writes no shelves (last week stays). Empty pool is also fail-closed.
    */
   async refreshActiveFields(): Promise<Result<RefreshShelvesResult>> {
@@ -253,8 +252,14 @@ export class MarketSync {
       return classified;
     }
 
-    const labels = classified.value.map(toSkillLabel);
-    const shelves = buildShelves({ listings: unique, labels, fields: fields.value });
+    const scores = new Map(classified.value.map((score) => [score.id, score]));
+    const shelves = buildShelves({
+      rows: unique.map((row) => toShelfInputRow(toLabelPoolRow(row), scores.get(row.id))),
+      fields: fields.value,
+      threshold: TOPIC_THRESHOLD,
+      maxTopics: MAX_TOPICS_PER_SKILL,
+      ownerCap: OWNER_CAP,
+    });
     // Not built from topic labels, so the meta row names the classify path
     // instead of a TAXONOMY_VERSION it never used.
     const written = await this.store.replaceShelves(shelves, 'classify');
@@ -363,9 +368,14 @@ function questionsFor(fields: MarketField[]): TopicQuestion[] {
   );
 }
 
-function toSkillLabel(score: SkillScore): SkillLabel {
+/** A pool row with its label's probabilities; a missing or errored label has none, so the row is unlabeled. */
+function toShelfInputRow(row: LabelPoolRow, score: SkillScore | undefined): ShelfInputRow {
   return {
-    id: score.id,
-    fieldSlugs: score.status === 'ok' ? topicsFor(score.probabilities, TOPIC_THRESHOLD, MAX_TOPICS_PER_SKILL) : [],
+    id: row.id,
+    name: row.name,
+    source: row.source,
+    owner: row.owner,
+    installs: row.installs,
+    probabilities: score?.status === 'ok' ? score.probabilities : {},
   };
 }
