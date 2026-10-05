@@ -2,6 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { err, ok, type Result } from '../core/result.js';
 import type { MarketStore } from './market-store.js';
 import type {
+  AssembledShelfEntries,
+  CreatorCheck,
+  CreatorSkillRow,
+  LabelPoolRow,
   MarketClassifyRow,
   MarketDetailInput,
   MarketField,
@@ -9,9 +13,12 @@ import type {
   MarketListingInput,
   MarketRole,
   MarketSearchRow,
+  OwnerStats,
   ShelfField,
+  ShelfMeta,
   ShelfRole,
   ShelfSkill,
+  SkillScore,
 } from './market-types.js';
 
 interface RoleRow {
@@ -258,6 +265,82 @@ export class SupabaseMarketStore implements MarketStore {
     return ok(shelfRoles);
   }
 
+  async getListing(id: string): Promise<Result<MarketListingDetail | null>> {
+    const { data, error } = await this.client
+      .from('market_skills')
+      .select('id, name, installs, url, install_url')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) return err(toError(error.message));
+    if (!data) return ok(null);
+
+    return ok({ id: data.id, name: data.name, installs: data.installs, url: data.url, installUrl: data.install_url });
+  }
+
+  // --- T4 shelves ---
+
+  async replaceShelves(_shelves: AssembledShelfEntries[], _taxonomyVersion: string): Promise<Result<void>> {
+    return err(new Error('not implemented: replaceShelves (T4)'));
+  }
+
+  async getShelfMeta(): Promise<Result<ShelfMeta | null>> {
+    return err(new Error('not implemented: getShelfMeta (T4)'));
+  }
+
+  // --- T5 owners (labels join: T19) ---
+
+  async listOwnerStats(_owners: string[]): Promise<Result<OwnerStats[]>> {
+    return err(new Error('not implemented: listOwnerStats (T5)'));
+  }
+
+  async listTopOwners(_limit: number): Promise<Result<OwnerStats[]>> {
+    return err(new Error('not implemented: listTopOwners (T5)'));
+  }
+
+  async listSkillsByOwners(_owners: string[], _taxonomyVersion: string): Promise<Result<CreatorSkillRow[]>> {
+    return err(new Error('not implemented: listSkillsByOwners (T5)'));
+  }
+
+  // --- T15b detail ---
+
+  async getDetailState(_id: string): Promise<Result<{ hash: string | null; hasExcerpt: boolean }>> {
+    return err(new Error('not implemented: getDetailState (T15b)'));
+  }
+
+  async listIdsMissingExcerpt(): Promise<Result<string[]>> {
+    return err(new Error('not implemented: listIdsMissingExcerpt (T15b)'));
+  }
+
+  // --- T17b labels ---
+
+  async listLabelPool(): Promise<Result<LabelPoolRow[]>> {
+    return err(new Error('not implemented: listLabelPool (T17b)'));
+  }
+
+  async listLabelKeys(_version: string): Promise<Result<Map<string, Pick<SkillScore, 'stateHash' | 'status'>>>> {
+    return err(new Error('not implemented: listLabelKeys (T17b)'));
+  }
+
+  async saveLabels(_version: string, _scores: SkillScore[]): Promise<Result<void>> {
+    return err(new Error('not implemented: saveLabels (T17b)'));
+  }
+
+  async listLabels(_version: string): Promise<Result<SkillScore[]>> {
+    return err(new Error('not implemented: listLabels (T17b)'));
+  }
+
+  // --- T12a creatorChecks ---
+
+  async getCreatorChecks(_keys: string[]): Promise<Result<CreatorCheck[]>> {
+    return err(new Error('not implemented: getCreatorChecks (T12a)'));
+  }
+
+  async saveCreatorCheck(_check: CreatorCheck): Promise<Result<void>> {
+    return err(new Error('not implemented: saveCreatorCheck (T12a)'));
+  }
+
+  // --- T21 search ---
+
   /**
    * `websearch_to_tsquery` against the generated `search_vector` column
    * (0003 migration) — index-backed via the GIN index, unlike `ilike`.
@@ -275,18 +358,6 @@ export class SupabaseMarketStore implements MarketStore {
     if (error) return err(toError(error.message));
 
     return ok(data.map((row) => ({ id: row.id, name: row.name, installs: row.installs })));
-  }
-
-  async getListing(id: string): Promise<Result<MarketListingDetail | null>> {
-    const { data, error } = await this.client
-      .from('market_skills')
-      .select('id, name, installs, url, install_url')
-      .eq('id', id)
-      .maybeSingle();
-    if (error) return err(toError(error.message));
-    if (!data) return ok(null);
-
-    return ok({ id: data.id, name: data.name, installs: data.installs, url: data.url, installUrl: data.install_url });
   }
 }
 

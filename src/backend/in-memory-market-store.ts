@@ -1,6 +1,10 @@
-import { ok, type Result } from '../core/result.js';
+import { err, ok, type Result } from '../core/result.js';
 import type { MarketStore } from './market-store.js';
 import type {
+  AssembledShelfEntries,
+  CreatorCheck,
+  CreatorSkillRow,
+  LabelPoolRow,
   MarketClassifyRow,
   MarketDetailInput,
   MarketField,
@@ -8,8 +12,11 @@ import type {
   MarketListingInput,
   MarketRole,
   MarketSearchRow,
+  OwnerStats,
   ShelfField,
+  ShelfMeta,
   ShelfRole,
+  SkillScore,
 } from './market-types.js';
 
 interface SkillRow extends MarketListingInput {
@@ -121,20 +128,6 @@ export class InMemoryMarketStore implements MarketStore {
       }));
   }
 
-  async searchListings(q: string, opts: { limit: number }): Promise<Result<MarketSearchRow[]>> {
-    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    const matches = [...this.skills.values()]
-      .filter((row) => !row.inactive)
-      .filter((row) => {
-        const haystack = `${row.name} ${row.description ?? ''}`.toLowerCase();
-        return words.every((word) => haystack.includes(word));
-      })
-      .sort((a, b) => b.installs - a.installs)
-      .slice(0, opts.limit);
-
-    return ok(matches.map((row) => ({ id: row.id, name: row.name, installs: row.installs })));
-  }
-
   async getListing(id: string): Promise<Result<MarketListingDetail | null>> {
     const row = this.skills.get(id);
     if (!row) {
@@ -155,5 +148,83 @@ export class InMemoryMarketStore implements MarketStore {
         return { id: skill.id, name: skill.name, installs: skill.installs, rank: index + 1 };
       })
       .filter((row): row is ShelfField['skills'][number] => row !== null);
+  }
+
+  // --- T4 shelves ---
+
+  async replaceShelves(_shelves: AssembledShelfEntries[], _taxonomyVersion: string): Promise<Result<void>> {
+    return err(new Error('not implemented: replaceShelves (T4)'));
+  }
+
+  async getShelfMeta(): Promise<Result<ShelfMeta | null>> {
+    return err(new Error('not implemented: getShelfMeta (T4)'));
+  }
+
+  // --- T5 owners (labels join: T19) ---
+
+  async listOwnerStats(_owners: string[]): Promise<Result<OwnerStats[]>> {
+    return err(new Error('not implemented: listOwnerStats (T5)'));
+  }
+
+  async listTopOwners(_limit: number): Promise<Result<OwnerStats[]>> {
+    return err(new Error('not implemented: listTopOwners (T5)'));
+  }
+
+  async listSkillsByOwners(_owners: string[], _taxonomyVersion: string): Promise<Result<CreatorSkillRow[]>> {
+    return err(new Error('not implemented: listSkillsByOwners (T5)'));
+  }
+
+  // --- T15b detail ---
+
+  async getDetailState(_id: string): Promise<Result<{ hash: string | null; hasExcerpt: boolean }>> {
+    return err(new Error('not implemented: getDetailState (T15b)'));
+  }
+
+  async listIdsMissingExcerpt(): Promise<Result<string[]>> {
+    return err(new Error('not implemented: listIdsMissingExcerpt (T15b)'));
+  }
+
+  // --- T17b labels ---
+
+  async listLabelPool(): Promise<Result<LabelPoolRow[]>> {
+    return err(new Error('not implemented: listLabelPool (T17b)'));
+  }
+
+  async listLabelKeys(_version: string): Promise<Result<Map<string, Pick<SkillScore, 'stateHash' | 'status'>>>> {
+    return err(new Error('not implemented: listLabelKeys (T17b)'));
+  }
+
+  async saveLabels(_version: string, _scores: SkillScore[]): Promise<Result<void>> {
+    return err(new Error('not implemented: saveLabels (T17b)'));
+  }
+
+  async listLabels(_version: string): Promise<Result<SkillScore[]>> {
+    return err(new Error('not implemented: listLabels (T17b)'));
+  }
+
+  // --- T12a creatorChecks ---
+
+  async getCreatorChecks(_keys: string[]): Promise<Result<CreatorCheck[]>> {
+    return err(new Error('not implemented: getCreatorChecks (T12a)'));
+  }
+
+  async saveCreatorCheck(_check: CreatorCheck): Promise<Result<void>> {
+    return err(new Error('not implemented: saveCreatorCheck (T12a)'));
+  }
+
+  // --- T21 search ---
+
+  async searchListings(q: string, opts: { limit: number }): Promise<Result<MarketSearchRow[]>> {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const matches = [...this.skills.values()]
+      .filter((row) => !row.inactive)
+      .filter((row) => {
+        const haystack = `${row.name} ${row.description ?? ''}`.toLowerCase();
+        return words.every((word) => haystack.includes(word));
+      })
+      .sort((a, b) => b.installs - a.installs)
+      .slice(0, opts.limit);
+
+    return ok(matches.map((row) => ({ id: row.id, name: row.name, installs: row.installs })));
   }
 }
