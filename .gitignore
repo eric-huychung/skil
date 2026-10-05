@@ -32,3 +32,6 @@ ui-example/
 
 # vendor clone kept locally for reference only, not part of this project
 skills-manager-main/
+
+# sync-market run summary
+.sync-market/
