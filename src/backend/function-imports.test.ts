@@ -12,6 +12,7 @@ const apiEntries = [
   'api/market/search.ts',
   'api/market/preview.ts',
   'api/market/suggested.ts',
+  'api/market/creators.ts',
 ].map((file) => resolve(repoRoot, file));
 
 function relativeImportSpecifiers(source: string): string[] {

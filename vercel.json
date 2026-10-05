@@ -20,6 +20,9 @@
     },
     "api/market/suggested.ts": {
       "includeFiles": "{dist/**,data/market-picks.yaml}"
+    },
+    "api/market/creators.ts": {
+      "includeFiles": "{dist/**,data/market-creators.yaml}"
     }
   },
   "headers": [

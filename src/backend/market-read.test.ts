@@ -1,8 +1,18 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ok } from '../core/result.js';
 import { InMemoryMarketStore } from './in-memory-market-store.js';
 import type { MarketSkillsClient } from './market-client.js';
-import { handleMarketPreviewRequest, handleMarketSearchRequest, handleShelvesRequest, handleSuggestedRequest } from './market-read.js';
+import { loadMarketCreators } from './market-creators.js';
+import {
+  handleCreatorsRequest,
+  handleMarketPreviewRequest,
+  handleMarketSearchRequest,
+  handleShelvesRequest,
+  handleSuggestedRequest,
+} from './market-read.js';
 
 function listing(id: string, overrides: Partial<{ name: string; installs: number }> = {}) {
   return {
@@ -393,5 +403,171 @@ describe('handleMarketPreviewRequest', () => {
     expect(body.message).toBe('Market index is temporarily unavailable.');
     expect(body.message).not.toContain('connection lost');
     expect(body.message).not.toContain('db.internal');
+  });
+});
+
+/** 30-entry creators YAML: an alias group first (pinned), one official owner, then fillers. */
+function writeCreatorsYaml(contents?: string): string {
+  const fillers = Array.from({ length: 27 }, (_, i) => `  - { slug: filler-${i}, label: Filler ${i}, owners: [filler-${i}] }`);
+  const yaml =
+    contents ??
+    [
+      'updatedAt: 2026-10-04',
+      'techCutoff: 0.4',
+      'officialFetchedAt: 2026-10-04',
+      'officialOwners: [vercel-labs]',
+      'blocked: []',
+      'creators:',
+      '  - { slug: matt, label: Matt Pocock, owners: [mattpocock, mattpocock-labs], pinned: true }',
+      '  - { slug: vercel-labs, label: Vercel Labs, owners: [vercel-labs] }',
+      '  - { slug: quiet, label: Quiet Person, owners: [quiet] }',
+      ...fillers,
+    ].join('\n');
+  const path = join(mkdtempSync(join(tmpdir(), 'creators-')), 'market-creators.yaml');
+  writeFileSync(path, yaml);
+  return path;
+}
+
+async function upsertSkill(store: InMemoryMarketStore, id: string, source: string, name: string, installs: number) {
+  await store.upsertListing(
+    { id, name, slug: name, source, installs, installUrl: `https://skills.sh/${id}`, url: `https://github.com/${source}` },
+    '2026-01-01T00:00:00.000Z',
+  );
+}
+
+async function creatorsStore(): Promise<InMemoryMarketStore> {
+  const store = new InMemoryMarketStore();
+  await upsertSkill(store, 'mattpocock/skills/tdd', 'mattpocock/skills', 'tdd', 100);
+  await upsertSkill(store, 'mattpocock/skills/grill', 'mattpocock/skills', 'grill', 10);
+  await upsertSkill(store, 'mattpocock-labs/extra/tdd', 'mattpocock-labs/extra', 'tdd', 50);
+  await upsertSkill(store, 'vercel-labs/agent-skills/react', 'vercel-labs/agent-skills', 'react', 7);
+  return store;
+}
+
+describe('handleCreatorsRequest', () => {
+  it('lists every creator in YAML order, summing stats across an alias group', async () => {
+    const store = await creatorsStore();
+    const creatorsPath = writeCreatorsYaml();
+
+    const response = await handleCreatorsRequest(new Request('http://localhost/api/market/creators'), {
+      store,
+      creatorsPath,
+    });
+    const body = (await response.json()) as { data: Array<Record<string, unknown>>; meta: unknown };
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('public, s-maxage=3600, stale-while-revalidate=1800');
+    expect(body.meta).toEqual({ updatedAt: '2026-10-04', installsSource: 'skills.sh' });
+    expect(body.data).toHaveLength(30);
+    expect(body.data.slice(0, 3)).toEqual([
+      { slug: 'matt', label: 'Matt Pocock', official: false, pinned: true, skillCount: 3, totalInstalls: 160 },
+      { slug: 'vercel-labs', label: 'Vercel Labs', official: true, pinned: false, skillCount: 1, totalInstalls: 7 },
+      { slug: 'quiet', label: 'Quiet Person', official: false, pinned: false, skillCount: 0, totalInstalls: 0 },
+    ]);
+    expect(body.data[3]?.slug).toBe('filler-0');
+  });
+
+  it('reads data/market-creators.yaml by default', async () => {
+    const response = await handleCreatorsRequest(new Request('http://localhost/api/market/creators'), {
+      store: new InMemoryMarketStore(),
+    });
+    const body = (await response.json()) as { data: Array<{ slug: string }> };
+
+    expect(response.status).toBe(200);
+    expect(body.data.map((card) => card.slug)).toEqual(loadMarketCreators().creators.map((creator) => creator.slug));
+  });
+
+  it('returns one creator with skills grouped by repo, not deduped by name, topics [] before labels', async () => {
+    const store = await creatorsStore();
+
+    const response = await handleCreatorsRequest(new Request('http://localhost/api/market/creators?slug=matt'), {
+      store,
+      creatorsPath: writeCreatorsYaml(),
+    });
+    const body = (await response.json()) as { data: unknown };
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('public, s-maxage=3600, stale-while-revalidate=1800');
+    expect(body.data).toEqual({
+      slug: 'matt',
+      label: 'Matt Pocock',
+      official: false,
+      repos: [
+        {
+          source: 'mattpocock/skills',
+          skills: [
+            { id: 'mattpocock/skills/tdd', name: 'tdd', installs: 100, topics: [] },
+            { id: 'mattpocock/skills/grill', name: 'grill', installs: 10, topics: [] },
+          ],
+        },
+        {
+          source: 'mattpocock-labs/extra',
+          skills: [{ id: 'mattpocock-labs/extra/tdd', name: 'tdd', installs: 50, topics: [] }],
+        },
+      ],
+    });
+  });
+
+  it('returns a creator with no indexed skills as empty repos', async () => {
+    const response = await handleCreatorsRequest(new Request('http://localhost/api/market/creators?slug=quiet'), {
+      store: await creatorsStore(),
+      creatorsPath: writeCreatorsYaml(),
+    });
+    const body = (await response.json()) as { data: { repos: unknown[] } };
+
+    expect(response.status).toBe(200);
+    expect(body.data.repos).toEqual([]);
+  });
+
+  it('returns 404 for an unknown slug', async () => {
+    const response = await handleCreatorsRequest(new Request('http://localhost/api/market/creators?slug=nobody'), {
+      store: await creatorsStore(),
+      creatorsPath: writeCreatorsYaml(),
+    });
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(404);
+    expect(body.error).toBe('not_found');
+  });
+
+  it('returns 500 config_error when the YAML is malformed', async () => {
+    const response = await handleCreatorsRequest(new Request('http://localhost/api/market/creators'), {
+      store: await creatorsStore(),
+      creatorsPath: writeCreatorsYaml('creators: [oops'),
+    });
+    const body = (await response.json()) as { error: string; message: string };
+
+    expect(response.status).toBe(500);
+    expect(body.error).toBe('config_error');
+    expect(body.message).not.toContain('market-creators');
+  });
+
+  it('returns 500 store_error without leaking the store error on the list', async () => {
+    const store = await creatorsStore();
+    store.listOwnerStats = async () => ({ ok: false, error: new Error('connection lost at db.internal:5432') });
+
+    const response = await handleCreatorsRequest(new Request('http://localhost/api/market/creators'), {
+      store,
+      creatorsPath: writeCreatorsYaml(),
+    });
+    const body = (await response.json()) as { error: string; message: string };
+
+    expect(response.status).toBe(500);
+    expect(body.error).toBe('store_error');
+    expect(body.message).not.toContain('db.internal');
+  });
+
+  it('returns 500 store_error on the detail', async () => {
+    const store = await creatorsStore();
+    store.listSkillsByOwners = async () => ({ ok: false, error: new Error('boom') });
+
+    const response = await handleCreatorsRequest(new Request('http://localhost/api/market/creators?slug=matt'), {
+      store,
+      creatorsPath: writeCreatorsYaml(),
+    });
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(500);
+    expect(body.error).toBe('store_error');
   });
 });
