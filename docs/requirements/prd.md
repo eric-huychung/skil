@@ -13,7 +13,7 @@ Developers accumulate AI skills as folders (`SKILL.md`) across `.cursor` / `.cla
 - **Skills** = folders with `SKILL.md`. Disk owns the body. One catalog, many `paths`.
 - **Live pair** = `.agents` + `.claude`. On when it lives in both. There is no "on for Cursor, off for Claude."
 - **Parked** = off-but-yours, under `.skil/parked/…`. Toggle-on restores (or re-fetches a market skill whose parked copy is gone).
-- **Leftover** = every other root we still scan. Leftover-only skills/commands copy into the live pair on scan; leftover path stays until cleanup. Parked leftovers stay off. Glob leftover rules stay path-scoped.
+- **Leftover** = every other root we still scan. Leftover-only skills/commands copy into the live pair on scan; leftover-only rules upsert into `AGENTS.md`. Leftover path stays until cleanup. Parked leftovers stay off.
 - **Deprecated** = leftover already retired. Recoverable, never re-scanned.
 - **Commands** = named groups of skill ids, once per project. A live command is a human-only skill folder in both trees. Filing does not turn the filed skill on.
 - **Rules** = shared law in `AGENTS.md` (togglable). Glob files (`.cursor/rules/*.mdc`, etc.) stay on disk, read-only.
@@ -29,10 +29,10 @@ We wrap skills.sh (OIDC backend) and `npx skills add`. We do not host a marketpl
 ## Loop
 
 1. Connect a repo (optional). Discover / Skills / Commands work without one. First toggle can pick a folder.
-2. Scan unions live + leftover + parked. Leftover-only skills/commands copy into the live pair. Does not fold leftover glob rules into AGENTS.md.
+2. Scan unions live + leftover + parked. Leftover-only skills/commands copy into the live pair. Leftover-only rules upsert into AGENTS.md.
 3. Create `/build`, file skills onto it. Filing does not move folders.
 4. Toggle on → both live trees. Discover `+` is the same write. Toggle off → parked, row stays.
-5. Sync leftover cleanup: drop ready duplicates, resolve drift, import leftover glob rules. Parked is never touched.
+5. Sync leftover cleanup: drop ready duplicates, resolve drift. Parked is never touched.
 6. Doctor on Commands. Suggest on Discover. Settings holds the BYOK key.
 
 ## GUI
@@ -79,7 +79,7 @@ GUI keeps Discover browse, leftover cleanup, DiskWatch, recents, encrypted keys.
 
 ## Out of scope
 
-Dock picker, five-way export, Inbox, scanning unstamped `commands/` as map input, cross-project import, skill authoring, our own registry, team `.yml` sync, last-folder as SoT (recents are a convenience, not the map), live 3-way merge, auto-sync of market skills, auto-fold leftover glob rules into AGENTS.md, login / SSO / analytics, IDE extensions, global (`~/`) skill library, `skil run`, SQLite, "used properly" eval, usage parsers besides Claude, stamps on ordinary `SKILL.md`, modeling runtime overlap (Cursor also loading `.agents`).
+Dock picker, five-way export, Inbox, scanning unstamped `commands/` as map input, cross-project import, skill authoring, our own registry, team `.yml` sync, last-folder as SoT (recents are a convenience, not the map), live 3-way merge, auto-sync of market skills, login / SSO / analytics, IDE extensions, global (`~/`) skill library, `skil run`, SQLite, "used properly" eval, usage parsers besides Claude, stamps on ordinary `SKILL.md`, modeling runtime overlap (Cursor also loading `.agents`).
 
 ## Open questions
 

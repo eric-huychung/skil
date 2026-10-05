@@ -27,7 +27,7 @@ Tick as you go. Note the weird stuff.
 - [ ] Pick a folder. Path shows up. Re-scan works
 - [ ] Recents: last folders show, click to switch, drop one
 - [ ] Disconnect. Discover still works. First toggle asks for a folder
-- [ ] Leftover warning if `.cursor` / old roots exist. Cleanup: leftover-only skills/commands already live after scan (path is safe to remove). Import leftover glob rules. Drop dupes. Conflicts stay a picker. Parked stays off
+- [ ] Leftover warning if `.cursor` / old roots exist. Cleanup: leftover-only skills/commands/rules already live after scan (path is safe to remove). Drop dupes. Conflicts stay a picker. Parked stays off
 - [ ] Switch folder → other project’s map, not a mashup
 
 ### Discover
@@ -100,7 +100,7 @@ Run from the **project folder**. `skil --help` is source of truth.
 
 ### Skills
 
-- [ ] `skil scan` — leftover-only skills/commands copy into the live pair. Leftover glob rules stay path-scoped. Leftover path stays
+- [ ] `skil scan` — leftover-only skills/commands copy into the live pair. Leftover-only rules upsert into AGENTS.md. Leftover path stays
 - [ ] `skil skills` — on / off
 - [ ] `skil skills enable tdd` → both live trees
 - [ ] `skil skills disable tdd` → parked, still in catalog

@@ -18,7 +18,7 @@ Product: `docs/requirements/prd.md`. History: `docs/design/decisions.md`. Discov
 
 Disk owns skill/rule bodies. We own: the catalog, the one command list, and where each id currently lives. One `.skil/state.json`.
 
-**Scan** unions live + leftover + parked. Leftover-only skills/commands copy into the live pair (leftover path stays). A missing live half is filled from the live copy that is already there. Parked leftovers stay off. Leftover glob rules stay path-scoped. **Toggle** is on → live pair, off → parked. Market `+` writes the live pair directly.
+**Scan** unions live + leftover + parked. Leftover-only skills/commands copy into the live pair; leftover-only rules upsert into `AGENTS.md` (leftover path stays). A missing live half is filled from the live copy that is already there. Parked leftovers stay off. **Toggle** is on → live pair, off → parked. Market `+` writes the live pair directly.
 
 Filing edits a command's `## Skills` list. It does not install or enable the filed skill. `CLAUDE.md` is `@AGENTS.md` plus Claude-only notes.
 
@@ -83,12 +83,12 @@ One OpenAI-chat-completions client. Presets: `anthropic` (`claude-haiku-4-5`), `
 ### Invariants
 
 - **On/off is a path.** Both live paths → on. Only parked → off. Leftover-only skills/commands become on after scan (leftover path stays until cleanup). `enabled` is never persisted.
-- Scan copies leftover-only skills/commands into the live pair and fills a missing live half. Never invents a command from an unstamped skill folder. Never writes a leftover or deprecated root. Parked leftovers stay off. Glob leftover rules stay path-scoped.
+- Scan copies leftover-only skills/commands into the live pair, leftover-only rules into `AGENTS.md`, and fills a missing live half. Never invents a command from an unstamped skill folder. Never writes a leftover or deprecated root. Parked leftovers stay off.
 - Same hash at a new path is a rename (keep the id). Every path gone → drop the id.
 - One catalog, one command list. Market vs Project is a display filter (`source`), not two states.
 - Command names store without `/` (`create('/build')` → `build`). Name collision on enable is an error — no auto-prefix.
 - Filing never enables. A parked command is not rewritten until toggled back on.
-- Glob rules stay on disk, never folded into `AGENTS.md`, never toggled.
+- Glob leftover files stay on disk until cleanup. Leftover-only copies upsert into `AGENTS.md` on scan. Shared sections toggle; leftover glob files do not.
 
 ## Adapters
 
