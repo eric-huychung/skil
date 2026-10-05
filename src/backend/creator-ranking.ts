@@ -3,13 +3,10 @@
  * Score = installs of a creator's single most-installed skill. No I/O here.
  */
 
-// Local types until the shared market types land; same shape as a `market_owner_stats` row.
-export interface OwnerStats {
-  owner: string;
-  skillCount: number;
-  totalInstalls: number;
-  bestInstalls: number;
-}
+import { CREATORS_SHELF_SIZE } from './market-creators.js';
+import type { OwnerStats } from './market-types.js';
+
+export type { OwnerStats } from './market-types.js';
 
 /** One creator slot's owners, e.g. `lark` = `larksuite` + `open.feishu.cn`. */
 export interface AliasGroup {
@@ -38,8 +35,6 @@ export interface SelectThirtyInput {
   passes?: (candidate: CreatorCandidate) => boolean;
   size?: number;
 }
-
-export const CREATOR_SLOTS = 30;
 
 const norm = (owner: string): string => owner.toLowerCase();
 
@@ -85,7 +80,7 @@ export function rankCandidates(candidates: readonly CreatorCandidate[]): Creator
 
 /** Pins first (bypassing the gate), then gate passers in rank order, minus blocked owners; at most 30. */
 export function selectThirty(input: SelectThirtyInput): SelectedCreator[] {
-  const size = input.size ?? CREATOR_SLOTS;
+  const size = input.size ?? CREATORS_SHELF_SIZE;
   const passes = input.passes ?? (() => true);
   const blocked = new Set(input.blocked.map(norm));
   const isBlocked = (owners: readonly string[]) => owners.some((owner) => blocked.has(norm(owner)));
