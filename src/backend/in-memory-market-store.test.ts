@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isOk } from '../core/result.js';
 import { InMemoryMarketStore } from './in-memory-market-store.js';
-import type { SkillScore } from './market-types.js';
+import type { CreatorCheck, SkillScore } from './market-types.js';
 
 function listing(id: string, overrides: Partial<{ name: string; installs: number }> = {}) {
   return {
@@ -533,5 +533,49 @@ describe('InMemoryMarketStore detail (T15b)', () => {
     const pool = await store.listLabelPool();
 
     expect(isOk(pool) && pool.value[0]?.labelExcerpt).toBe('Body.');
+  });
+});
+
+describe('InMemoryMarketStore creator checks', () => {
+  function check(creatorKey: string, overrides: Partial<CreatorCheck> = {}): CreatorCheck {
+    return {
+      creatorKey,
+      stateHash: `hash-${creatorKey}`,
+      techProbability: 0.9,
+      domain: 'software-dev',
+      modelVersion: 'jev-1',
+      ...overrides,
+    };
+  }
+
+  it('getCreatorChecks returns saved rows for the asked keys and omits missing ones', async () => {
+    const store = new InMemoryMarketStore();
+    await store.saveCreatorCheck(check('antfu'));
+    await store.saveCreatorCheck(check('larksuite+open.feishu.cn'));
+
+    const rows = await store.getCreatorChecks(['antfu', 'nobody']);
+
+    expect(isOk(rows) && rows.value).toEqual([check('antfu')]);
+  });
+
+  it('saveCreatorCheck replaces the row for the same creatorKey', async () => {
+    const store = new InMemoryMarketStore();
+    await store.saveCreatorCheck(check('antfu'));
+    await store.saveCreatorCheck(check('antfu', { stateHash: 'new-hash', techProbability: 0.2, domain: 'other' }));
+
+    const rows = await store.getCreatorChecks(['antfu']);
+
+    expect(isOk(rows) && rows.value).toEqual([
+      check('antfu', { stateHash: 'new-hash', techProbability: 0.2, domain: 'other' }),
+    ]);
+  });
+
+  it('getCreatorChecks with no keys returns []', async () => {
+    const store = new InMemoryMarketStore();
+    await store.saveCreatorCheck(check('antfu'));
+
+    const rows = await store.getCreatorChecks([]);
+
+    expect(isOk(rows) && rows.value).toEqual([]);
   });
 });

@@ -343,12 +343,21 @@ export class InMemoryMarketStore implements MarketStore {
 
   // --- T12a creatorChecks ---
 
-  async getCreatorChecks(_keys: string[]): Promise<Result<CreatorCheck[]>> {
-    return err(new Error('not implemented: getCreatorChecks (T12a)'));
+  /** creatorKey -> cached tech-gate row */
+  private creatorChecks = new Map<string, CreatorCheck>();
+
+  async getCreatorChecks(keys: string[]): Promise<Result<CreatorCheck[]>> {
+    const rows: CreatorCheck[] = [];
+    for (const key of new Set(keys)) {
+      const row = this.creatorChecks.get(key);
+      if (row) rows.push({ ...row });
+    }
+    return ok(rows);
   }
 
-  async saveCreatorCheck(_check: CreatorCheck): Promise<Result<void>> {
-    return err(new Error('not implemented: saveCreatorCheck (T12a)'));
+  async saveCreatorCheck(check: CreatorCheck): Promise<Result<void>> {
+    this.creatorChecks.set(check.creatorKey, { ...check });
+    return ok(undefined);
   }
 
   // --- T21 search ---
