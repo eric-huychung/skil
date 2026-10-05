@@ -724,3 +724,195 @@ describe('MarketSync.labelPool', () => {
     expect(await store.listLabels(TAXONOMY_VERSION)).toEqual(before);
   });
 });
+
+describe('MarketSync.rebuildShelves', () => {
+  const at = '2026-01-01T00:00:00.000Z';
+
+  async function seedFields(store: InMemoryMarketStore, slugs: string[]) {
+    await store.upsertRole({ slug: 'swe', label: 'SWE', sortOrder: 1, active: true });
+    for (const slug of slugs) {
+      await store.upsertField({ slug, roleSlug: 'swe', label: slug, q: slug, sortOrder: 1, shelfSize: 30, active: true });
+    }
+  }
+
+  /** `owner/repo/skill` ids, with `source` = `owner/repo` like the real index. */
+  async function seedSkill(store: InMemoryMarketStore, id: string, installs: number) {
+    const cut = id.lastIndexOf('/');
+    await store.upsertListing(
+      { ...listingItem(id, installs), name: id.slice(cut + 1), slug: id.slice(cut + 1), source: id.slice(0, cut) },
+      at,
+    );
+  }
+
+  /** Saves a current-version label for each pool row named in `probabilities` (`null` = errored). */
+  async function label(store: InMemoryMarketStore, probabilities: Record<string, Record<string, number> | null>) {
+    const pool = await store.listLabelPool();
+    const rows = isOk(pool) ? pool.value : [];
+    const scores = rows
+      .filter((row) => row.id in probabilities)
+      .map((row) => {
+        const p = probabilities[row.id];
+        return {
+          id: row.id,
+          status: p ? ('ok' as const) : ('error' as const),
+          probabilities: p ?? {},
+          stateHash: stateHash(buildLabelState(row)),
+          modelVersion: 'fake',
+        };
+      });
+    await store.saveLabels(TAXONOMY_VERSION, scores);
+  }
+
+  async function shelfIds(store: InMemoryMarketStore, slug: string): Promise<string[] | undefined> {
+    const shelves = await store.listShelves();
+    return isOk(shelves)
+      ? shelves.value.flatMap((role) => role.fields).find((f) => f.slug === slug)?.skills.map((s) => s.id)
+      : undefined;
+  }
+
+  async function seedOldShelves(store: InMemoryMarketStore) {
+    await store.replaceShelves([{ fieldSlug: 'frontend', entries: [{ id: 'old/r/kept', moreCount: 0 }] }], 'old-version');
+  }
+
+  it('returns incomplete_coverage and leaves shelves untouched when an active row has no label', async () => {
+    const store = new InMemoryMarketStore();
+    await seedFields(store, ['frontend', 'integrations']);
+    await seedSkill(store, 'old/r/kept', 1);
+    await seedSkill(store, 'a/r/one', 10);
+    await seedSkill(store, 'b/r/two', 20);
+    await seedOldShelves(store);
+    await label(store, { 'old/r/kept': { frontend: 0.9 }, 'a/r/one': { frontend: 0.9 } });
+    const replaceShelves = vi.spyOn(store, 'replaceShelves');
+
+    const result = await syncOf(store, fakeClient([])).rebuildShelves({});
+
+    expect(isOk(result) && result.value).toMatchObject({
+      written: false,
+      reason: 'incomplete_coverage',
+      pool: 3,
+      missing: 1,
+    });
+    expect(replaceShelves).not.toHaveBeenCalled();
+    expect(await shelfIds(store, 'frontend')).toEqual(['old/r/kept']);
+    const meta = await store.getShelfMeta();
+    expect(isOk(meta) && meta.value?.taxonomyVersion).toBe('old-version');
+  });
+
+  it('counts a label whose state hash no longer matches the row as missing coverage', async () => {
+    const store = new InMemoryMarketStore();
+    await seedFields(store, ['frontend']);
+    await seedSkill(store, 'a/r/one', 10);
+    await label(store, { 'a/r/one': { frontend: 0.9 } });
+    await store.setDetail('a/r/one', { description: 'changed since labeling', hash: 'h2' });
+
+    const result = await syncOf(store, fakeClient([])).rebuildShelves({});
+
+    expect(isOk(result) && result.value).toMatchObject({ written: false, reason: 'incomplete_coverage', missing: 1 });
+  });
+
+  it('writes every shelf in one replaceShelves call stamped with TAXONOMY_VERSION', async () => {
+    const store = new InMemoryMarketStore();
+    await seedFields(store, ['frontend', 'testing', 'integrations']);
+    await seedSkill(store, 'a/r/popular-unsure', 1_000);
+    await seedSkill(store, 'b/r/quiet-sure', 10);
+    await seedSkill(store, 'c/r/tester', 50);
+    await label(store, {
+      'a/r/popular-unsure': { frontend: 0.7, testing: 0.1, integrations: 0.2 },
+      'b/r/quiet-sure': { frontend: 0.85, testing: 0.1, integrations: 0.1 },
+      'c/r/tester': { frontend: 0.1, testing: 0.9, integrations: 0.1 },
+    });
+    const replaceShelves = vi.spyOn(store, 'replaceShelves');
+
+    const result = await syncOf(store, fakeClient([])).rebuildShelves({});
+
+    expect(isOk(result) && result.value.written).toBe(true);
+    expect(replaceShelves).toHaveBeenCalledTimes(1);
+    expect(replaceShelves.mock.calls[0]?.[1]).toBe(TAXONOMY_VERSION);
+    expect(await shelfIds(store, 'frontend')).toEqual(['b/r/quiet-sure', 'a/r/popular-unsure']);
+    expect(await shelfIds(store, 'testing')).toEqual(['c/r/tester']);
+    const meta = await store.getShelfMeta();
+    expect(isOk(meta) && meta.value?.taxonomyVersion).toBe(TAXONOMY_VERSION);
+  });
+
+  it('rebuilds with errored and below-threshold rows unlabeled, never on integrations, and reports shelf health', async () => {
+    const store = new InMemoryMarketStore();
+    await seedFields(store, ['frontend', 'integrations']);
+    await seedSkill(store, 'old/r/kept', 1);
+    await seedOldShelves(store);
+    for (const id of ['a/r/one', 'a/r/two', 'b/r/three', 'c/r/unsure', 'd/r/errored', 'e/r/blank']) {
+      await seedSkill(store, id, 10);
+    }
+    await label(store, {
+      'old/r/kept': { frontend: 0.1, integrations: 0.1 },
+      'a/r/one': { frontend: 0.9, integrations: 0.1 },
+      'a/r/two': { frontend: 0.7, integrations: 0.45 },
+      'b/r/three': { frontend: 0.65, integrations: 0.1 },
+      'c/r/unsure': { frontend: 0.5, integrations: 0.55 },
+      'd/r/errored': null,
+      'e/r/blank': { frontend: 0, integrations: 0 },
+    });
+
+    const result = await syncOf(store, fakeClient([])).rebuildShelves({});
+
+    expect(isOk(result) && result.value).toEqual({
+      written: true,
+      pool: 7,
+      missing: 0,
+      errored: 1,
+      unlabeled: 4,
+      unlabeledShare: 4 / 7,
+      reviewBand: 2,
+      fields: [
+        { slug: 'frontend', count: 3, distinctOwners: 2, topOwnerShare: 2 / 3 },
+        { slug: 'integrations', count: 0, distinctOwners: 0, topOwnerShare: 0 },
+      ],
+    });
+    expect(await shelfIds(store, 'integrations')).toEqual([]);
+    expect(await shelfIds(store, 'frontend')).toEqual(['a/r/one', 'a/r/two', 'b/r/three']);
+  });
+
+  it('dryRun builds and reports but writes nothing', async () => {
+    const store = new InMemoryMarketStore();
+    await seedFields(store, ['frontend']);
+    await seedSkill(store, 'old/r/kept', 1);
+    await seedSkill(store, 'a/r/one', 10);
+    await seedOldShelves(store);
+    await label(store, { 'old/r/kept': { frontend: 0.1 }, 'a/r/one': { frontend: 0.9 } });
+    const replaceShelves = vi.spyOn(store, 'replaceShelves');
+
+    const result = await syncOf(store, fakeClient([])).rebuildShelves({ dryRun: true });
+
+    expect(isOk(result) && result.value).toMatchObject({
+      written: false,
+      fields: [{ slug: 'frontend', count: 1, distinctOwners: 1, topOwnerShare: 1 }],
+    });
+    expect(isOk(result) && result.value.reason).toBeUndefined();
+    expect(replaceShelves).not.toHaveBeenCalled();
+    expect(await shelfIds(store, 'frontend')).toEqual(['old/r/kept']);
+  });
+
+  it('returns the store error and keeps the old shelves when replaceShelves fails', async () => {
+    const store = new InMemoryMarketStore();
+    await seedFields(store, ['frontend']);
+    await seedSkill(store, 'old/r/kept', 1);
+    await seedOldShelves(store);
+    await label(store, { 'old/r/kept': { frontend: 0.9 } });
+    vi.spyOn(store, 'replaceShelves').mockResolvedValueOnce(err(new Error('rpc failed')));
+
+    const result = await syncOf(store, fakeClient([])).rebuildShelves({});
+
+    expect(!isOk(result) && result.error.message).toBe('rpc failed');
+    expect(await shelfIds(store, 'frontend')).toEqual(['old/r/kept']);
+  });
+
+  it('fails closed on an empty pool instead of wiping every shelf', async () => {
+    const store = new InMemoryMarketStore();
+    await seedFields(store, ['frontend']);
+    const replaceShelves = vi.spyOn(store, 'replaceShelves');
+
+    const result = await syncOf(store, fakeClient([])).rebuildShelves({});
+
+    expect(isOk(result)).toBe(false);
+    expect(replaceShelves).not.toHaveBeenCalled();
+  });
+});

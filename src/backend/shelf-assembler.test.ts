@@ -1,8 +1,52 @@
 import { describe, expect, it } from 'vitest';
-import type { AssembledShelfEntries, MarketField } from './market-types.js';
+import type { AssembledShelfEntries, MarketClassifyRow, MarketField } from './market-types.js';
 import { GOLD_LABELS, GOLD_LISTINGS } from './shelf-gold.fixture.js';
 import { AZURE_LABELS, AZURE_LISTINGS, LARK_LABELS, LARK_LISTINGS } from './shelf-suite.fixture.js';
-import { buildShelves, dedupByName } from './shelf-assembler.js';
+import {
+  buildShelves,
+  CONFIDENT_PROBABILITY,
+  dedupByName,
+  OWNER_CAP,
+  shelfTopics,
+  type ShelfInputRow,
+} from './shelf-assembler.js';
+
+const THRESHOLD = 0.6;
+const MAX_TOPICS = 3;
+
+/** `owner/repo/skill` id → assembler row; source and owner come from the id like the real index. */
+function input(id: string, installs: number, probabilities: Record<string, number>, name?: string): ShelfInputRow {
+  const cut = id.lastIndexOf('/');
+  return {
+    id,
+    name: name ?? id.slice(cut + 1),
+    source: id.slice(0, cut),
+    owner: id.split('/')[0]!,
+    installs,
+    probabilities,
+  };
+}
+
+/** Listing + slug-label fixtures → rows with each labeled slug at a confident probability. */
+function shelfRows(
+  listings: MarketClassifyRow[],
+  labels: Array<{ id: string; fieldSlugs: string[] }>,
+  probability = 0.9,
+): ShelfInputRow[] {
+  const slugsById = new Map(labels.map((label) => [label.id, label.fieldSlugs]));
+  return listings.map((row) =>
+    input(
+      row.id,
+      row.installs,
+      Object.fromEntries((slugsById.get(row.id) ?? []).map((slug) => [slug, probability])),
+      row.name,
+    ),
+  );
+}
+
+function build(rows: ShelfInputRow[], fields: MarketField[], ownerCap = OWNER_CAP): AssembledShelfEntries[] {
+  return buildShelves({ rows, fields, threshold: THRESHOLD, maxTopics: MAX_TOPICS, ownerCap });
+}
 
 function idsOn(shelves: AssembledShelfEntries[], slug: string): string[] | undefined {
   return shelves.find((shelf) => shelf.fieldSlug === slug)?.entries.map((entry) => entry.id);
@@ -39,7 +83,7 @@ describe('buildShelves', () => {
   ];
 
   it('places gold skills on the right shelves and drops the clone', () => {
-    const shelves = buildShelves({ listings: GOLD_LISTINGS, labels: GOLD_LABELS, fields });
+    const shelves = build(shelfRows(GOLD_LISTINGS, GOLD_LABELS), fields);
     const byField = Object.fromEntries(shelves.map((shelf) => [shelf.fieldSlug, shelf.entries.map((entry) => entry.id)]));
 
     expect(byField.frontend).toEqual([
@@ -54,38 +98,61 @@ describe('buildShelves', () => {
     expect(byField.frontend).not.toContain('clone/frontend-design');
   });
 
-  it('caps a field at shelfSize and keeps leftover unlabeled skills on integrations', () => {
-    const listings = [
-      { id: 'a/big', name: 'big', slug: 'big', installs: 50, description: null, hash: null },
-      { id: 'a/small', name: 'small', slug: 'small', installs: 10, description: null, hash: null },
-      { id: 'a/mystery', name: 'mystery', slug: 'mystery', installs: 5, description: null, hash: null },
+  it('caps a field at shelfSize and never dumps unlabeled skills on integrations', () => {
+    const rows = [
+      input('a/r/big', 50, { frontend: 0.9 }),
+      input('a/r/small', 10, { frontend: 0.9 }),
+      input('a/r/mystery', 5, { frontend: 0.59, integrations: 0.4 }),
+      input('a/r/blank', 1, {}),
     ];
-    const shelves = buildShelves({
-      listings,
-      labels: [
-        { id: 'a/big', fieldSlugs: ['frontend'] },
-        { id: 'a/small', fieldSlugs: ['frontend'] },
-        { id: 'a/mystery', fieldSlugs: [] },
-      ],
-      fields: [field('frontend', 1), field('integrations')],
-    });
+    const shelves = build(rows, [field('frontend', 1), field('integrations')]);
 
-    expect(idsOn(shelves, 'frontend')).toEqual(['a/big']);
-    expect(idsOn(shelves, 'integrations')).toEqual(['a/mystery']);
+    expect(idsOn(shelves, 'frontend')).toEqual(['a/r/big']);
+    expect(idsOn(shelves, 'integrations')).toEqual([]);
   });
 
-  it('drops unknown slugs and keeps at most two fields per skill', () => {
-    const listings = [
-      { id: 'a/one', name: 'one', slug: 'one', installs: 1, description: null, hash: null },
-    ];
-    const shelves = buildShelves({
-      listings,
-      labels: [{ id: 'a/one', fieldSlugs: ['nope', 'frontend', 'testing', 'review'] }],
-      fields: [field('frontend'), field('testing'), field('review'), field('integrations')],
-    });
+  it('uses the threshold inclusively and keeps at most maxTopics known fields, highest first', () => {
+    const rows = [input('a/r/one', 1, { nope: 0.99, frontend: 0.7, testing: 0.95, review: 0.6, prd: 0.8, workflow: 0.2 })];
+    const shelves = build(rows, [field('frontend'), field('testing'), field('review'), field('prd'), field('workflow')]);
 
-    const on = shelves.filter((shelf) => shelf.entries.some((entry) => entry.id === 'a/one')).map((shelf) => shelf.fieldSlug);
-    expect(on).toEqual(['frontend', 'testing']);
+    const on = shelves.filter((shelf) => shelf.entries.some((entry) => entry.id === 'a/r/one')).map((shelf) => shelf.fieldSlug);
+    expect(on).toEqual(['frontend', 'testing', 'prd']);
+    expect(on).not.toContain('review');
+  });
+
+  it('ranks confident (tier 0) rows above lower-confidence (tier 1) rows, then by installs', () => {
+    const rows = [
+      input('a/r/popular-unsure', 1_000_000, { frontend: 0.79 }),
+      input('b/r/quiet-sure', 10, { frontend: 0.8 }),
+      input('c/r/mid-sure', 500, { frontend: 0.95 }),
+      input('d/r/mid-unsure', 900, { frontend: 0.65 }),
+    ];
+    const shelves = build(rows, [field('frontend')]);
+
+    expect(idsOn(shelves, 'frontend')).toEqual(['c/r/mid-sure', 'b/r/quiet-sure', 'a/r/popular-unsure', 'd/r/mid-unsure']);
+    expect(CONFIDENT_PROBABILITY).toBe(0.8);
+  });
+
+  it('dedups by name per shelf: the clone shows when the original is not on that shelf', () => {
+    const rows = [
+      input('a/r/tool', 100, { frontend: 0.9 }),
+      input('b/r/tool', 5, { frontend: 0.9, testing: 0.9 }),
+    ];
+    const shelves = build(rows, [field('frontend'), field('testing')]);
+
+    expect(idsOn(shelves, 'frontend')).toEqual(['a/r/tool']);
+    expect(idsOn(shelves, 'testing')).toEqual(['b/r/tool']);
+  });
+});
+
+describe('shelfTopics', () => {
+  it('drops unknown fields before applying the threshold and the max', () => {
+    expect(shelfTopics({ x: 0.99, a: 0.7, b: 0.65, c: 0.9, d: 0.61 }, new Set(['a', 'b', 'c', 'd']), 0.6, 3)).toEqual([
+      'c',
+      'a',
+      'b',
+    ]);
+    expect(shelfTopics({ a: 0.59 }, new Set(['a']), 0.6, 3)).toEqual([]);
   });
 });
 
@@ -102,7 +169,7 @@ describe('buildShelves suite collapse and owner cap', () => {
   }
 
   it('Azure: collapses each repo suite under its best-installed row and caps Microsoft at 5', () => {
-    const shelves = buildShelves({ listings: AZURE_LISTINGS, labels: AZURE_LABELS, fields: [field('cloud')] });
+    const shelves = build(shelfRows(AZURE_LISTINGS, AZURE_LABELS), [field('cloud')]);
     const cloud = shelves.find((shelf) => shelf.fieldSlug === 'cloud')!;
 
     expect(cloud.entries).toEqual([
@@ -118,7 +185,7 @@ describe('buildShelves suite collapse and owner cap', () => {
   });
 
   it('Lark: collapses the lark-* suite; a two-row prefix group stays expanded', () => {
-    const shelves = buildShelves({ listings: LARK_LISTINGS, labels: LARK_LABELS, fields: [field('chat')] });
+    const shelves = build(shelfRows(LARK_LISTINGS, LARK_LABELS), [field('chat')]);
     const chat = shelves.find((shelf) => shelf.fieldSlug === 'chat')!;
 
     expect(chat.entries).toEqual([
@@ -134,7 +201,7 @@ describe('buildShelves suite collapse and owner cap', () => {
     const labels = AZURE_LABELS.map((label) =>
       label.id === 'microsoft/github-copilot-for-azure/azure-rbac' ? { id: label.id, fieldSlugs: ['security'] } : label,
     );
-    const shelves = buildShelves({ listings: AZURE_LISTINGS, labels, fields: [field('cloud'), field('security')] });
+    const shelves = build(shelfRows(AZURE_LISTINGS, labels), [field('cloud'), field('security')]);
 
     expect(shelves.find((shelf) => shelf.fieldSlug === 'cloud')?.entries[0]).toEqual({
       id: 'microsoft/github-copilot-for-azure/azure-deploy',
@@ -146,17 +213,26 @@ describe('buildShelves suite collapse and owner cap', () => {
   });
 
   it('applies the owner cap before cutting to shelfSize', () => {
-    const shelves = buildShelves({
-      listings: AZURE_LISTINGS,
-      labels: AZURE_LABELS,
-      fields: [field('cloud', 3)],
-      ownerCap: 1,
-    });
+    const shelves = build(shelfRows(AZURE_LISTINGS, AZURE_LABELS), [field('cloud', 3)], 1);
 
     expect(idsOn(shelves, 'cloud')).toEqual([
       'microsoft/github-copilot-for-azure/azure-deploy',
       'vercel-labs/agent-skills/vercel-deploy',
       'hashicorp/agent-skills/terraform-style-guide',
+    ]);
+  });
+
+  it('a suite with any confident member ranks in tier 0', () => {
+    const rows = [
+      input('big/r/solo', 1_000_000, { cloud: 0.7 }),
+      input('ms/az/az-a', 10, { cloud: 0.7 }),
+      input('ms/az/az-b', 20, { cloud: 0.7 }),
+      input('ms/az/az-c', 5, { cloud: 0.9 }),
+    ];
+
+    expect(build(rows, [field('cloud')])[0]?.entries).toEqual([
+      { id: 'ms/az/az-b', moreCount: 2 },
+      { id: 'big/r/solo', moreCount: 0 },
     ]);
   });
 });
