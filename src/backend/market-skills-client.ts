@@ -13,11 +13,24 @@ import { parseSkillDescription, parseSkillExcerpt } from './parse-skill-descript
 const SKILLS_SH_SKILLS_URL = 'https://skills.sh/api/v1/skills';
 /** skills.sh max per page (docs: "Results per page, 1-500"). */
 const LISTING_PER_PAGE = 500;
+/** One stalled request must not block a whole batch, so each attempt is bounded. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+/** Retries after the first attempt (3 attempts total). */
+const DEFAULT_MAX_RETRIES = 2;
+/** Backoff before retry n is `base * 2^n`: 500ms, then 1s. */
+const DEFAULT_RETRY_BACKOFF_MS = 500;
 
 export interface MarketSkillsClientDeps {
   fetchImpl: typeof fetch;
   /** Mints a short-lived Vercel OIDC token, verified by skills.sh against oidc.vercel.com. */
   getOidcToken: () => Promise<string>;
+  /** Per-attempt timeout; a timeout is retried like a network error. */
+  requestTimeoutMs?: number;
+  /** Retries for timeouts, network errors, 429 and 5xx. Other 4xx are never retried. */
+  maxRetries?: number;
+  retryBackoffMs?: number;
+  /** Injectable so tests don't actually wait between attempts. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /**
@@ -169,15 +182,11 @@ export class RealMarketSkillsClient implements MarketSkillsClient {
   }
 
   async getAudit(id: string): Promise<Result<MarketAudit>> {
-    let response: Response;
-    try {
-      const token = await this.deps.getOidcToken();
-      response = await this.deps.fetchImpl(`${SKILLS_SH_SKILLS_URL}/audit/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } catch (error) {
-      return err(new Error(`Failed to reach skills.sh: ${(error as Error).message}`));
+    const fetched = await this.fetchWithRetry(`${SKILLS_SH_SKILLS_URL}/audit/${id}`);
+    if (!isOk(fetched)) {
+      return fetched;
     }
+    const response = fetched.value;
 
     if (response.status === 404) {
       return ok({ status: 'none' });
@@ -198,13 +207,11 @@ export class RealMarketSkillsClient implements MarketSkillsClient {
   }
 
   private async get<T>(url: string): Promise<Result<T>> {
-    let response: Response;
-    try {
-      const token = await this.deps.getOidcToken();
-      response = await this.deps.fetchImpl(url, { headers: { Authorization: `Bearer ${token}` } });
-    } catch (error) {
-      return err(new Error(`Failed to reach skills.sh: ${(error as Error).message}`));
+    const fetched = await this.fetchWithRetry(url);
+    if (!isOk(fetched)) {
+      return fetched;
     }
+    const response = fetched.value;
 
     const parsed = await parseJsonBody(response);
     if (!isOk(parsed)) {
@@ -217,5 +224,37 @@ export class RealMarketSkillsClient implements MarketSkillsClient {
     }
 
     return ok(body as T);
+  }
+
+  /**
+   * Every request goes through here: per-attempt timeout plus a bounded retry
+   * for transient failures (timeout, network error, 429, 5xx). After the last
+   * attempt a retryable status is returned as-is so callers build their usual
+   * error from the body; a thrown failure becomes an error Result.
+   */
+  private async fetchWithRetry(url: string): Promise<Result<Response>> {
+    const timeoutMs = this.deps.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    const maxRetries = this.deps.maxRetries ?? DEFAULT_MAX_RETRIES;
+    const backoffMs = this.deps.retryBackoffMs ?? DEFAULT_RETRY_BACKOFF_MS;
+    const sleep = this.deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+
+    for (let attempt = 0; ; attempt++) {
+      const canRetry = attempt < maxRetries;
+      try {
+        const token = await this.deps.getOidcToken();
+        const response = await this.deps.fetchImpl(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (!canRetry || !(response.status === 429 || response.status >= 500)) {
+          return ok(response);
+        }
+      } catch (error) {
+        if (!canRetry) {
+          return err(new Error(`Failed to reach skills.sh: ${(error as Error).message}`));
+        }
+      }
+      await sleep(backoffMs * 2 ** attempt);
+    }
   }
 }

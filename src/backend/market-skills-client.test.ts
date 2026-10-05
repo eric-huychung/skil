@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { isErr, isOk } from '../core/result.js';
-import { RealMarketSkillsClient } from './market-skills-client.js';
+import { RealMarketSkillsClient, type MarketSkillsClientDeps } from './market-skills-client.js';
 
 function fakeFetch(response: { status: number; body: unknown }) {
   return vi.fn(async () => ({
@@ -10,8 +10,8 @@ function fakeFetch(response: { status: number; body: unknown }) {
   })) as unknown as typeof fetch;
 }
 
-function client(fetchImpl: typeof fetch) {
-  return new RealMarketSkillsClient({ fetchImpl, getOidcToken: async () => 'test-oidc-token' });
+function client(fetchImpl: typeof fetch, extra: Partial<MarketSkillsClientDeps> = {}) {
+  return new RealMarketSkillsClient({ fetchImpl, getOidcToken: async () => 'test-oidc-token', sleep: async () => {}, ...extra });
 }
 
 function listingRow(id: string, overrides: Partial<{ installs: number; isDuplicate: boolean }> = {}) {
@@ -241,5 +241,118 @@ describe('RealMarketSkillsClient.getAudit', () => {
     const result = await client(fetchImpl).getAudit('a/one');
 
     expect(isOk(result) && result.value).toEqual({ status: 'fail' });
+  });
+});
+
+describe('RealMarketSkillsClient timeout and retry', () => {
+  const okBody = { id: 'a/one', source: 'a', slug: 'one', installs: 0, hash: 'h', files: null };
+  const res = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+
+  function sequence(...steps: Array<() => Promise<unknown>>) {
+    let i = 0;
+    return vi.fn(async () => steps[Math.min(i++, steps.length - 1)]!()) as unknown as typeof fetch;
+  }
+
+  it('aborts a stalled request after the timeout and returns an error', async () => {
+    const fetchImpl = vi.fn(
+      (_url: unknown, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        }),
+    ) as unknown as typeof fetch;
+
+    const result = await client(fetchImpl, { requestTimeoutMs: 10, maxRetries: 0 }).getSkill('a/one');
+
+    expect(isErr(result) && result.error.message).toContain('Failed to reach skills.sh');
+  });
+
+  it('retries a timed-out request and succeeds on a later attempt', async () => {
+    let calls = 0;
+    const fetchImpl = vi.fn((_url: unknown, init?: RequestInit) => {
+      if (++calls === 1) {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        });
+      }
+      return Promise.resolve(res(200, okBody));
+    }) as unknown as typeof fetch;
+
+    const result = await client(fetchImpl, { requestTimeoutMs: 10 }).getSkill('a/one');
+
+    expect(isOk(result)).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a network error and then succeeds', async () => {
+    const fetchImpl = sequence(
+      async () => {
+        throw new TypeError('fetch failed');
+      },
+      async () => res(200, okBody),
+    );
+
+    expect(isOk(await client(fetchImpl).getSkill('a/one'))).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries 429 and 5xx responses', async () => {
+    const fetchImpl = sequence(
+      async () => res(429, { message: 'slow down' }),
+      async () => res(503, { message: 'unavailable' }),
+      async () => res(200, okBody),
+    );
+
+    expect(isOk(await client(fetchImpl).getSkill('a/one'))).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it('retries getAudit too (shared request path)', async () => {
+    const fetchImpl = sequence(
+      async () => res(500, { message: 'boom' }),
+      async () => res(200, { id: 'a/one', source: 'a', slug: 'one', audits: [{ status: 'warn' }] }),
+    );
+
+    const result = await client(fetchImpl).getAudit('a/one');
+
+    expect(isOk(result) && result.value).toEqual({ status: 'warn' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up after 3 attempts and returns the usual error result', async () => {
+    const fetchImpl = sequence(async () => res(503, { message: 'unavailable' }));
+
+    const result = await client(fetchImpl).getSkill('a/one');
+
+    expect(isErr(result) && result.error.message).toBe('unavailable');
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns the network error after exhausting retries', async () => {
+    const fetchImpl = sequence(async () => {
+      throw new TypeError('fetch failed');
+    });
+
+    const result = await client(fetchImpl).getSkill('a/one');
+
+    expect(isErr(result) && result.error.message).toBe('Failed to reach skills.sh: fetch failed');
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry 4xx responses other than 429', async () => {
+    const fetchImpl = sequence(async () => res(404, { message: 'Not found' }));
+
+    const result = await client(fetchImpl).getSkill('a/missing');
+
+    expect(isErr(result)).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('sleeps with a growing backoff between attempts', async () => {
+    const sleep = vi.fn(async () => {});
+    const fetchImpl = sequence(async () => res(500, { message: 'boom' }));
+
+    await client(fetchImpl, { sleep, retryBackoffMs: 100 }).getSkill('a/one');
+
+    expect(sleep.mock.calls.map((c) => c[0])).toEqual([100, 200]);
   });
 });
