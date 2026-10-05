@@ -35,3 +35,5 @@ skills-manager-main/
 
 # sync-market run summary
 .sync-market/
+.env*
+supabase/.temp/
