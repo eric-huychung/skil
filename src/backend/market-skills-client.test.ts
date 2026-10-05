@@ -89,7 +89,41 @@ describe('RealMarketSkillsClient.getSkill', () => {
 
     const result = await client(fetchImpl).getSkill('a/one');
 
-    expect(isOk(result) && result.value).toEqual({ description: 'Does one thing.', hash: 'api-hash' });
+    expect(isOk(result) && result.value).toEqual({ description: 'Does one thing.', hash: 'api-hash', labelExcerpt: 'Body' });
+  });
+
+  it('builds labelExcerpt from the already-fetched SKILL.md contents with one request', async () => {
+    const contents = '---\ndescription: Hi\n---\n# Title\n\n```\ncode\n```\nUse it   well.';
+    const fetchImpl = fakeFetch({
+      status: 200,
+      body: {
+        id: 'a/one',
+        source: 'a',
+        slug: 'one',
+        installs: 5,
+        hash: 'h',
+        files: [
+          { path: 'README.md', contents: 'Not this one.' },
+          { path: 'SKILL.md', contents },
+        ],
+      },
+    });
+
+    const result = await client(fetchImpl).getSkill('a/one');
+
+    expect(isOk(result) && result.value.labelExcerpt).toBe('# Title Use it well.');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a null labelExcerpt when there is no SKILL.md file', async () => {
+    const fetchImpl = fakeFetch({
+      status: 200,
+      body: { id: 'a/one', source: 'a', slug: 'one', installs: 5, hash: 'h', files: null },
+    });
+
+    const result = await client(fetchImpl).getSkill('a/one');
+
+    expect(isOk(result) && result.value.labelExcerpt).toBeNull();
   });
 
   it('falls back to hashing the fetched SKILL.md when the API hash is null', async () => {
