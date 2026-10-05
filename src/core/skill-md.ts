@@ -2,6 +2,11 @@ import { load as loadYaml } from 'js-yaml';
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
+/** Drop leading YAML (Cursor `.mdc` / SKILL.md). Body-only markdown is unchanged. */
+export function stripFrontmatter(contents: string): string {
+  return contents.replace(FRONTMATTER_RE, '').trim();
+}
+
 /** Rough char/4 token estimate — a relative warn signal, not a billing number. */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);

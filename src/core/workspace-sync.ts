@@ -11,7 +11,7 @@ import {
   parkedSkillPath,
 } from './dock-layout.js';
 import { hashSkillTree } from './skill-folder.js';
-import { AGENTS_MD, leftoverRuleId, readRuleSection } from './project-rules.js';
+import { AGENTS_MD, canonicalRuleBody, leftoverRuleId, readRuleSection } from './project-rules.js';
 import { isOk, err, ok, type Result } from './result.js';
 
 /**
@@ -172,7 +172,7 @@ function classifyRule(fs: IFileSystemAdapter, leftover: LeftoverRecord): SyncRow
   if (!isOk(contents)) {
     return null;
   }
-  const hashHere = sha256(normalizeBody(contents.value));
+  const hashHere = sha256(canonicalRuleBody(contents.value));
   const ruleId = leftoverRuleId(leftover.path);
   const agents = fs.readFile(AGENTS_MD);
   const section = isOk(agents) ? readRuleSection(agents.value, ruleId) : null;
@@ -187,7 +187,7 @@ function classifyRule(fs: IFileSystemAdapter, leftover: LeftoverRecord): SyncRow
         canonicalPath: parkedPath,
         status: 'ready-to-remove',
         hashHere,
-        hashCanonical: sha256(normalizeBody(parked.value)),
+        hashCanonical: sha256(canonicalRuleBody(parked.value)),
       };
     }
     return {
@@ -198,7 +198,7 @@ function classifyRule(fs: IFileSystemAdapter, leftover: LeftoverRecord): SyncRow
       hashHere,
     };
   }
-  const hashCanonical = sha256(normalizeBody(section));
+  const hashCanonical = sha256(canonicalRuleBody(section));
   return {
     kind: 'rule',
     id: leftover.id,
@@ -226,10 +226,6 @@ function parkedCommandFolder(fs: IFileSystemAdapter, id: string): string | undef
 
 function sha256(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
-function normalizeBody(text: string): string {
-  return text.replace(/\r\n/g, '\n').trim();
 }
 
 const STATUS_ORDER: Record<SyncRow['status'], number> = {

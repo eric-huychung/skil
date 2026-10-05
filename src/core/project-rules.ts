@@ -2,6 +2,7 @@ import type { IFileSystemAdapter } from '../interfaces/adapters.js';
 import type { RuleRecord } from '../types/index.js';
 import { PARKED_RULES_ROOT } from './dock-layout.js';
 import { err, isOk, ok, type Result } from './result.js';
+import { stripFrontmatter } from './skill-md.js';
 
 /**
  * Shared law lives in one place: `AGENTS.md`. `setSharedRuleEnabled`
@@ -14,12 +15,13 @@ export const CLAUDE_MD = 'CLAUDE.md';
 export const COPILOT_INSTRUCTIONS_MD = '.github/copilot-instructions.md';
 
 /**
- * Path-scoped glob rule dirs a real dock actually loads by file glob —
- * left on disk exactly as found, read-only, never folded into
- * `AGENTS.md`, never toggled. `.codex/rules` and `.agents/rules` are
- * deliberately absent: Codex and the `agents` dock only read
- * `AGENTS.md`, so files under those dirs are leftover, not a real glob
- * rule root (see `leftoverAlwaysOnWarnings`).
+ * Path-scoped glob rule dirs a real dock actually loads by file glob.
+ * Leftover-only copies upsert into `AGENTS.md` on scan; leftover file
+ * stays until cleanup. Toggle does not apply to the leftover file.
+ * `.codex/rules` and `.agents/rules` are deliberately absent: Codex
+ * and the `agents` dock only read `AGENTS.md`, so files under those
+ * dirs are leftover, not a real glob rule root (see
+ * `leftoverAlwaysOnWarnings`).
  */
 export const GLOB_RULE_DIRS: Record<string, { ext: string }> = {
   '.cursor/rules': { ext: '.mdc' },
@@ -53,16 +55,30 @@ export function ruleBodiesEqual(left: string, right: string): boolean {
   return left.replace(/\r\n/g, '\n').trim() === right.replace(/\r\n/g, '\n').trim();
 }
 
+export function ruleHeading(body: string): string | null {
+  const match = stripFrontmatter(body).match(/^#{1,6}\s+(.+)$/m);
+  const heading = match?.[1]?.trim();
+  return heading ? heading : null;
+}
+
+export function ruleDisplayTitle(body: string, id: string): string {
+  const slash = id.lastIndexOf('/');
+  const leaf = slash === -1 ? id : id.slice(slash + 1);
+  return ruleHeading(body) ?? leaf;
+}
+
+/** Strip leftover YAML and demote a standalone H1 so AGENTS.md keeps the file title. */
+export function canonicalRuleBody(body: string): string {
+  return demoteH1Headings(stripFrontmatter(body));
+}
+
 export function upsertRuleSection(contents: string, id: string, body: string): string {
-  const block = `<!-- skil:rule ${id} -->\n${body.trimEnd()}\n<!-- /skil:rule ${id} -->`;
+  const block = `<!-- skil:rule ${id} -->\n${canonicalRuleBody(body)}\n<!-- /skil:rule ${id} -->`;
   const re = new RegExp(
     `<!-- skil:rule ${escapeRegExp(id)} -->\\r?\\n?[\\s\\S]*?\\r?\\n?<!-- /skil:rule ${escapeRegExp(id)} -->`
   );
-  if (re.test(contents)) {
-    return contents.replace(re, block);
-  }
-  const trimmed = contents.replace(/\s+$/, '');
-  return trimmed === '' ? `${block}\n` : `${trimmed}\n\n${block}\n`;
+  const next = re.test(contents) ? contents.replace(re, block) : appendRuleBlock(contents, block);
+  return ensureAgentsFileTitle(next);
 }
 
 /** Removes one section, cleaning up the blank lines it leaves behind. */
@@ -71,6 +87,42 @@ export function removeRuleSection(contents: string, id: string): string {
     `\\n*<!-- skil:rule ${escapeRegExp(id)} -->\\r?\\n?[\\s\\S]*?\\r?\\n?<!-- /skil:rule ${escapeRegExp(id)} -->\\n*`
   );
   return contents.replace(re, '\n\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '');
+}
+
+/** Rewrite AGENTS.md sections that still carry leftover `.mdc` YAML. */
+export function stripSharedRuleFrontmatter(contents: string): string {
+  let next = contents;
+  for (const section of parseRuleSections(contents)) {
+    if (!ruleBodiesEqual(canonicalRuleBody(section.body), section.body)) {
+      next = upsertRuleSection(next, section.id, section.body);
+    }
+  }
+  return ensureAgentsFileTitle(next);
+}
+
+const AGENTS_FILE_TITLE = '# AGENTS.md';
+
+function appendRuleBlock(contents: string, block: string): string {
+  const trimmed = contents.replace(/\s+$/, '');
+  return trimmed === '' ? `${block}\n` : `${trimmed}\n\n${block}\n`;
+}
+
+/** `# Title` is the document name. Sections belong at `##`. Idempotent if already demoted. */
+function demoteH1Headings(markdown: string): string {
+  if (!/^#\s+/m.test(markdown)) {
+    return markdown;
+  }
+  return markdown.replace(/^(#{1,5})(\s+)/gm, (_, hashes: string, space: string) => `${hashes}#${space}`);
+}
+
+function ensureAgentsFileTitle(contents: string): string {
+  const firstSection = contents.search(/<!-- skil:rule /);
+  const preamble = firstSection === -1 ? contents : contents.slice(0, firstSection);
+  if (/^#\s+/m.test(preamble)) {
+    return contents;
+  }
+  const rest = contents.replace(/^\s+/, '');
+  return rest === '' ? `${AGENTS_FILE_TITLE}\n` : `${AGENTS_FILE_TITLE}\n\n${rest}`;
 }
 
 function parkedSharedRuleId(path: string): string {
@@ -91,7 +143,14 @@ export function collectSharedRules(fs: IFileSystemAdapter): Result<RuleRecord[]>
   const agents = fs.readFile(AGENTS_MD);
   if (isOk(agents)) {
     for (const section of parseRuleSections(agents.value)) {
-      rows.push({ id: section.id, name: section.id, kind: 'shared', path: AGENTS_MD, enabled: true });
+      rows.push({
+        id: section.id,
+        name: section.id,
+        title: ruleDisplayTitle(section.body, section.id),
+        kind: 'shared',
+        path: AGENTS_MD,
+        enabled: true,
+      });
       seen.add(section.id);
     }
   }
@@ -105,7 +164,15 @@ export function collectSharedRules(fs: IFileSystemAdapter): Result<RuleRecord[]>
     if (seen.has(id)) {
       continue;
     }
-    rows.push({ id, name: id, kind: 'shared', path: AGENTS_MD, enabled: false });
+    const parkedBody = fs.readFile(path);
+    rows.push({
+      id,
+      name: id,
+      title: isOk(parkedBody) ? ruleDisplayTitle(parkedBody.value, id) : id.slice(id.lastIndexOf('/') + 1),
+      kind: 'shared',
+      path: AGENTS_MD,
+      enabled: false,
+    });
     seen.add(id);
   }
 
@@ -148,7 +215,15 @@ export function collectGlobRules(fs: IFileSystemAdapter): Result<RuleRecord[]> {
       if (base.startsWith('.') || !base.endsWith(ext.endsWith('.md') ? '.md' : ext)) {
         continue;
       }
-      rows.push({ id: path, name: globRuleName(dir, path, ext), kind: 'glob', path });
+      const name = globRuleName(dir, path, ext);
+      const body = fs.readFile(path);
+      rows.push({
+        id: path,
+        name,
+        title: isOk(body) ? ruleDisplayTitle(body.value, name) : name.slice(name.lastIndexOf('/') + 1),
+        kind: 'glob',
+        path,
+      });
     }
   }
   return ok(rows);

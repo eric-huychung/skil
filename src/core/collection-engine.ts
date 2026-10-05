@@ -32,9 +32,12 @@ import {
   leftoverRuleId,
   readRuleSection,
   removeRuleSection,
+  ruleDisplayTitle,
+  stripSharedRuleFrontmatter,
   upsertRuleSection,
 } from './project-rules.js';
 import { computeLlmFindings, computeSkillFindings, estimateTokens, llmFindingsCacheKey, parseDescription } from './health-checks.js';
+import { stripFrontmatter } from './skill-md.js';
 import type { LlmFindingsSkillInput } from './health-checks.js';
 import { relocateSkillFolder } from './skill-folder.js';
 import { buildSyncAudit, readSyncBodies } from './workspace-sync.js';
@@ -793,7 +796,8 @@ export class CollectionEngine implements ICollectionEngine {
     if (!isOk(filled)) {
       return err(new Error(`Failed to import leftovers: ${filled.error.message}`));
     }
-    this.writtenPaths = [...written, ...this.writtenPaths, ...filled.value];
+    const stripped = this.stripSharedRuleFrontmatterOnDisk();
+    this.writtenPaths = [...written, ...this.writtenPaths, ...filled.value, ...stripped];
 
     const alwaysOnWarnings = leftoverAlwaysOnWarnings(this.fs);
     return ok({ added, gone, changed, alwaysOnWarnings });
@@ -941,7 +945,7 @@ export class CollectionEngine implements ICollectionEngine {
     const ids = [
       ...new Set(
         buildSyncAudit(this.fs, listed.value)
-          .rows.filter((row) => row.status === 'needs-import' && row.kind !== 'rule')
+          .rows.filter((row) => row.status === 'needs-import')
           .map((row) => row.id)
       ),
     ];
@@ -951,6 +955,20 @@ export class CollectionEngine implements ICollectionEngine {
     }
     const imported = this.importToCanonicalSync(ids, { skipErrors: true });
     return isOk(imported) ? imported : ok({ adopted: [], deprecated: [] });
+  }
+
+  /** Drop leftover `.mdc` YAML from live AGENTS.md sections. */
+  private stripSharedRuleFrontmatterOnDisk(): string[] {
+    const agents = this.fs.readFile(AGENTS_MD);
+    if (!isOk(agents)) {
+      return [];
+    }
+    const next = stripSharedRuleFrontmatter(agents.value);
+    if (next === agents.value) {
+      return [];
+    }
+    const written = this.fs.writeFile(AGENTS_MD, next);
+    return isOk(written) ? [AGENTS_MD] : [];
   }
 
   /** Copy leftover or present live into any missing live-pair folder. Skip parked. */
@@ -1653,7 +1671,14 @@ export class CollectionEngine implements ICollectionEngine {
       return err(new Error(`Failed to remove parked rule '${id}': ${removed.error.message}`));
     }
     this.writtenPaths = [AGENTS_MD, parkedPath];
-    return ok({ id, name: id, kind: 'shared', path: AGENTS_MD, enabled: true });
+    return ok({
+      id,
+      name: id,
+      title: ruleDisplayTitle(parked.value, id),
+      kind: 'shared',
+      path: AGENTS_MD,
+      enabled: true,
+    });
   }
 
   private turnSharedRuleOff(id: string, target: RuleRecord | undefined): Result<RuleRecord> {
@@ -1669,7 +1694,7 @@ export class CollectionEngine implements ICollectionEngine {
       return err(new Error(`Rule '${id}' not found.`));
     }
     const parkedPath = parkedRulePath(id);
-    const parked = this.fs.writeFile(parkedPath, body);
+    const parked = this.fs.writeFile(parkedPath, stripFrontmatter(body));
     if (!isOk(parked)) {
       return err(new Error(`Failed to park rule '${id}': ${parked.error.message}`));
     }
@@ -1679,7 +1704,14 @@ export class CollectionEngine implements ICollectionEngine {
       return err(new Error(`Failed to turn off rule '${id}': ${written.error.message}`));
     }
     this.writtenPaths = [AGENTS_MD, parkedPath];
-    return ok({ id, name: id, kind: 'shared', path: AGENTS_MD, enabled: false });
+    return ok({
+      id,
+      name: id,
+      title: ruleDisplayTitle(body, id),
+      kind: 'shared',
+      path: AGENTS_MD,
+      enabled: false,
+    });
   }
 
   private removeCommandFolders(name: string): string[] {

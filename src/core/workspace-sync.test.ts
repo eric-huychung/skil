@@ -257,7 +257,7 @@ describe('buildSyncAudit', () => {
     expect(isOk(bodies)).toBe(true);
     if (!isOk(bodies)) return;
     expect(bodies.value.leftoverBody).toBe('# leftover\n');
-    expect(bodies.value.canonicalBody.trim()).toBe('# live');
+    expect(bodies.value.canonicalBody.trim()).toBe('## live');
   });
 
   it('classifies a glob .cursor/rules file against AGENTS.md, including .claude/rules copies', () => {

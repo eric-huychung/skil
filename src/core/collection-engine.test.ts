@@ -995,9 +995,10 @@ describe('CollectionEngine', () => {
       expect(engine.skills()[0]?.id).toBe('ui/styling');
     });
 
-    it('copies leftover-only skills and commands into the live pair', async () => {
+    it('copies leftover-only skills, commands, and rules into canonical homes', async () => {
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
       fs.writeFile('.cursor/commands/build.md', writeCommandFile('build', ['tdd']));
+      fs.writeFile('.cursor/rules/behavior.mdc', '# behavior\n');
 
       const result = engine.scan();
 
@@ -1005,13 +1006,13 @@ describe('CollectionEngine', () => {
       expect(isOk(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true);
       expect(isOk(fs.readFile('.claude/skills/tdd/SKILL.md'))).toBe(true);
       expect(isOk(fs.readFile('.agents/skills/build/SKILL.md'))).toBe(true);
+      expect(isOk(fs.readFile('AGENTS.md'))).toBe(true);
       expect(engine.list()).toEqual([expect.objectContaining({ name: 'build', enabled: true })]);
+      expect(engine.rules().some((rule) => rule.kind === 'shared' && rule.id === 'behavior')).toBe(true);
       const audit = engine.auditSync();
       expect(isOk(audit)).toBe(true);
       if (isOk(audit)) {
-        expect(audit.value.rows.filter((row) => row.kind !== 'rule').every((row) => row.status === 'ready-to-remove')).toBe(
-          true
-        );
+        expect(audit.value.rows.every((row) => row.status === 'ready-to-remove')).toBe(true);
       }
     });
 
@@ -1032,16 +1033,40 @@ describe('CollectionEngine', () => {
       }
     });
 
-    it('does not fold leftover glob rules into AGENTS.md on scan', () => {
-      fs.writeFile('.cursor/rules/extra.mdc', '---\nglobs: src/**\n---\n# extra\n');
+    it('does not turn a parked leftover rule back on', () => {
+      fs.writeFile('.skil/parked/rules/behavior', '# parked\n');
+      fs.writeFile('.cursor/rules/behavior.mdc', '# leftover\n');
 
       engine.scan();
 
       expect(isErr(fs.readFile('AGENTS.md'))).toBe(true);
+      expect(fs.readFile('.skil/parked/rules/behavior')).toEqual({ ok: true, value: '# parked\n' });
       const audit = engine.auditSync();
       expect(isOk(audit)).toBe(true);
       if (isOk(audit)) {
-        expect(audit.value.rows.find((row) => row.path === '.cursor/rules/extra.mdc')?.status).toBe('needs-import');
+        expect(audit.value.rows.find((row) => row.path === '.cursor/rules/behavior.mdc')?.status).toBe(
+          'ready-to-remove'
+        );
+      }
+    });
+
+    it('does not overwrite an AGENTS.md section that differs from the leftover', () => {
+      fs.writeFile(
+        'AGENTS.md',
+        '<!-- skil:rule behavior -->\n# live\n<!-- /skil:rule behavior -->\n'
+      );
+      fs.writeFile('.cursor/rules/behavior.mdc', '# leftover\n');
+
+      engine.scan();
+
+      expect(fs.readFile('AGENTS.md')).toEqual({
+        ok: true,
+        value: '# AGENTS.md\n\n<!-- skil:rule behavior -->\n## live\n<!-- /skil:rule behavior -->\n',
+      });
+      const audit = engine.auditSync();
+      expect(isOk(audit)).toBe(true);
+      if (isOk(audit)) {
+        expect(audit.value.rows.find((row) => row.path === '.cursor/rules/behavior.mdc')?.status).toBe('drift');
       }
     });
 
@@ -2090,46 +2115,59 @@ describe('CollectionEngine', () => {
   });
 
   describe('rules', () => {
-    it('lists AGENTS.md shared-law sections and path-scoped glob rule files, and scan does not touch either', () => {
+    it('strips alwaysApply YAML already sitting in AGENTS.md on scan', () => {
       fs.writeFile(
         'AGENTS.md',
-        '<!-- skil:rule pair-programming/behavior -->\n# behavior\n<!-- /skil:rule pair-programming/behavior -->\n\n' +
-          '<!-- skil:rule security -->\n# security\n<!-- /skil:rule security -->\n'
+        '<!-- skil:rule pair-programming/behavior -->\n---\nalwaysApply: true\n---\n# Pair Programming Behavior\n<!-- /skil:rule pair-programming/behavior -->\n'
       );
+
+      engine.scan();
+
+      const agents = fs.readFile('AGENTS.md');
+      expect(isOk(agents)).toBe(true);
+      if (isOk(agents)) {
+      expect(agents.value).toContain('# AGENTS.md');
+      expect(agents.value).toContain('## Pair Programming Behavior');
+      expect(agents.value).not.toMatch(/^# Pair Programming Behavior/m);
+      expect(agents.value).not.toContain('alwaysApply');
+      }
+      expect(engine.rules()).toEqual([
+        expect.objectContaining({
+          id: 'pair-programming/behavior',
+          title: 'Pair Programming Behavior',
+          kind: 'shared',
+        }),
+      ]);
+    });
+
+    it('lists existing AGENTS.md sections and upserts leftover-only glob copies on scan', () => {
+      const existing =
+        '<!-- skil:rule pair-programming/behavior -->\n# behavior\n<!-- /skil:rule pair-programming/behavior -->\n\n' +
+        '<!-- skil:rule security -->\n# security\n<!-- /skil:rule security -->\n';
+      fs.writeFile('AGENTS.md', existing);
+      fs.writeFile('.cursor/rules/pair-programming/behavior.mdc', '# behavior\n');
       fs.writeFile('.cursor/rules/pair-programming/format.mdc', '# format\n');
-      fs.writeFile('.claude/rules/review.md', '# review\n');
-      fs.writeFile('.github/instructions/typescript.instructions.md', '---\napplyTo: "**/*.ts"\n---\n# ts\n');
-      fs.writeFile('.windsurf/rules/style.md', '# style\n');
       fs.writeFile('.cursor/skills/tdd/SKILL.md', '# tdd\n');
 
       engine.scan();
 
       const rules = engine.rules();
-      expect(rules).toHaveLength(6);
       expect(rules).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: 'pair-programming/behavior', kind: 'shared', path: 'AGENTS.md', enabled: true }),
           expect.objectContaining({ id: 'security', kind: 'shared', path: 'AGENTS.md', enabled: true }),
-          expect.objectContaining({
-            id: '.cursor/rules/pair-programming/format.mdc',
-            name: 'pair-programming/format',
-            kind: 'glob',
-          }),
-          expect.objectContaining({ id: '.claude/rules/review.md', name: 'review', kind: 'glob' }),
-          expect.objectContaining({
-            id: '.github/instructions/typescript.instructions.md',
-            name: 'typescript',
-            kind: 'glob',
-          }),
-          expect.objectContaining({ id: '.windsurf/rules/style.md', name: 'style', kind: 'glob' }),
+          expect.objectContaining({ id: 'pair-programming/format', kind: 'shared', path: 'AGENTS.md', enabled: true }),
         ])
       );
-      expect(fs.readFile('AGENTS.md')).toEqual({
-        ok: true,
-        value:
-          '<!-- skil:rule pair-programming/behavior -->\n# behavior\n<!-- /skil:rule pair-programming/behavior -->\n\n' +
-            '<!-- skil:rule security -->\n# security\n<!-- /skil:rule security -->\n',
-      });
+      expect(rules.some((rule) => rule.kind === 'glob')).toBe(false);
+      expect(isOk(fs.readFile('AGENTS.md'))).toBe(true);
+      const agents = fs.readFile('AGENTS.md');
+      expect(isOk(agents)).toBe(true);
+      if (isOk(agents)) {
+        expect(agents.value).toContain('# behavior');
+        expect(agents.value).toContain('# security');
+        expect(agents.value).toContain('# format');
+      }
     });
 
     it('drops an imported glob copy from rules() so it is leftover, not a second row', () => {
@@ -2405,6 +2443,24 @@ describe('CollectionEngine', () => {
       expect(fs.readFile('.agents/skills/design/SKILL.md')).toEqual({ ok: true, value: '# live\n' });
     });
 
+    it('strips Cursor alwaysApply YAML when a leftover glob rule lands in AGENTS.md', async () => {
+      fs.writeFile(
+        '.cursor/rules/behavior.mdc',
+        '---\ndescription: hello\nalwaysApply: true\n---\n# Hello rule\n'
+      );
+
+      const result = await engine.importToCanonical(['behavior']);
+
+      expect(isOk(result)).toBe(true);
+      const agents = fs.readFile('AGENTS.md');
+      expect(isOk(agents)).toBe(true);
+      if (isOk(agents)) {
+        expect(agents.value).toContain('# Hello rule');
+        expect(agents.value).not.toContain('alwaysApply');
+        expect(agents.value).not.toContain('description:');
+      }
+    });
+
     it('imports a leftover glob rule into AGENTS.md and leaves the file for remove', async () => {
       fs.writeFile('.cursor/rules/behavior.mdc', '# behavior\n');
 
@@ -2467,7 +2523,7 @@ describe('CollectionEngine', () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.value.adopted).toEqual(['behavior']);
+        expect(result.value.adopted).toEqual([]);
       }
       expect(isOk(fs.readFile('.agents/skills/tdd/SKILL.md'))).toBe(true);
       expect(isOk(fs.readFile('.agents/skills/build/SKILL.md'))).toBe(true);
@@ -2573,7 +2629,11 @@ describe('CollectionEngine', () => {
     });
 
     it('refuses drift so a blind remove cannot delete the copy to keep', async () => {
-      fs.writeFile('.cursor/rules/extra.mdc', '# extra\n');
+      fs.writeFile(
+        'AGENTS.md',
+        '<!-- skil:rule extra -->\n# live\n<!-- /skil:rule extra -->\n'
+      );
+      fs.writeFile('.cursor/rules/extra.mdc', '# leftover\n');
       fs.writeFile('.agents/skills/design/SKILL.md', '# live\n');
       fs.writeFile('.cursor/skills/design/SKILL.md', '# leftover\n');
       engine.scan();

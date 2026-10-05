@@ -152,10 +152,11 @@ export interface ICollectionEngine {
    * Pull: unions the live pair, leftover skill roots, and parked into
    * one catalog. Hashes SKILL.md, reconciles gone/changed/new/rename.
    * Leftover-only skills/commands copy into the live pair (leftover
-   * path stays). A missing live half is filled from the live copy that
-   * is already there. Parked leftovers stay off. Leftover glob rules
-   * stay path-scoped. Never writes a leftover root. Does not invent a
-   * command from an unstamped skill folder. Does not call install.
+   * path stays). Leftover-only rules upsert into `AGENTS.md`. A missing
+   * live half is filled from the live copy that is already there.
+   * Parked leftovers stay off. Never writes a leftover root. Does not
+   * invent a command from an unstamped skill folder. Does not call
+   * install.
    */
   scan(): Result<ScanResult>;
 
@@ -227,10 +228,10 @@ export interface ICollectionEngine {
 
   /**
    * Copy/upsert into canonical homes only — never deprecates the source.
-   * Leftover-only skills/commands already land on scan. This is leftover
-   * glob rules (and leftover collisions scan skipped). Skills/commands →
-   * live pair; rules → `AGENTS.md` section. Ids that are not
-   * needs-import are skipped.
+   * Leftover-only skills/commands/rules already land on scan. This is
+   * leftover collisions scan skipped. Skills/commands → live pair;
+   * rules → `AGENTS.md` section. Ids that are not needs-import are
+   * skipped.
    */
   importToCanonical(ids: string[]): Promise<Result<AdoptResult>>;
 

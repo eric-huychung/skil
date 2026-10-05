@@ -4,6 +4,9 @@ All notable changes to skil are documented here. Versions follow [Semantic Versi
 
 ## [Unreleased]
 
+### Changed
+- Scan copies leftover-only skills, commands, and rules into canonical homes. Parked leftovers stay off.
+
 ## [0.8.0] - 2026-10-05
 
 Smarter Discover shelves and a new Creators tab.

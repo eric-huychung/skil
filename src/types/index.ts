@@ -106,14 +106,17 @@ export interface SkillRecord {
  * One rule found on disk. Disk is SoT — we do not persist this.
  * `shared` = one `AGENTS.md` section, togglable via `setSharedRuleEnabled`
  * (park/restore, same model as a skill). `glob` = a path-scoped rule file
- * (`.cursor/rules/*.mdc`, `.claude/rules/**\/*.md`, etc.) left on disk
- * exactly as found — read-only, never folded into `AGENTS.md`.
+ * (`.cursor/rules/*.mdc`, `.claude/rules/**\/*.md`, etc.). Leftover-only
+ * copies upsert into `AGENTS.md` on scan; leftover file stays until
+ * cleanup. Remaining glob rows are read-only.
  */
 export interface RuleRecord {
   /** `pair-programming/behavior` for a shared section; a relative path for a glob file. */
   id: string;
-  /** Display name (`pair-programming/behavior`, `behavior.mdc`). */
+  /** Path id (`pair-programming/behavior`, `behavior.mdc`). Not shown on the card. */
   name: string;
+  /** Markdown heading from the body, else the last path segment. */
+  title: string;
   kind: 'shared' | 'glob';
   /** `AGENTS.md` for a shared section; the `.mdc`/`.md` path for a glob file. */
   path: string;
