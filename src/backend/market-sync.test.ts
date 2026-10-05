@@ -5,6 +5,7 @@ import type { MarketListingPage, MarketSkillsClient } from './market-client.js';
 import { MarketSync } from './market-sync.js';
 import { FakeSkillClassifier } from './skill-classifier.js';
 import { GOLD_LABELS, GOLD_LISTINGS } from './shelf-gold.fixture.js';
+import { LARK_LABELS, LARK_LISTINGS } from './shelf-suite.fixture.js';
 
 function listingItem(id: string, installs = 0) {
   return {
@@ -291,6 +292,40 @@ describe('MarketSync.refreshActiveFields', () => {
     expect(shelves.flatMap((shelf) => shelf.entries).every((entry) => entry.moreCount === 0)).toBe(true);
     const meta = await store.getShelfMeta();
     expect(isOk(meta) && meta.value?.generatedAt).toEqual(expect.any(String));
+  });
+
+  it('writes suite moreCount and reads it back through listShelves', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertRole({ slug: 'swe', label: 'SWE', sortOrder: 1, active: true });
+    await store.upsertField({ slug: 'chat', roleSlug: 'swe', label: 'Chat', q: 'chat', sortOrder: 1, shelfSize: 30, active: true });
+    for (const row of LARK_LISTINGS) {
+      await store.upsertListing(
+        {
+          id: row.id,
+          name: row.name,
+          slug: row.slug,
+          source: row.id.split('/').slice(0, 2).join('/'),
+          installs: row.installs,
+          installUrl: null,
+          url: `https://github.com/${row.id}`,
+        },
+        '2026-01-01T00:00:00.000Z',
+      );
+      await store.setDetail(row.id, { description: row.description, hash: row.hash! });
+    }
+    const classifier = new FakeSkillClassifier(new Map(LARK_LABELS.map((label) => [label.id, label.fieldSlugs])));
+
+    const result = await syncOf(store, fakeClient([]), { classifier }).refreshActiveFields();
+
+    expect(isOk(result)).toBe(true);
+    const shelves = await store.listShelves();
+    const chat = isOk(shelves) ? shelves.value.flatMap((role) => role.fields).find((f) => f.slug === 'chat') : undefined;
+    expect(chat?.skills.map((skill) => [skill.id, skill.moreCount])).toEqual([
+      ['larksuite/cli/lark-calendar', 5],
+      ['slackapi/agent-skills/slack-messaging', undefined],
+      ['larksuite/openclaw-lark/feishu-bitable', undefined],
+      ['larksuite/openclaw-lark/feishu-calendar', undefined],
+    ]);
   });
 
   it('returns the store error and keeps the old shelves when replaceShelves fails', async () => {
