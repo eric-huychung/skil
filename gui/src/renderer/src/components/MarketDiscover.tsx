@@ -10,7 +10,27 @@ import SkillPreviewDialog from './SkillPreviewDialog';
 import WorkspaceWarning from './WorkspaceWarning';
 
 type AddState = { status: 'success' } | { status: 'error' };
-type Row = { id: string; name: string; installs: number; rank?: number; topics?: string[] };
+type Row = { id: string; name: string; installs: number; rank?: number; topics?: string[]; moreCount?: number };
+
+/** Collapsed suites share the name part before the first `-` (shelf assembler's suite rule). */
+function suitePrefix(name: string): string {
+  const slug = name.split('/').pop() ?? name;
+  return slug.split('-')[0] ?? slug;
+}
+
+/**
+ * Lifts "+N more" above the row's full-size preview button (`.library-skill-hit`),
+ * which otherwise covers `.skill-info`.
+ */
+const MORE_INFO_STYLE = { zIndex: 'auto' } as const;
+const MORE_BUTTON_STYLE = {
+  position: 'relative',
+  zIndex: 2,
+  font: 'inherit',
+  background: 'transparent',
+  borderWidth: '0 0 1px',
+  cursor: 'pointer',
+} as const;
 
 /** Survives Discover unmount (Settings toggle) so one LLM rank per project+role. */
 const editorialSuggestCache = new Map<string, Row[]>();
@@ -365,6 +385,12 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
     }
   }
 
+  function searchSuite(name: string) {
+    const prefix = suitePrefix(name);
+    setQuery(prefix);
+    void runMarketSearch(prefix);
+  }
+
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await runMarketSearch(query.trim());
@@ -397,6 +423,7 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
     const isAdding = addingId === skill.id;
     const added = !isAdding && addState?.status === 'success';
     const topics = skill.topics ?? [];
+    const moreCount = skill.moreCount ?? 0;
     return (
       <li
         className="library-skill library-skill-interactive"
@@ -412,8 +439,25 @@ export default function MarketDiscover({ onOpenSettings }: { onOpenSettings?: ()
           aria-label={`Details for ${skill.name}`}
         />
         <span className="skill-rank">{skill.rank ?? index + 1}</span>
-        <div className="skill-info">
-          <div className="skill-name">{skill.name}</div>
+        <div className="skill-info" style={moreCount > 0 ? MORE_INFO_STYLE : undefined}>
+          {moreCount > 0 ? (
+            <div className="skill-name">
+              <span>{skill.name}</span>,{' '}
+              <button
+                type="button"
+                className={`skill-details-link ${FOCUS_RING}`}
+                style={MORE_BUTTON_STYLE}
+                onClick={(event: MouseEvent<HTMLButtonElement>) => {
+                  event.stopPropagation();
+                  searchSuite(skill.name);
+                }}
+              >
+                +{moreCount} more
+              </button>
+            </div>
+          ) : (
+            <div className="skill-name">{skill.name}</div>
+          )}
           {topics.length > 0 && (
             <ul aria-label="Topics" className="filter-row skill-meta-row">
               {topics.map((topic) => (

@@ -144,6 +144,52 @@ describe('MarketDiscover', () => {
     expect(engine.skills()[0]?.paths).toEqual(['.agents/skills/obra/react-patterns', '.claude/skills/obra/react-patterns']);
   });
 
+  it('shows "+N more" on collapsed suite rows and searches the suite prefix on click', async () => {
+    const engine = createInMemoryEngine();
+    const searched: string[] = [];
+    const suiteShelves: ShelfRole[] = [
+      {
+        slug: 'swe',
+        label: 'SWE',
+        fields: [
+          {
+            slug: 'cloud',
+            label: 'Cloud',
+            skills: [
+              { id: 'microsoft/github-copilot-for-azure/azure-deploy', name: 'azure-deploy', installs: 900, rank: 1, moreCount: 4 },
+              { id: 'vercel-labs/agent-skills/vercel-deploy', name: 'vercel-deploy', installs: 500, rank: 2 },
+            ],
+          },
+        ],
+      },
+    ];
+    const bridge = {
+      ...createTestBridge(engine),
+      marketShelves: async (): Promise<Result<ShelfRole[]>> => ok(suiteShelves),
+      marketSearch: async (query: string): Promise<Result<MarketSearchRow[]>> => {
+        searched.push(query);
+        return ok([{ id: 'microsoft/github-copilot-for-azure/azure-rbac', name: 'azure-rbac', installs: 400 }]);
+      },
+    };
+
+    renderWithProviders(<MarketDiscover />, { bridge });
+    await openLeaderboard();
+    await userEvent.click(screen.getByRole('tab', { name: 'SWE' }));
+    await waitFor(() => expect(screen.getByText('azure-deploy')).toBeInTheDocument());
+
+    const suiteRow = screen.getByText('azure-deploy').closest('li') as HTMLElement;
+    expect(suiteRow).toHaveTextContent('azure-deploy, +4 more');
+    const plainRow = screen.getByText('vercel-deploy').closest('li') as HTMLElement;
+    expect(within(plainRow).queryByText(/more/)).not.toBeInTheDocument();
+
+    await userEvent.click(within(suiteRow).getByRole('button', { name: '+4 more' }));
+
+    await waitFor(() => expect(screen.getByText('azure-rbac')).toBeInTheDocument());
+    expect(searched).toEqual(['azure']);
+    expect(screen.getByLabelText('Search skills')).toHaveValue('azure');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('searches the full market index and falls back to skills.sh on error', async () => {
     const engine = createInMemoryEngine();
     const bridge = {
