@@ -157,11 +157,19 @@ export class SupabaseMarketStore implements MarketStore {
     return ok(data?.hash ?? null);
   }
 
-  /** No-op if `id` is unknown: `.eq('id', id)` on an update just matches zero rows. */
+  /**
+   * No-op if `id` is unknown: `.eq('id', id)` on an update just matches zero rows.
+   * `label_excerpt` is only in the payload when `labelExcerpt` is given, so omitting it leaves the stored one.
+   */
   async setDetail(id: string, detail: MarketDetailInput): Promise<Result<void>> {
     const { error } = await this.client
       .from('market_skills')
-      .update({ description: detail.description, hash: detail.hash, updated_at: new Date().toISOString() })
+      .update({
+        description: detail.description,
+        hash: detail.hash,
+        ...(detail.labelExcerpt === undefined ? {} : { label_excerpt: detail.labelExcerpt }),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id);
     if (error) return err(toError(error.message));
     return ok(undefined);
@@ -372,12 +380,29 @@ export class SupabaseMarketStore implements MarketStore {
 
   // --- T15b detail ---
 
-  async getDetailState(_id: string): Promise<Result<{ hash: string | null; hasExcerpt: boolean }>> {
-    return err(new Error('not implemented: getDetailState (T15b)'));
+  async getDetailState(id: string): Promise<Result<{ hash: string | null; hasExcerpt: boolean }>> {
+    const { data, error } = await this.client
+      .from('market_skills')
+      .select('hash, label_excerpt')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) return err(toError(error.message));
+    return ok({ hash: data?.hash ?? null, hasExcerpt: data?.label_excerpt != null });
   }
 
+  /** Paged past PostgREST's 1,000-row cap, ordered by id. */
   async listIdsMissingExcerpt(): Promise<Result<string[]>> {
-    return err(new Error('not implemented: listIdsMissingExcerpt (T15b)'));
+    const res = await this.pageLabelRows<{ id: string }>((from, to) =>
+      this.client
+        .from('market_skills')
+        .select('id')
+        .eq('inactive', false)
+        .is('label_excerpt', null)
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    if (!res.ok) return res;
+    return ok(res.value.map((row) => row.id));
   }
 
   // --- T17b labels ---

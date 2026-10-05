@@ -115,9 +115,9 @@ describe('MarketSync.hydrateDetails', () => {
   it('is a no-op when the fetched hash matches the stored hash', async () => {
     const store = new InMemoryMarketStore();
     await store.upsertListing(listingItem('a/same'), '2026-01-01T00:00:00.000Z');
-    await store.setDetail('a/same', { description: 'Old description', hash: 'hash-1' });
+    await store.setDetail('a/same', { description: 'Old description', hash: 'hash-1', labelExcerpt: 'Body.' });
     const client = fakeClient([]);
-    client.getSkill = vi.fn(async () => ok({ description: 'New description', hash: 'hash-1' }));
+    client.getSkill = vi.fn(async () => ok({ description: 'New description', hash: 'hash-1', labelExcerpt: 'Body.' }));
     const sync = syncOf(store, client);
 
     const result = await sync.hydrateDetails(['a/same']);
@@ -168,6 +168,52 @@ describe('MarketSync.hydrateDetails', () => {
     const result = await sync.hydrateDetails(['a/no-desc']);
 
     expect(isOk(result) && result.value.hydrated).toEqual(['a/no-desc']);
+  });
+});
+
+describe('MarketSync.hydrateDetails excerpt (T15b)', () => {
+  it('hydrates a hash-equal row that has no excerpt yet, and writes the excerpt', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertListing(listingItem('a/backfill'), '2026-01-01T00:00:00.000Z');
+    await store.setDetail('a/backfill', { description: 'Old', hash: 'hash-1' });
+    const client = fakeClient([]);
+    client.getSkill = vi.fn(async () => ok({ description: 'Old', hash: 'hash-1', labelExcerpt: 'Body text.' }));
+    const sync = syncOf(store, client);
+
+    const result = await sync.hydrateDetails(['a/backfill']);
+
+    expect(isOk(result) && result.value.hydrated).toEqual(['a/backfill']);
+    expect(await store.getDetailState('a/backfill')).toEqual({ ok: true, value: { hash: 'hash-1', hasExcerpt: true } });
+    const pool = await store.listLabelPool();
+    expect(isOk(pool) && pool.value[0]?.labelExcerpt).toBe('Body text.');
+  });
+
+  it('is a no-op only when the hash matches and an excerpt is stored', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertListing(listingItem('a/done'), '2026-01-01T00:00:00.000Z');
+    await store.setDetail('a/done', { description: 'Old', hash: 'hash-1', labelExcerpt: 'Old body.' });
+    const client = fakeClient([]);
+    client.getSkill = vi.fn(async () => ok({ description: 'New', hash: 'hash-1', labelExcerpt: 'New body.' }));
+    const sync = syncOf(store, client);
+
+    const result = await sync.hydrateDetails(['a/done']);
+
+    expect(isOk(result) && result.value.unchanged).toEqual(['a/done']);
+    const pool = await store.listLabelPool();
+    expect(isOk(pool) && pool.value[0]?.labelExcerpt).toBe('Old body.');
+  });
+
+  it('caps a stored excerpt at 1,000 chars', async () => {
+    const store = new InMemoryMarketStore();
+    await store.upsertListing(listingItem('a/long'), '2026-01-01T00:00:00.000Z');
+    const client = fakeClient([]);
+    client.getSkill = vi.fn(async () => ok({ description: null, hash: 'hash-1', labelExcerpt: 'x'.repeat(1_500) }));
+    const sync = syncOf(store, client);
+
+    await sync.hydrateDetails(['a/long']);
+
+    const pool = await store.listLabelPool();
+    expect(isOk(pool) && pool.value[0]?.labelExcerpt?.length).toBe(1_000);
   });
 });
 
