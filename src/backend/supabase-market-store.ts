@@ -20,6 +20,7 @@ import type {
   ShelfSkill,
   SkillScore,
 } from './market-types.js';
+import { MAX_TOPICS_PER_SKILL, TOPIC_THRESHOLD, topicsFor } from './topic-taxonomy.js';
 
 interface RoleRow {
   slug: string;
@@ -344,9 +345,10 @@ export class SupabaseMarketStore implements MarketStore {
   /**
    * Pages with `.range()` until a short page. Installs descending, then id
    * ascending: a total order, so no row is skipped or repeated across pages.
-   * `topics` is `[]` until T19 joins labels for `taxonomyVersion`.
+   * For each page, a second query reads `market_skill_labels` for those ids at
+   * `taxonomyVersion`; `ok` labels become `topics` via `topicsFor`, the rest `[]`.
    */
-  async listSkillsByOwners(owners: string[], _taxonomyVersion: string): Promise<Result<CreatorSkillRow[]>> {
+  async listSkillsByOwners(owners: string[], taxonomyVersion: string): Promise<Result<CreatorSkillRow[]>> {
     const wanted = [...new Set(owners)];
     if (wanted.length === 0) return ok([]);
 
@@ -363,6 +365,25 @@ export class SupabaseMarketStore implements MarketStore {
         .range(from, from + pageSize - 1);
       if (error) return err(toError(error.message));
 
+      // Ids go in the URL, so chunk them to keep each `.in()` request short.
+      const topicsById = new Map<string, string[]>();
+      const ids = data.map((row) => row.id as string);
+      for (let i = 0; i < ids.length; i += 200) {
+        const labels = await this.client
+          .from('market_skill_labels')
+          .select('skill_id, probabilities')
+          .eq('taxonomy_version', taxonomyVersion)
+          .eq('status', 'ok')
+          .in('skill_id', ids.slice(i, i + 200));
+        if (labels.error) return err(toError(labels.error.message));
+        for (const label of labels.data) {
+          topicsById.set(
+            label.skill_id,
+            topicsFor(label.probabilities as Record<string, number>, TOPIC_THRESHOLD, MAX_TOPICS_PER_SKILL),
+          );
+        }
+      }
+
       for (const row of data) {
         rows.push({
           id: row.id,
@@ -370,7 +391,7 @@ export class SupabaseMarketStore implements MarketStore {
           source: row.source,
           owner: row.owner,
           installs: row.installs,
-          topics: [],
+          topics: topicsById.get(row.id) ?? [],
         });
       }
       if (data.length < pageSize) break;
