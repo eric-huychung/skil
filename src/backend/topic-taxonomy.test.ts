@@ -35,6 +35,43 @@ describe('TOPIC_QUESTIONS', () => {
   });
 });
 
+describe('T23 tech topics', () => {
+  const NEW_SLUGS = ['mobile', 'ai-ml', 'languages', 'agent-tooling', 'game-dev', 'docs'];
+
+  it('leaves the 21 earlier questions byte-for-byte unchanged (same hash as the first label run)', () => {
+    const earlier = TOPIC_QUESTIONS.filter((q) => !NEW_SLUGS.includes(q.fieldSlug));
+    expect(earlier).toHaveLength(21);
+    expect(taxonomyVersion(earlier)).toBe('ff85d19cf77d');
+  });
+
+  it('asks the six approved questions word for word', () => {
+    const prompt = (slug: string) => TOPIC_QUESTIONS.find((q) => q.fieldSlug === slug)?.prompt;
+    expect(TOPIC_QUESTIONS).toHaveLength(27);
+    expect(prompt('mobile')).toBe(
+      'Is this skill mainly about building mobile or native apps (iOS and Swift, Android and Kotlin, Flutter, React Native, Expo)?',
+    );
+    expect(prompt('ai-ml')).toBe(
+      'Is this skill mainly about building AI or machine-learning systems (LLM apps, RAG, prompt engineering, evals, fine-tuning, model training or inference, computer vision)?',
+    );
+    expect(prompt('languages')).toBe(
+      'Is this skill mainly about writing code in one specific programming language or its ecosystem (its idioms, types, tooling or libraries, for example Rust, Go, C# and .NET, Python, TypeScript, C++)?',
+    );
+    expect(prompt('agent-tooling')).toBe(
+      'Is this skill mainly about extending or configuring AI coding agents: writing skills, plugins, MCP servers or hooks, AGENTS.md or CLAUDE.md files, agent memory or context?',
+    );
+    expect(prompt('game-dev')).toBe(
+      'Is this skill mainly about game development or real-time 3D graphics (Unity, Unreal, Godot, game design, shaders)?',
+    );
+    expect(prompt('docs')).toBe(
+      'Is this skill mainly about writing or generating technical documentation (READMEs, ADRs, runbooks, API docs, changelogs, architecture diagrams)?',
+    );
+  });
+
+  it('has a new version, so the next sync relabels', () => {
+    expect(TAXONOMY_VERSION).not.toBe('ff85d19cf77d');
+  });
+});
+
 describe('TAXONOMY_VERSION', () => {
   it('is a 12-char hex hash of the questions', () => {
     expect(TAXONOMY_VERSION).toMatch(/^[0-9a-f]{12}$/);

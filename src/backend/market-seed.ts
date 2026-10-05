@@ -1,7 +1,7 @@
 import type { MarketField, MarketRole } from './market-types.js';
 
 /**
- * Seed: 6 roles / 21 fields. Not a schema cap — insert more rows later;
+ * Seed: 6 roles / 27 fields. Not a schema cap — insert more rows later;
  * `listActiveFields` picks them up. `q` is unused for shelves (classify
  * path) but the column is NOT NULL so placeholders stay.
  */
@@ -17,7 +17,7 @@ export const SEED_ROLES: MarketRole[] = [
 const SHELF_SIZE = 30;
 
 export const SEED_FIELDS: MarketField[] = [
-  // SWE (8)
+  // SWE (12)
   field('frontend', 'swe', 'Frontend', 'frontend ui', 1),
   field('backend', 'swe', 'Backend', 'backend services', 2),
   field('api', 'swe', 'API', 'api design', 3),
@@ -26,6 +26,10 @@ export const SEED_FIELDS: MarketField[] = [
   field('security', 'swe', 'Security', 'security review', 6),
   field('devops', 'swe', 'DevOps', 'ci cd', 7),
   field('review', 'swe', 'Review', 'code review', 8),
+  field('mobile', 'swe', 'Mobile', 'mobile apps', 9),
+  field('languages', 'swe', 'Languages', 'programming language', 10),
+  field('game-dev', 'swe', 'Game dev', 'game development', 11),
+  field('docs', 'swe', 'Docs', 'technical documentation', 12),
   // UI/UX (3)
   field('product-ui', 'ui-ux', 'Product UI', 'ui ux', 1),
   field('design-system', 'ui-ux', 'Design system', 'design system', 2),
@@ -42,6 +46,8 @@ export const SEED_FIELDS: MarketField[] = [
   field('viz', 'data', 'Viz', 'data visualization', 3),
   // Agent + Other (classify leftovers / agent-workflow)
   field('workflow', 'agent', 'Workflow', 'agent workflow', 1),
+  field('ai-ml', 'agent', 'AI & ML', 'machine learning', 2),
+  field('agent-tooling', 'agent', 'Agent tooling', 'agent skills mcp', 3),
   field('integrations', 'other', 'Integrations', 'vendor integrations', 1),
 ];
 

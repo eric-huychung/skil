@@ -4,13 +4,27 @@ import { InMemoryMarketStore } from './in-memory-market-store.js';
 import { SEED_FIELDS, SEED_ROLES } from './market-seed.js';
 
 describe('market-seed', () => {
-  it('seeds 6 roles and 21 fields', () => {
+  it('seeds 6 roles and 27 fields', () => {
     expect(SEED_ROLES).toHaveLength(6);
-    expect(SEED_FIELDS).toHaveLength(21);
+    expect(SEED_FIELDS).toHaveLength(27);
     expect(SEED_ROLES.map((role) => role.slug)).toEqual(['swe', 'ui-ux', 'pm', 'data', 'agent', 'other']);
     expect(SEED_FIELDS.some((field) => field.slug === 'sql')).toBe(false);
     expect(SEED_FIELDS.some((field) => field.slug === 'workflow')).toBe(true);
     expect(SEED_FIELDS.some((field) => field.slug === 'integrations')).toBe(true);
+  });
+
+  it('places the T23 tech topics: mobile, languages, game-dev, docs under swe; ai-ml, agent-tooling under agent', () => {
+    const roleOf = (slug: string) => SEED_FIELDS.find((field) => field.slug === slug)?.roleSlug;
+    for (const slug of ['mobile', 'languages', 'game-dev', 'docs']) expect(roleOf(slug)).toBe('swe');
+    for (const slug of ['ai-ml', 'agent-tooling']) expect(roleOf(slug)).toBe('agent');
+    expect(roleOf('architecture')).toBeUndefined();
+  });
+
+  it('sort orders are unique within each role', () => {
+    for (const role of SEED_ROLES) {
+      const orders = SEED_FIELDS.filter((field) => field.roleSlug === role.slug).map((field) => field.sortOrder);
+      expect(new Set(orders).size).toBe(orders.length);
+    }
   });
 
   it('every field points at a seeded role', () => {
@@ -40,7 +54,7 @@ describe('market-seed', () => {
 
     expect(shelves.value.map((role) => role.slug)).toEqual(['swe', 'ui-ux', 'pm', 'data', 'agent', 'other']);
     const totalFields = shelves.value.reduce((sum, role) => sum + role.fields.length, 0);
-    expect(totalFields).toBe(21);
+    expect(totalFields).toBe(27);
     for (const role of shelves.value) {
       for (const field of role.fields) {
         expect(field.skills).toEqual([]);

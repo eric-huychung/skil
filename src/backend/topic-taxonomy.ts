@@ -18,6 +18,17 @@ export const TOPIC_QUESTIONS: TopicQuestion[] = [
   q('security', 'Is this skill mainly about software security, vulnerabilities, compliance or security review?'),
   q('devops', 'Is this skill mainly about CI/CD, deployment, infrastructure, cloud operations or monitoring?'),
   q('review', 'Is this skill mainly about reviewing code or pull requests?'),
+  // SWE, added in T23 (tech clusters that left skills unlabeled)
+  q('mobile', 'Is this skill mainly about building mobile or native apps (iOS and Swift, Android and Kotlin, Flutter, React Native, Expo)?'),
+  q(
+    'languages',
+    'Is this skill mainly about writing code in one specific programming language or its ecosystem (its idioms, types, tooling or libraries, for example Rust, Go, C# and .NET, Python, TypeScript, C++)?',
+  ),
+  q('game-dev', 'Is this skill mainly about game development or real-time 3D graphics (Unity, Unreal, Godot, game design, shaders)?'),
+  q(
+    'docs',
+    'Is this skill mainly about writing or generating technical documentation (READMEs, ADRs, runbooks, API docs, changelogs, architecture diagrams)?',
+  ),
   // UI/UX
   q('product-ui', 'Is this skill mainly about designing product UI or UX (screens, layouts, interaction design)?'),
   q('design-system', 'Is this skill mainly about design systems, design tokens, brand styles or component libraries?'),
@@ -36,6 +47,15 @@ export const TOPIC_QUESTIONS: TopicQuestion[] = [
   q(
     'workflow',
     'Is this a skill that changes how a coding agent itself works: how it plans, asks clarifying questions, breaks down or hands off tasks, uses git safely, finds or manages other skills and tools, or drives a browser or terminal?',
+  ),
+  // Agent, added in T23
+  q(
+    'ai-ml',
+    'Is this skill mainly about building AI or machine-learning systems (LLM apps, RAG, prompt engineering, evals, fine-tuning, model training or inference, computer vision)?',
+  ),
+  q(
+    'agent-tooling',
+    'Is this skill mainly about extending or configuring AI coding agents: writing skills, plugins, MCP servers or hooks, AGENTS.md or CLAUDE.md files, agent memory or context?',
   ),
   // Other: reworded so it means a named vendor, not "anything left over"
   q(
