@@ -2,9 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { err, isOk, ok } from '../core/result.js';
 import { InMemoryMarketStore } from './in-memory-market-store.js';
 import type { MarketListingPage, MarketSkillsClient } from './market-client.js';
-import { MarketSync } from './market-sync.js';
-import { FakeSkillClassifier } from './skill-classifier.js';
-import { TOPIC_QUESTIONS, TOPIC_THRESHOLD } from './topic-taxonomy.js';
+import { buildLabelState, stateHash } from './label-state.js';
+import { MarketSync, type LabelPoolError } from './market-sync.js';
+import type { LabelPoolRow } from './market-types.js';
+import { FakeSkillClassifier, type SkillClassifier } from './skill-classifier.js';
+import { failureKindOf } from './sync-summary.js';
+import { TAXONOMY_VERSION, TOPIC_QUESTIONS, TOPIC_THRESHOLD } from './topic-taxonomy.js';
 import { GOLD_LABELS, GOLD_LISTINGS } from './shelf-gold.fixture.js';
 import { LARK_LABELS, LARK_LISTINGS } from './shelf-suite.fixture.js';
 
@@ -562,5 +565,162 @@ describe('MarketSync.refreshActiveFields', () => {
     const result = await sync.refreshActiveFields();
 
     expect(isOk(result) && result.value.queued).toEqual(['a/new']);
+  });
+});
+
+describe('MarketSync.labelPool', () => {
+  const hashOf = (row: LabelPoolRow) => stateHash(buildLabelState(row));
+
+  async function seedPool(store: InMemoryMarketStore, count: number): Promise<string[]> {
+    const ids = Array.from({ length: count }, (_, i) => `acme/repo/s${String(i).padStart(3, '0')}`);
+    for (const id of ids) {
+      await store.upsertListing(listingItem(id), '2026-01-01T00:00:00.000Z');
+    }
+    return ids;
+  }
+
+  function fake(script: { failIds?: string[]; error?: Error } = {}) {
+    return new FakeSkillClassifier({ ...script, stateHash: hashOf });
+  }
+
+  /** Delegates to `inner` but fails the `failOnCall`-th classify call (1-based). */
+  function failingOnCall(inner: FakeSkillClassifier, failOnCall: number): SkillClassifier & { calls: number } {
+    return {
+      calls: 0,
+      async classify(rows, questions) {
+        this.calls += 1;
+        if (this.calls === failOnCall) return err(new Error('jev down'));
+        return inner.classify(rows, questions);
+      },
+    };
+  }
+
+  function syncFor(store: InMemoryMarketStore) {
+    return syncOf(store, fakeClient([]));
+  }
+
+  it('labels every unlabeled row in batches and saves them under TAXONOMY_VERSION', async () => {
+    const store = new InMemoryMarketStore();
+    const ids = await seedPool(store, 5);
+    const classifier = fake();
+
+    const result = await syncFor(store).labelPool(classifier, { batchSize: 2 });
+
+    expect(isOk(result) && result.value).toMatchObject({
+      needed: 5,
+      labeled: 5,
+      errored: 0,
+      skippedUnchanged: 0,
+      batches: 3,
+    });
+    expect(classifier.calls.map((call) => call.rows.length)).toEqual([2, 2, 1]);
+    expect(classifier.calls[0]?.questions).toEqual(TOPIC_QUESTIONS);
+    const keys = await store.listLabelKeys(TAXONOMY_VERSION);
+    expect(isOk(keys) && [...keys.value.keys()].sort()).toEqual(ids);
+  });
+
+  it('makes zero classifier calls on a second run with no changes', async () => {
+    const store = new InMemoryMarketStore();
+    await seedPool(store, 3);
+    await syncFor(store).labelPool(fake());
+
+    const second = fake();
+    const result = await syncFor(store).labelPool(second);
+
+    expect(second.calls).toHaveLength(0);
+    expect(isOk(result) && result.value).toMatchObject({ needed: 0, labeled: 0, skippedUnchanged: 3, batches: 0 });
+  });
+
+  it('relabels only rows whose label state changed', async () => {
+    const store = new InMemoryMarketStore();
+    await seedPool(store, 3);
+    await syncFor(store).labelPool(fake());
+    await store.setDetail('acme/repo/s001', { description: 'now does more', hash: 'h2' });
+
+    const second = fake();
+    const result = await syncFor(store).labelPool(second);
+
+    expect(second.calls.flatMap((call) => call.rows.map((row) => row.id))).toEqual(['acme/repo/s001']);
+    expect(isOk(result) && result.value.diff).toEqual({ added: [], changed: ['acme/repo/s001'], retried: [] });
+  });
+
+  it('keeps batches 1-2 when batch 3 fails, and the next run resumes from batch 3', async () => {
+    const store = new InMemoryMarketStore();
+    const ids = await seedPool(store, 6);
+    const failing = failingOnCall(fake(), 3);
+
+    const first = await syncFor(store).labelPool(failing, { batchSize: 2 });
+
+    expect(isOk(first)).toBe(false);
+    if (!isOk(first)) expect(first.error.message).toBe('jev down');
+    const kept = await store.listLabelKeys(TAXONOMY_VERSION);
+    expect(isOk(kept) && [...kept.value.keys()].sort()).toEqual(ids.slice(0, 4));
+
+    const resume = fake();
+    const second = await syncFor(store).labelPool(resume, { batchSize: 2 });
+
+    expect(resume.calls.flatMap((call) => call.rows.map((row) => row.id))).toEqual(ids.slice(4));
+    expect(isOk(second) && second.value).toMatchObject({ needed: 2, labeled: 2, skippedUnchanged: 4 });
+  });
+
+  it("retries status 'error' rows on the next run", async () => {
+    const store = new InMemoryMarketStore();
+    const ids = await seedPool(store, 100);
+    const first = await syncFor(store).labelPool(fake({ failIds: [ids[7]!] }));
+    expect(isOk(first) && first.value).toMatchObject({ needed: 100, labeled: 99, errored: 1 });
+
+    const retry = fake();
+    const second = await syncFor(store).labelPool(retry);
+
+    expect(retry.calls.flatMap((call) => call.rows.map((row) => row.id))).toEqual([ids[7]]);
+    expect(isOk(second) && second.value.diff).toEqual({ added: [], changed: [], retried: [ids[7]] });
+    const keys = await store.listLabelKeys(TAXONOMY_VERSION);
+    expect(isOk(keys) && keys.value.get(ids[7]!)?.status).toBe('ok');
+  });
+
+  it("returns Err kind 'bad_answers' when more than 2% of rows errored, keeping saved batches", async () => {
+    const store = new InMemoryMarketStore();
+    const ids = await seedPool(store, 100);
+
+    const result = await syncFor(store).labelPool(fake({ failIds: ids.slice(0, 3) }), { batchSize: 50 });
+
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result)) {
+      expect(failureKindOf(result.error, 'store')).toBe('bad_answers');
+      expect((result.error as LabelPoolError).result).toMatchObject({ needed: 100, errored: 3, labeled: 47 });
+    }
+    const keys = await store.listLabelKeys(TAXONOMY_VERSION);
+    expect(isOk(keys) && keys.value.size).toBe(50);
+  });
+
+  it('passes a whole-call classifier error through unchanged', async () => {
+    const store = new InMemoryMarketStore();
+    await seedPool(store, 2);
+    const cause = Object.assign(new Error('401'), { kind: 'auth' });
+
+    const result = await syncFor(store).labelPool(fake({ error: cause }));
+
+    expect(!isOk(result) && result.error).toBe(cause);
+  });
+
+  it('dryRun classifies but saves nothing, and returns the diff', async () => {
+    const store = new InMemoryMarketStore();
+    const ids = await seedPool(store, 3);
+    const pool = await store.listLabelPool();
+    const errorRow = isOk(pool) ? pool.value[2]! : undefined;
+    await store.saveLabels(TAXONOMY_VERSION, [
+      { id: ids[1]!, status: 'ok', probabilities: {}, stateHash: 'stale', modelVersion: 'fake' },
+      { id: ids[2]!, status: 'error', probabilities: {}, stateHash: hashOf(errorRow!), modelVersion: 'fake' },
+    ]);
+    const before = await store.listLabels(TAXONOMY_VERSION);
+
+    const result = await syncFor(store).labelPool(fake(), { dryRun: true });
+
+    expect(isOk(result) && result.value).toMatchObject({
+      needed: 3,
+      labeled: 3,
+      diff: { added: [ids[0]], changed: [ids[1]], retried: [ids[2]] },
+    });
+    expect(await store.listLabels(TAXONOMY_VERSION)).toEqual(before);
   });
 });
