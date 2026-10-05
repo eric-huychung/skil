@@ -4,6 +4,7 @@ import { type CreatorEntry, type CreatorsConfig, loadMarketCreators } from './ma
 import { hydrateSuggestedPicks, loadMarketPicks } from './market-picks.js';
 import type { MarketStore } from './market-store.js';
 import type { CreatorCard, CreatorDetail, CreatorSkillRow } from './market-types.js';
+import { MAX_SEARCH_QUERY_LENGTH, SEARCH_CACHE_CONTROL } from './skills-proxy.js';
 import { toSkillsAddSource } from './skills-add-source.js';
 import { TAXONOMY_VERSION } from './topic-taxonomy.js';
 
@@ -176,8 +177,8 @@ function parseSearchLimit(raw: string | null): number {
 /**
  * Vercel Function handler for `GET /api/market/search?q=&limit=`. Searches
  * the full stored index (not just shelved skills) — same query used by the
- * landing page and the GUI's market search. `q` is required; `limit`
- * clamps to 1-50 (default 25). Each row is `{ id, name, installs }` only,
+ * landing page and the GUI's market search. `q` is required and capped at
+ * `MAX_SEARCH_QUERY_LENGTH`; `limit` clamps to 1-50 (default 25). Each row is `{ id, name, installs }` only,
  * same as a shelf row minus rank.
  */
 export async function handleMarketSearchRequest(request: Request, deps: MarketReadDeps): Promise<Response> {
@@ -190,13 +191,20 @@ export async function handleMarketSearchRequest(request: Request, deps: MarketRe
     );
   }
 
+  if (q.length > MAX_SEARCH_QUERY_LENGTH) {
+    return Response.json(
+      { error: 'invalid_request', message: `'q' must be at most ${MAX_SEARCH_QUERY_LENGTH} characters.` },
+      { status: 400 },
+    );
+  }
+
   const limit = parseSearchLimit(params.get('limit'));
   const result = await deps.store.searchListings(q, { limit });
   if (!isOk(result)) {
     return Response.json({ error: 'store_error', message: STORE_UNAVAILABLE }, { status: 500 });
   }
 
-  return Response.json({ data: result.value });
+  return Response.json({ data: result.value }, { headers: { 'Cache-Control': SEARCH_CACHE_CONTROL } });
 }
 
 /**

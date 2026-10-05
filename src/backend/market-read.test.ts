@@ -213,6 +213,26 @@ describe('handleMarketSearchRequest', () => {
     expect(body.error).toBe('invalid_request');
   });
 
+  it('returns 400 when q is longer than 200 characters', async () => {
+    const store = new InMemoryMarketStore();
+
+    const response = await handleMarketSearchRequest(
+      new Request(`http://localhost/api/market/search?q=${'a'.repeat(201)}`),
+      { store },
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it('sets a short CDN Cache-Control header on success', async () => {
+    const store = new InMemoryMarketStore();
+
+    const response = await handleMarketSearchRequest(new Request('http://localhost/api/market/search?q=sql'), { store });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('public, s-maxage=60, stale-while-revalidate=300');
+  });
+
   it('returns id/name/installs rows matching name or description, name prefix ranked above a description match', async () => {
     const store = new InMemoryMarketStore();
     await store.upsertListing(listing('a/one', { name: 'SQL helper', installs: 5 }), '2026-01-01T00:00:00.000Z');

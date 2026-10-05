@@ -4,6 +4,10 @@ import { err, isOk, ok, type Result } from '../core/result.js';
 const SKILLS_SH_SEARCH_URL = 'https://skills.sh/api/v1/skills/search';
 const SKILLS_SH_BROWSE_URL = 'https://skills.sh/api/v1/skills';
 const BROWSE_CACHE_CONTROL = 'public, s-maxage=86400, stale-while-revalidate=3600';
+/** Search is open to the public: a short CDN cache absorbs repeat queries so they can't drain the skills.sh / Supabase budget. */
+export const SEARCH_CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300';
+/** Real queries are a few words; anything longer is noise or abuse. */
+export const MAX_SEARCH_QUERY_LENGTH = 200;
 /** Client-facing 502 copy. Never relay skills.sh / gateway HTML or error text. */
 const UPSTREAM_UNAVAILABLE = 'skills.sh unavailable.';
 
@@ -106,12 +110,19 @@ export async function handleBrowseRequest(request: Request, deps: SkillsProxyDep
 
 /**
  * Vercel Function handler for `GET /api/skills/search?q=`. Same OIDC proxy
- * as browse; no CDN cache (query-specific). 502 body stays generic.
+ * as browse, with a short CDN cache on 200 only. `q` is capped at
+ * `MAX_SEARCH_QUERY_LENGTH`. 502 body stays generic.
  */
 export async function handleSearchRequest(request: Request, deps: SkillsProxyDeps): Promise<Response> {
   const query = new URL(request.url, 'http://localhost').searchParams.get('q');
   if (!query) {
     return Response.json({ error: 'invalid_request', message: "Missing required 'q' query parameter." }, { status: 400 });
+  }
+  if (query.length > MAX_SEARCH_QUERY_LENGTH) {
+    return Response.json(
+      { error: 'invalid_request', message: `'q' must be at most ${MAX_SEARCH_QUERY_LENGTH} characters.` },
+      { status: 400 },
+    );
   }
 
   const result = await searchSkills(query, deps);
@@ -119,5 +130,5 @@ export async function handleSearchRequest(request: Request, deps: SkillsProxyDep
     return upstreamErrorResponse(result.error);
   }
 
-  return Response.json(result.value);
+  return Response.json(result.value, { headers: { 'Cache-Control': SEARCH_CACHE_CONTROL } });
 }

@@ -253,6 +253,32 @@ describe('handleSearchRequest', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it('returns 400 without calling skills.sh when q is longer than 200 characters', async () => {
+    const fetchImpl = fakeFetch({ status: 200, body: { data: [] } });
+    const getOidcToken = vi.fn(async () => 'test-oidc-token');
+
+    const response = await handleSearchRequest(
+      new Request(`${website.apiBaseUrl}/api/skills/search?q=${'a'.repeat(201)}`),
+      { fetchImpl, getOidcToken },
+    );
+
+    expect(response.status).toBe(400);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('sets a short CDN Cache-Control on a successful search', async () => {
+    const fetchImpl = fakeFetch({ status: 200, body: { data: [] } });
+    const getOidcToken = vi.fn(async () => 'test-oidc-token');
+
+    const response = await handleSearchRequest(new Request(`${website.apiBaseUrl}/api/skills/search?q=react`), {
+      fetchImpl,
+      getOidcToken,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('public, s-maxage=60, stale-while-revalidate=300');
+  });
+
   it('returns 502 with a generic message when skills.sh fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const fetchImpl = fakeFetch({ status: 429, body: { message: 'Too many requests' } });
