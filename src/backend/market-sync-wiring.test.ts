@@ -3,8 +3,9 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('MarketSync wiring', () => {
-  it('laptop script and weekly Actions job share one classify path', () => {
+  it('laptop script and weekly Actions job share the Jev label-and-shelves path', () => {
     const laptop = readFileSync(join(process.cwd(), 'scripts/sync-market.ts'), 'utf8');
+    const jevRun = readFileSync(join(process.cwd(), 'src/backend/jev-run.ts'), 'utf8');
     const workflow = readFileSync(join(process.cwd(), '.github/workflows/sync-market.yml'), 'utf8');
     const vercel = JSON.parse(readFileSync(join(process.cwd(), 'vercel.json'), 'utf8')) as {
       crons?: Array<{ path: string; schedule: string }>;
@@ -14,7 +15,13 @@ describe('MarketSync wiring', () => {
 
     expect(laptop).toMatch(/new MarketSync\(/);
     expect(laptop).not.toContain('createMarketSync');
-    expect(laptop).toContain('refreshActiveFields');
+    expect(laptop).toContain('runJevLabelAndShelves');
+    expect(laptop).toContain('new JevSkillClassifier');
+    expect(jevRun).toContain('labelPool');
+    expect(jevRun).toContain('rebuildShelves');
+    expect(laptop).not.toContain('refreshActiveFields');
+    expect(laptop).not.toContain('LlmSkillClassifier');
+    expect(laptop).not.toContain('--jev');
     expect(laptop).toContain('--classify-only');
     expect(laptop).toContain('AI_GATEWAY_API_KEY');
     expect(laptop).not.toContain('searchSkills');
@@ -24,6 +31,7 @@ describe('MarketSync wiring', () => {
     expect(vercel.crons ?? []).toEqual([]);
     expect(vercel.functions?.['api/cron/sync-market.ts']).toBeUndefined();
     expect(workflow).toMatch(/cron: ['"]0 0 \* \* 0['"]/);
+    expect(workflow).toContain('Label skills and rebuild shelves');
     expect(workflow).toContain('sync-market -- --classify-only');
     expect(workflow).toContain('secrets.AI_GATEWAY_API_KEY');
     expect(workflow).toContain('secrets.NEXT_PUBLIC_SUPABASE_URL');

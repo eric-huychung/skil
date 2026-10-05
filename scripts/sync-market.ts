@@ -7,16 +7,11 @@
  *
  * Reindex shelves only (needs AI_GATEWAY_API_KEY, no OIDC):
  *   npm run sync-market -- --classify-only
- *   seed → classify top 1000 → write shelves
+ *   seed → incrementally label the pool with Jev → rebuild shelves
  *   Same path as Sunday GitHub Actions.
  *
- * Jev labels + shelves (TEMPORARY flag until the job switches over; combine with the above):
- *   npm run sync-market -- --classify-only --jev
- *   labelPool (incremental, Jev) → rebuildShelves (coverage gate, one replaceShelves write)
- *   instead of the old classify-top-1000 path. Incomplete label coverage fails the run (exit 1).
- *
- * Dry run (needs --jev; writes nothing: no seed, no crawl/hydrate, no labels, no shelves):
- *   npm run sync-market -- --jev --dry-run
+ * Dry run (writes nothing: no seed, no crawl/hydrate, no labels, no shelves):
+ *   npm run sync-market -- --classify-only --dry-run
  *   Prints the label diff and shelf-health numbers (unlabeled share, per-shelf counts and
  *   distinct owners, review band). The coverage gate reads stored labels only, so it fails
  *   until a real label run has saved them.
@@ -49,7 +44,6 @@ import { err, isOk, ok, type Result } from '../src/core/result.js';
 import { SEED_FIELDS, SEED_ROLES } from '../src/backend/market-seed.js';
 import { MarketSync } from '../src/backend/market-sync.js';
 import { RealMarketSkillsClient } from '../src/backend/market-skills-client.js';
-import { LlmSkillClassifier } from '../src/backend/llm-skill-classifier.js';
 import { SupabaseMarketStore } from '../src/backend/supabase-market-store.js';
 import { loadMarketCreators } from '../src/backend/market-creators.js';
 import { JevCreatorGate, printCreatorsReport } from '../src/backend/creators-report.js';
@@ -105,10 +99,6 @@ function parseClassifyOnly(argv: string[]): boolean {
 
 function parseBackfillExcerpt(argv: string[]): boolean {
   return argv.includes('--backfill-excerpt');
-}
-
-function parseJev(argv: string[]): boolean {
-  return argv.includes('--jev');
 }
 
 function parseDryRun(argv: string[]): boolean {
@@ -180,12 +170,8 @@ async function run(state: RunState): Promise<SyncRunOutcome> {
   const classifyOnly = parseClassifyOnly(flags);
   const maxDetail = parseMaxDetail(flags);
   const backfillExcerpt = parseBackfillExcerpt(flags);
-  const jev = parseJev(flags);
   const dryRun = parseDryRun(flags);
 
-  if (dryRun && !jev) {
-    return configError(state, '--dry-run needs --jev (the old classify path has no dry run).');
-  }
   if (dryRun && backfillExcerpt) {
     return configError(state, '--dry-run cannot be combined with --backfill-excerpt (backfill writes excerpts).');
   }
@@ -202,10 +188,11 @@ async function run(state: RunState): Promise<SyncRunOutcome> {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
   const store = new SupabaseMarketStore(supabase);
+  const classifier = new JevSkillClassifier(new GatewayJevClient({ fetchImpl: fetch, apiKey: gatewayKey }));
   const sync = new MarketSync({
     store,
     client: new RealMarketSkillsClient({ fetchImpl: fetch, getOidcToken: () => getVercelOidcToken() }),
-    classifier: new LlmSkillClassifier({ fetchImpl: fetch, getAccessToken: async () => gatewayKey }),
+    classifier,
   });
 
   if (backfillExcerpt) {
@@ -222,10 +209,7 @@ async function run(state: RunState): Promise<SyncRunOutcome> {
   if (dryRun) {
     state.step = 'label';
     console.log('Dry run: skip seed and listing crawl; no label or shelf writes.');
-    const outcome = await runJevLabelAndShelves(
-      { sync, store, classifier: jevClassifier(gatewayKey), log: (line) => console.log(line) },
-      { dryRun: true },
-    );
+    const outcome = await runJevLabelAndShelves({ sync, store, classifier, log: (line) => console.log(line) }, { dryRun: true });
     return { ...outcome, secrets: state.secrets };
   }
 
@@ -253,48 +237,11 @@ async function run(state: RunState): Promise<SyncRunOutcome> {
     console.log('Classify-only: skip listing crawl.');
   }
 
-  if (jev) {
-    state.step = 'label';
-    const outcome = await runJevLabelAndShelves({
-      sync,
-      store,
-      classifier: jevClassifier(gatewayKey),
-      log: (line) => console.log(line),
-    });
-    state.shelvesWritten = outcome.shelvesWritten;
-    if (!outcome.failure) console.log('Done.');
-    return { ...outcome, secrets: state.secrets };
-  }
-
   state.step = 'label';
-  console.log('Classifying top 1000 into shelves (dedup → LLM → rank)...');
-  const shelves = await sync.refreshActiveFields();
-  if (!isOk(shelves)) return fail(state, 'unavailable', shelves.error);
-  state.shelvesWritten = shelves.value.refreshed.length > 0;
-  console.log(`Shelves written: ${shelves.value.refreshed.join(', ')}`);
-
-  const listed = await store.listShelves();
-  if (isOk(listed)) {
-    for (const role of listed.value) {
-      for (const field of role.fields) {
-        console.log(`  ${role.label} / ${field.label}: ${field.skills.length}`);
-      }
-    }
-  }
-
-  if (!classifyOnly && shelves.value.queued.length > 0) {
-    state.step = 'hydrate';
-    console.log(`Classify pool has ${shelves.value.queued.length} id(s) with no hash; hydrating...`);
-    const drained = await drainHydrateQueue(sync, shelves.value.queued, maxDetail);
-    if (!isOk(drained)) return fail(state, 'unavailable', drained.error);
-  }
-
-  console.log('Done.');
-  return { shelvesWritten: state.shelvesWritten, secrets: state.secrets };
-}
-
-function jevClassifier(apiKey: string): JevSkillClassifier {
-  return new JevSkillClassifier(new GatewayJevClient({ fetchImpl: fetch, apiKey }));
+  const outcome = await runJevLabelAndShelves({ sync, store, classifier, log: (line) => console.log(line) });
+  state.shelvesWritten = outcome.shelvesWritten;
+  if (!outcome.failure) console.log('Done.');
+  return { ...outcome, secrets: state.secrets };
 }
 
 function writeSummary(outcome: SyncRunOutcome): number {
