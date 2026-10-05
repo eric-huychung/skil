@@ -29,6 +29,14 @@ describe('taxonomy review', () => {
     ]);
   });
 
+  it('treats the review band high edge as exclusive, matching sync', () => {
+    const edgePool = [pool[0]];
+    const edgeScores: SkillScore[] = [
+      { id: 'a/clear', status: 'ok', probabilities: { frontend: 0.6 }, stateHash: '1', modelVersion: 'test' },
+    ];
+    expect(buildTaxonomyReview(edgePool, edgeScores)).toEqual([]);
+  });
+
   it('reads labels without calling a shelf mutation', async () => {
     const store = {
       listLabelPool: async () => ok(pool),

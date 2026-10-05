@@ -32,7 +32,7 @@ export function buildTaxonomyReview(
       const probabilities = score?.probabilities ?? {};
       const hasTopic = score?.status === 'ok' && Object.values(probabilities).some((p) => p >= threshold);
       const hasReviewBand =
-        score?.status === 'ok' && Object.values(probabilities).some((p) => p >= reviewBand.low && p <= reviewBand.high);
+        score?.status === 'ok' && Object.values(probabilities).some((p) => p >= reviewBand.low && p < reviewBand.high);
       const flags: TaxonomyReviewFlag[] = [];
       if (!hasTopic) flags.push('unlabeled');
       if (hasReviewBand) flags.push('review-band');
