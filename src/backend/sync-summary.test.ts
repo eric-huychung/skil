@@ -66,9 +66,52 @@ describe('summarize', () => {
     expect(summary.status).toBe('failed');
     expect(summary.failedStep).toBe(step);
     expect(summary.failureKind).toBe(kind);
-    expect(summary.firstError).toBe('boom');
+    expect(summary.firstError).toMatch(/^boom/);
     expect(summary.shelvesWritten).toBe(false);
     expect(exitCodeFor(summary)).toBe(1);
+  });
+
+  it('explains a bad_answers label failure (LabelPoolError shape) and keeps its counts', () => {
+    const error = Object.assign(new Error('MarketSync: 3 of 50 rows errored (over 2%)'), { kind: 'bad_answers' });
+    const summary = summarize({
+      failure: { step: 'label', kind: failureKindOf(error, 'unavailable'), error },
+      stats: { labeled: 47, needed: 50, errored: 3 },
+      shelvesWritten: false,
+    });
+    expect(summary).toMatchObject({ status: 'failed', failedStep: 'label', failureKind: 'bad_answers', errored: 3 });
+    expect(summary.firstError).toContain('3 of 50 rows errored');
+    expect(summary.firstError).toContain('next run retries');
+    expect(exitCodeFor(summary)).toBe(1);
+  });
+
+  it('explains an incomplete_coverage shelf failure', () => {
+    const error = Object.assign(new Error('4 of 10 active rows have no current label'), {
+      kind: 'incomplete_coverage',
+    });
+    const summary = summarize({
+      failure: { step: 'shelves', kind: failureKindOf(error, 'store'), error },
+      shelvesWritten: false,
+      shelvesGeneratedAt: '2026-09-27T00:00:00Z',
+    });
+    expect(summary).toMatchObject({
+      status: 'failed',
+      failedStep: 'shelves',
+      failureKind: 'incomplete_coverage',
+      shelvesWritten: false,
+      shelvesGeneratedAt: '2026-09-27T00:00:00Z',
+    });
+    expect(summary.firstError).toContain('4 of 10 active rows');
+    expect(summary.firstError).toContain('shelves left unchanged');
+    expect(exitCodeFor(summary)).toBe(1);
+  });
+
+  it('keeps the hint when a hinted message is truncated', () => {
+    const summary = summarize({
+      failure: { step: 'label', kind: 'bad_answers', error: new Error('x'.repeat(2000)) },
+      shelvesWritten: false,
+    });
+    expect(summary.firstError!.length).toBeLessThanOrEqual(300);
+    expect(summary.firstError).toContain('next run retries');
   });
 
   it('prefixes firstError with an HTTP status when the error has one', () => {
