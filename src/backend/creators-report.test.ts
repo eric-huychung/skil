@@ -2,14 +2,17 @@ import { describe, expect, it, vi } from 'vitest';
 import yaml from 'js-yaml';
 import { err, isErr, isOk, ok } from '../core/result.js';
 import {
+  JevCreatorGate,
   fetchGithubFollowers,
   formatReport,
   printCreatorsReport,
   runCreatorsReport,
   type CreatorsReportDeps,
+  type JevCreatorGateDeps,
 } from './creators-report.js';
+import { JevError, type JevClient, type JevEvaluation } from './jev-client.js';
 import { parseMarketCreators, type CreatorsConfig, type CreatorEntry } from './market-creators.js';
-import type { OwnerStats } from './market-types.js';
+import type { CreatorCheck, LabelPoolRow, OwnerStats } from './market-types.js';
 
 const OFFICIAL_HTML = '<main><a href="/anthropics">A</a><a href="/vercel-labs">V</a><a href="/stripe">S</a></main>';
 
@@ -145,6 +148,129 @@ describe('runCreatorsReport', () => {
       ['a', 0.9, 'devtools'],
       ['c', null, null],
     ]);
+  });
+});
+
+/** Jev keyed by the state's first line ("Creator: a, b"); unknown creators get a JevError. */
+function fakeJev(byCreator: Record<string, number | JevError>) {
+  const states: string[] = [];
+  const jev: JevClient = {
+    evaluate: async (state) => {
+      states.push(state);
+      const answer = byCreator[/^Creator: (.*)$/m.exec(state)?.[1] ?? ''];
+      if (answer === undefined) return err(new JevError('unavailable', `no fake answer for ${state.split('\n')[0]}`));
+      if (answer instanceof JevError) return err(answer);
+      const evaluation: JevEvaluation = {
+        answers: {
+          tech: { kind: 'boolean', probability: answer },
+          domain: { kind: 'choice', option: answer >= 0.5 ? 'software-dev' : 'marketing-sales', probabilities: {} },
+        },
+        modelVersion: 'jev-1',
+        inputTokens: 1,
+      };
+      return ok(evaluation);
+    },
+  };
+  return { jev, states };
+}
+
+function poolRow(owner: string, name: string, installs = 10): LabelPoolRow {
+  return { id: `${owner}/${name}`, name, source: `${owner}/repo`, installs, description: `${name} help`, labelExcerpt: null, owner };
+}
+
+function gateStore(pool: LabelPoolRow[]): JevCreatorGateDeps['store'] & { saved: CreatorCheck[] } {
+  const saved: CreatorCheck[] = [];
+  return {
+    saved,
+    listLabelPool: async () => ok(pool),
+    getCreatorChecks: async (keys) => ok(saved.filter((check) => keys.includes(check.creatorKey))),
+    saveCreatorCheck: async (check) => {
+      saved.push(check);
+      return ok(undefined);
+    },
+  };
+}
+
+describe('JevCreatorGate', () => {
+  it('a tech: override beats the probability, then the YAML cutoff decides', async () => {
+    const current = config(
+      [entry('liked', ['liked'], { tech: true }), entry('hated', ['hated'], { tech: false })],
+      { techCutoff: 0.5 }
+    );
+    const { jev } = fakeJev({ liked: 0.1, hated: 0.95, high: 0.6, edge: 0.5, low: 0.49 });
+    const rows = [stats('hated', 9), stats('liked', 8), stats('high', 7), stats('edge', 6), stats('low', 5)];
+    const gate = new JevCreatorGate({ jev, store: gateStore([]) });
+    const result = await runCreatorsReport(deps({ config: current, rows, gate, size: 10 }));
+    expect(isOk(result) && result.value.rows.map((r) => [r.slug, r.techProbability])).toEqual([
+      ['liked', 0.1],
+      ['high', 0.6],
+      ['edge', 0.5],
+    ]);
+  });
+
+  it('judges each candidate: verdicts carry probability, domain and passes', async () => {
+    const current = config([entry('liked', ['liked'], { tech: true })], { techCutoff: 0.4 });
+    const { jev } = fakeJev({ liked: 0.1, low: 0.2, high: 0.8 });
+    const candidates = ['liked', 'low', 'high'].map((key) => ({
+      key,
+      owners: [key],
+      skillCount: 1,
+      totalInstalls: 1,
+      bestInstalls: 1,
+    }));
+    const judged = await new JevCreatorGate({ jev, store: gateStore([]) }).judge(candidates, current);
+    expect(isOk(judged) && Object.fromEntries(judged.value)).toEqual({
+      liked: { techProbability: 0.1, domain: 'marketing-sales', passes: true },
+      low: { techProbability: 0.2, domain: 'marketing-sales', passes: false },
+      high: { techProbability: 0.8, domain: 'software-dev', passes: true },
+    });
+  });
+
+  it('sends pool descriptions for every alias, skips blocked owners, and caches the answers', async () => {
+    const current = config([entry('lark', ['larksuite', 'open.feishu.cn'])], { blocked: ['spam'] });
+    const { jev, states } = fakeJev({ 'larksuite, open.feishu.cn': 0.9 });
+    const store = gateStore([poolRow('larksuite', 'docs', 50), poolRow('open.feishu.cn', 'bot', 70), poolRow('spam', 'x')]);
+    const gate = new JevCreatorGate({ jev, store });
+    const rows = [stats('spam', 99), stats('larksuite', 9), stats('open.feishu.cn', 8)];
+
+    const first = await runCreatorsReport(deps({ config: current, rows, gate }));
+    expect(isOk(first) && first.value.rows.map((r) => [r.slug, r.techProbability])).toEqual([['lark', 0.9]]);
+    expect(states).toHaveLength(1);
+    expect(states[0]).toContain('1. bot: bot help');
+    expect(states[0]).toContain('2. docs: docs help');
+    expect(store.saved.map((check) => check.creatorKey)).toEqual(['larksuite+open.feishu.cn']);
+
+    const second = await runCreatorsReport(deps({ config: current, rows, gate }));
+    expect(isOk(second)).toBe(true);
+    expect(states).toHaveLength(1);
+  });
+
+  it('leaves out a creator Jev could not answer unless an override says tech, and warns', async () => {
+    const current = config([entry('kept', ['kept'], { tech: true })]);
+    const { jev } = fakeJev({ fine: 0.9 });
+    const warnings: string[] = [];
+    const gate = new JevCreatorGate({ jev, store: gateStore([]), warn: (line) => warnings.push(line) });
+    const rows = [stats('kept', 9), stats('broken', 8), stats('fine', 7)];
+    const result = await runCreatorsReport(deps({ config: current, rows, gate }));
+    expect(isOk(result) && result.value.rows.map((r) => [r.slug, r.techProbability])).toEqual([
+      ['kept', null],
+      ['fine', 0.9],
+    ]);
+    expect(warnings.join('\n')).toContain('broken');
+  });
+
+  it('fails the report on a Jev auth error or a store error', async () => {
+    const { jev } = fakeJev({ a: new JevError('auth', 'bad key') });
+    const authed = await runCreatorsReport(
+      deps({ rows: [stats('a', 1)], gate: new JevCreatorGate({ jev, store: gateStore([]) }) })
+    );
+    expect(isErr(authed) && authed.error.message).toBe('bad key');
+
+    const store = { ...gateStore([]), listLabelPool: async () => err(new Error('pool down')) };
+    const pooled = await runCreatorsReport(
+      deps({ rows: [stats('a', 1)], gate: new JevCreatorGate({ jev: fakeJev({ a: 0.9 }).jev, store }) })
+    );
+    expect(isErr(pooled) && pooled.error.message).toBe('pool down');
   });
 });
 

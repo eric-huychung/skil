@@ -1,8 +1,10 @@
 import { err, isOk, ok, type Result } from '../core/result.js';
+import { creatorKey, gateCreators, type CreatorGateCache, type CreatorGateSkill } from './creator-gate.js';
 import { mergeAliases, rankCandidates, selectThirty, type CreatorCandidate } from './creator-ranking.js';
 import { CREATORS_SHELF_SIZE, type CreatorsConfig } from './market-creators.js';
 import type { MarketStore } from './market-store.js';
 import { fetchOfficialOwners } from './official-owners.js';
+import type { JevClient } from './jev-client.js';
 
 /**
  * The creators report (design §4.7, laptop only): proposes the 30 Creators slots and prints
@@ -13,20 +15,77 @@ import { fetchOfficialOwners } from './official-owners.js';
 const TOP_OWNERS = 100;
 const GITHUB_USERS_URL = 'https://api.github.com/users/';
 
-/** One candidate's tech-gate answer. */
+/** One candidate's tech-gate answer. `null` probability/domain: Jev could not answer this run. */
 export interface GateVerdict {
-  techProbability: number;
-  domain: string;
+  techProbability: number | null;
+  domain: string | null;
   /** After `tech:` overrides and the YAML cutoff. */
   passes: boolean;
 }
 
 /**
- * Tech-gate seam: T12b plugs the Jev gate (with its cache) in here.
+ * Tech-gate seam (`JevCreatorGate` below is the real one).
  * Candidates missing from the map pass with no verdict. Without a gate, every candidate passes.
  */
 export interface CreatorGate {
   judge(candidates: readonly CreatorCandidate[], config: CreatorsConfig): Promise<Result<Map<string, GateVerdict>>>;
+}
+
+export interface JevCreatorGateDeps {
+  jev: JevClient;
+  /** The label pool supplies skill descriptions; the checks table is the gate cache (its only write). */
+  store: Pick<MarketStore, 'listLabelPool'> & CreatorGateCache;
+  /** Per-creator Jev failures are reported here (the creator is left out unless `tech: true`). */
+  warn?: (line: string) => void;
+}
+
+/**
+ * The real tech gate (report steps 2-3): Jev via `gateCreators` with its cache, then
+ * `tech:` override first, then `blocked`, then probability >= the YAML `techCutoff`.
+ * Blocked candidates are not sent to Jev. A store error or Jev auth error fails the gate.
+ */
+export class JevCreatorGate implements CreatorGate {
+  constructor(private readonly deps: JevCreatorGateDeps) {}
+
+  async judge(candidates: readonly CreatorCandidate[], config: CreatorsConfig): Promise<Result<Map<string, GateVerdict>>> {
+    const blocked = new Set(config.blocked.map((owner) => owner.toLowerCase()));
+    const judged = candidates.filter((c) => !c.owners.some((owner) => blocked.has(owner.toLowerCase())));
+    if (judged.length === 0) return ok(new Map());
+
+    const pool = await this.deps.store.listLabelPool();
+    if (!isOk(pool)) return err(pool.error);
+    const skillsByOwner = new Map<string, CreatorGateSkill[]>();
+    for (const row of pool.value) {
+      const owner = row.owner.toLowerCase();
+      const skills = skillsByOwner.get(owner) ?? [];
+      skills.push({ name: row.name, description: row.description, installs: row.installs });
+      skillsByOwner.set(owner, skills);
+    }
+
+    const gated = await gateCreators(
+      judged.map((c) => ({ owners: c.owners, skills: c.owners.flatMap((o) => skillsByOwner.get(o.toLowerCase()) ?? []) })),
+      this.deps.jev,
+      this.deps.store
+    );
+    if (!isOk(gated)) return err(gated.error);
+    const checks = new Map(gated.value.checks.map((check) => [check.creatorKey, check]));
+    for (const failure of gated.value.failed) {
+      this.deps.warn?.(`Tech gate: no answer for ${failure.creatorKey} (${failure.message})`);
+    }
+
+    const overrides = new Map(config.creators.map((creator) => [creator.slug, creator.tech]));
+    const verdicts = new Map<string, GateVerdict>();
+    for (const candidate of judged) {
+      const check = checks.get(creatorKey(candidate.owners));
+      const override = overrides.get(candidate.key);
+      verdicts.set(candidate.key, {
+        techProbability: check?.techProbability ?? null,
+        domain: check?.domain ?? null,
+        passes: override ?? (check !== undefined && check.techProbability >= config.techCutoff),
+      });
+    }
+    return ok(verdicts);
+  }
 }
 
 export interface CreatorsReportDeps {
