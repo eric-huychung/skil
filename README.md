@@ -1,67 +1,43 @@
-<div align="center">
-
-<br>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.png">
-    <img src="docs/assets/wordmark-light.png" alt="Skil" width="96">
-  </picture>
-</p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/headline-dark.png">
-    <img src="docs/assets/headline-light.png" alt="More skills, but organized." width="520">
-  </picture>
-</p>
-
-Find skills, organize them, and kill the dead ones.
-
-<br>
-
-<a href="https://www.skil.website/"><img src="docs/assets/icons/globe.svg" width="16" height="16" align="absmiddle" alt=""> Website</a>
-&nbsp;&nbsp;·&nbsp;&nbsp;
-<a href="https://github.com/eric-huychung/skil/releases/latest"><img src="docs/assets/icons/download.svg" width="16" height="16" align="absmiddle" alt=""> Download</a>
-&nbsp;&nbsp;·&nbsp;&nbsp;
-<a href="https://github.com/eric-huychung/skil"><img src="docs/assets/icons/github.svg" width="16" height="16" align="absmiddle" alt=""> Source</a>
-
-<br>
-
 [![CI](https://github.com/eric-huychung/skil/actions/workflows/ci.yml/badge.svg)](https://github.com/eric-huychung/skil/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-8B5CF6)](LICENSE)
 ![macOS](https://img.shields.io/badge/macOS-app%20%2B%20CLI-8B5CF6)
 
-Free and open source. No login.
+<table width="100%">
+  <tr>
+    <td align="left" valign="middle">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.png">
+        <img src="docs/assets/wordmark-light.png" alt="Skil" width="72">
+      </picture>
+      <br>
+      Find skills, organize them, and kill the dead ones.
+    </td>
+    <td align="right" valign="middle" nowrap>
+      <a href="https://www.skil.website/"><img src="docs/assets/icons/globe.svg" width="16" height="16" align="absmiddle" alt=""> Website</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/eric-huychung/skil/releases/latest"><img src="docs/assets/icons/download.svg" width="16" height="16" align="absmiddle" alt=""> Download</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/eric-huychung/skil"><img src="docs/assets/icons/github.svg" width="16" height="16" align="absmiddle" alt=""> Source</a>
+    </td>
+  </tr>
+</table>
 
-<br>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.png">
-    <img src="docs/assets/hero-light.png" alt="The Skil app showing the Sync screen, with the skil CLI running beside it" width="880">
-  </picture>
-</p>
-
-<br>
-<br>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.png">
+  <img src="docs/assets/hero-light.png" alt="The Skil app showing the Sync screen, with the skil CLI running beside it" width="100%">
+</picture>
 
 |  <img src="docs/assets/icons/search.svg" width="20" height="20" alt=""><br>**Find** | <img src="docs/assets/icons/layers.svg" width="20" height="20" alt=""><br>**Organize** | <img src="docs/assets/icons/activity.svg" width="20" height="20" alt=""><br>**Eval** |
 | :---: | :---: | :---: |
 | Search the market, get picks for your repo, install in one command | Turn skills, commands and rules on or off. Off means parked, never deleted | Spot idle, bloated or unused skills before they cost you context |
 
-</div>
+## <img src="docs/assets/icons/download.svg" width="22" height="22" align="absmiddle" alt=""> Install
 
-<br>
+### <img src="docs/assets/icons/app.svg" width="18" height="18" align="absmiddle" alt=""> App
 
-<h2 align="center"><img src="docs/assets/icons/download.svg" width="22" height="22" align="absmiddle" alt=""> Install</h2>
+Download the `.dmg` from [skil.website](https://www.skil.website/) or [Releases](https://github.com/eric-huychung/skil/releases/latest).
 
-<h3 align="center"><img src="docs/assets/icons/app.svg" width="18" height="18" align="absmiddle" alt=""> App</h3>
-
-<p align="center">
-Download the <code>.dmg</code> from <a href="https://www.skil.website/">skil.website</a> or <a href="https://github.com/eric-huychung/skil/releases/latest">Releases</a>.<br>
-Or run these two lines. <code>curl</code> skips the browser quarantine stamp, so macOS won't block it.
-</p>
+Or run these two lines. `curl` skips the browser quarantine stamp, so macOS won't block it:
 
 ```bash
 curl -L -o ~/Downloads/skil.dmg \
@@ -69,7 +45,7 @@ curl -L -o ~/Downloads/skil.dmg \
 open ~/Downloads/skil.dmg
 ```
 
-<p align="center">Drag <b>Skil</b> into Applications, then run:</p>
+Drag **Skil** into Applications, then run:
 
 ```bash
 xattr -cr /Applications/Skil.app
@@ -79,30 +55,26 @@ xattr -cr /Applications/Skil.app
 >
 > **Opened it by double-click?** The app is unsigned (no Apple fee), so macOS may block it once. Go to **System Settings → Privacy & Security → Open Anyway**.
 
-<h3 align="center"><img src="docs/assets/icons/terminal.svg" width="18" height="18" align="absmiddle" alt=""> CLI</h3>
+### <img src="docs/assets/icons/terminal.svg" width="18" height="18" align="absmiddle" alt=""> CLI
 
-<p align="center">Needs Node 20 or newer.</p>
+Needs Node 20 or newer.
 
 ```bash
 git clone https://github.com/eric-huychung/skil.git
 cd skil && npm install && npm run build && npm link
 ```
 
-<p align="center">Then, from any project folder:</p>
+Then, from any project folder:
 
 ```bash
 skil --help
 ```
 
-<br>
+## <img src="docs/assets/icons/terminal.svg" width="22" height="22" align="absmiddle" alt=""> Commands
 
-<h2 align="center"><img src="docs/assets/icons/terminal.svg" width="22" height="22" align="absmiddle" alt=""> Commands</h2>
+Run these from your project folder.
 
-<p align="center">Run these from your project folder.</p>
-
-<h3 align="center"><img src="docs/assets/icons/search.svg" width="18" height="18" align="absmiddle" alt=""> Find</h3>
-
-<div align="center">
+### <img src="docs/assets/icons/search.svg" width="18" height="18" align="absmiddle" alt=""> Find
 
 | Command | What it does |
 | :-- | :-- |
@@ -112,16 +84,9 @@ skil --help
 | `skil suggest` | Picks for this repo. Doesn't install |
 | `skil install obra/react-patterns` | Add a skill to the project. Use the name from the left column of `search` |
 
-</div>
+### <img src="docs/assets/icons/layers.svg" width="18" height="18" align="absmiddle" alt=""> Organize
 
-<h3 align="center"><img src="docs/assets/icons/layers.svg" width="18" height="18" align="absmiddle" alt=""> Organize</h3>
-
-<p align="center">
-<b>On</b> is a copy in both <code>.agents/skills</code> and <code>.claude/skills</code>.<br>
-<b>Off</b> is parked under <code>.skil/parked</code>, not deleted. The map lives in <code>.skil/state.json</code>.
-</p>
-
-<div align="center">
+**On** is a copy in both `.agents/skills` and `.claude/skills`. **Off** is parked under `.skil/parked`, not deleted. The map lives in `.skil/state.json`.
 
 **Skills**
 
@@ -132,8 +97,7 @@ skil --help
 | `skil skills enable tdd` | Turn a skill on |
 | `skil skills disable tdd` | Park a skill |
 
-**Commands** are workflows (`build` becomes `/build`).<br>
-Adding a skill to one doesn't turn that skill on.
+**Commands** are workflows (`build` becomes `/build`). Adding a skill to one doesn't turn that skill on.
 
 | Command | What it does |
 | :-- | :-- |
@@ -153,11 +117,7 @@ Adding a skill to one doesn't turn that skill on.
 | `skil rules enable pair-programming/behavior` | Turn a shared section on |
 | `skil rules disable pair-programming/behavior` | Turn it off |
 
-</div>
-
-<h3 align="center"><img src="docs/assets/icons/activity.svg" width="18" height="18" align="absmiddle" alt=""> Eval</h3>
-
-<div align="center">
+### <img src="docs/assets/icons/activity.svg" width="18" height="18" align="absmiddle" alt=""> Eval
 
 | Command | What it does |
 | :-- | :-- |
@@ -165,22 +125,14 @@ Adding a skill to one doesn't turn that skill on.
 | `skil doctor build` | Findings for one command |
 | `skil usage` | How often Claude actually read each skill |
 
-</div>
+## <img src="docs/assets/icons/app.svg" width="22" height="22" align="absmiddle" alt=""> Run the app from source
 
-<br>
-
-<h2 align="center"><img src="docs/assets/icons/app.svg" width="22" height="22" align="absmiddle" alt=""> Run the app from source</h2>
-
-<p align="center">Same project, visual. Discover, Skills, Commands, Rules, Sync, Settings.</p>
+Same project, visual. Discover, Skills, Commands, Rules, Sync, Settings.
 
 ```bash
 npm run gui:dev
 ```
 
-<br>
-
-<div align="center">
+---
 
 MIT · Built by [Eric Chung](https://www.linkedin.com/in/huychung/)
-
-</div>
