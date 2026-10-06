@@ -147,3 +147,5 @@ npm run gui:dev
 ---
 
 MIT · Built by [Eric Chung](https://www.linkedin.com/in/huychung/)
+
+<sub>Junior software engineer in Seattle, US, looking for a full-time role. Would love to connect!</sub>
