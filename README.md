@@ -1,31 +1,42 @@
+<div align="center">
+
 [![CI](https://github.com/eric-huychung/skil/actions/workflows/ci.yml/badge.svg)](https://github.com/eric-huychung/skil/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-8B5CF6)](LICENSE)
 ![macOS](https://img.shields.io/badge/macOS-app%20%2B%20CLI-8B5CF6)
 
-<table width="100%">
-  <tr>
-    <td align="left" valign="middle">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.png">
-        <img src="docs/assets/wordmark-light.png" alt="Skil" width="72">
-      </picture>
-      <br>
-      Find skills, organize them, and kill the dead ones.
-    </td>
-    <td align="right" valign="middle" nowrap>
-      <a href="https://www.skil.website/"><img src="docs/assets/icons/globe.svg" width="16" height="16" align="absmiddle" alt=""> Website</a>
-      &nbsp;·&nbsp;
-      <a href="https://github.com/eric-huychung/skil/releases/latest"><img src="docs/assets/icons/download.svg" width="16" height="16" align="absmiddle" alt=""> Download</a>
-      &nbsp;·&nbsp;
-      <a href="https://github.com/eric-huychung/skil"><img src="docs/assets/icons/github.svg" width="16" height="16" align="absmiddle" alt=""> Source</a>
-    </td>
-  </tr>
-</table>
+<br>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.png">
-  <img src="docs/assets/hero-light.png" alt="The Skil app showing the Sync screen, with the skil CLI running beside it" width="100%">
-</picture>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.png">
+    <img src="docs/assets/wordmark-light.png" alt="Skil" width="96">
+  </picture>
+</p>
+
+Find skills, organize them, and kill the dead ones.
+
+<br>
+
+<a href="https://www.skil.website/"><img src="docs/assets/icons/globe.svg" width="16" height="16" align="absmiddle" alt=""> Website</a>
+&nbsp;&nbsp;·&nbsp;&nbsp;
+<a href="https://github.com/eric-huychung/skil/releases/latest"><img src="docs/assets/icons/download.svg" width="16" height="16" align="absmiddle" alt=""> Download</a>
+&nbsp;&nbsp;·&nbsp;&nbsp;
+<a href="https://github.com/eric-huychung/skil"><img src="docs/assets/icons/github.svg" width="16" height="16" align="absmiddle" alt=""> Source</a>
+
+<br>
+<br>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.png">
+    <img src="docs/assets/hero-light.png" alt="The Skil app showing the Sync screen, with the skil CLI running beside it" width="880">
+  </picture>
+</p>
+
+<br>
+<br>
+
+</div>
 
 |  <img src="docs/assets/icons/search.svg" width="20" height="20" alt=""><br>**Find** | <img src="docs/assets/icons/layers.svg" width="20" height="20" alt=""><br>**Organize** | <img src="docs/assets/icons/activity.svg" width="20" height="20" alt=""><br>**Eval** |
 | :---: | :---: | :---: |
