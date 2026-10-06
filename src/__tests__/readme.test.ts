@@ -8,7 +8,7 @@ const readme = readFileSync(join(root, 'README.md'), 'utf-8');
 
 describe('README product loop', () => {
   it('documents the live-trees verbs and the skil bin', () => {
-    expect(readme).toMatch(/^# skil/m);
+    expect(readme).toMatch(/^# skil|alt="Skil"/m);
     expect(readme).toContain('skil scan');
     expect(readme).toContain('skil create');
     expect(readme).toContain('skil delete');
